@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
+    "type:generate": "npx @better-auth/cli generate --output ./src/db/schema.ts",
     "ci": "pnpm run lint && pnpm run db:push && pnpm run build"
   },
   "dependencies": {
