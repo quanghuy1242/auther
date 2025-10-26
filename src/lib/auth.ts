@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins/jwt";
 import { oidcProvider } from "better-auth/plugins/oidc-provider";
 import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
+import { username } from "better-auth/plugins";
 
 import { env } from "@/env";
 import * as schema from "@/db/schema";
@@ -20,7 +21,12 @@ export const auth = betterAuth({
     provider: "sqlite",
     schema,
   }),
+  emailAndPassword: {
+    enabled: true,
+    disableSignUp: true,
+  },
   plugins: [
+    username(),
     jwt({
       jwt: {
         issuer: env.JWT_ISSUER,
