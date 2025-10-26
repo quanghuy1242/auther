@@ -7,12 +7,6 @@ export type EmailSignInState = {
   error?: string;
 };
 
-const initialState: EmailSignInState = {
-  success: false,
-};
-
-export const emailSignInInitialState = initialState;
-
 export async function emailPasswordSignIn(
   _: EmailSignInState,
   formData: FormData,

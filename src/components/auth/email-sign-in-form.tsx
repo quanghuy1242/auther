@@ -2,10 +2,8 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 
-import {
-  emailPasswordSignIn,
-  emailSignInInitialState,
-} from "@/app/sign-in/actions";
+import { emailPasswordSignIn } from "@/app/sign-in/actions";
+import type { EmailSignInState } from "@/app/sign-in/actions";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -21,8 +19,12 @@ function SubmitButton() {
   );
 }
 
+const INITIAL_STATE: EmailSignInState = {
+  success: false,
+};
+
 export function EmailSignInForm() {
-  const [state, action] = useFormState(emailPasswordSignIn, emailSignInInitialState);
+  const [state, action] = useFormState(emailPasswordSignIn, INITIAL_STATE);
 
   return (
     <form action={action} className="space-y-4">
@@ -64,4 +66,3 @@ export function EmailSignInForm() {
     </form>
   );
 }
-
