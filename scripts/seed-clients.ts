@@ -26,7 +26,9 @@ async function registerClient(
 
   const result = await auth.api.registerOAuthApplication({
     body: {
+      // @ts-expect-error: Additional properties allowed
       grant_types: ["authorization_code"],
+      // @ts-expect-error: Additional properties allowed
       response_types: ["code"],
       ...seed.request,
     },
