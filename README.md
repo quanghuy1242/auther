@@ -1,5 +1,3 @@
-![Better Auth + Payload](docs/assets/auth-flow.png)
-
 # Better Auth Service
 
 Serverless Next.js project that runs a dedicated [better-auth](https://www.better-auth.com/) instance for Payload CMS and SPA clients. It exposes OAuth2/OIDC endpoints, issues JWTs backed by Turso (libSQL) via Drizzle ORM, and provides a sign-in experience for both confidential and PKCE clients.
