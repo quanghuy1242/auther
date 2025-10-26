@@ -11,6 +11,7 @@
 - **Payload CMS (`payload-app`)**: Next.js serverless deployment embedding Payload. Disables local auth, adds a custom auth strategy that validates Better Auth JWTs, and uses middleware to drive OAuth redirects.
 - **Shared Concerns**:
   - JWKS endpoint exposed by Better Auth for JWT verification.
+    - Production path: `https://<auth-domain>/api/auth/jwks`.
   - Shared secrets/env vars for webhook verification, admin API access, and cookie signing.
   - Observability (structured logs, tracing) routed to a central service (e.g., Sentry).
 
@@ -37,39 +38,85 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
 - Create `lib/auth.ts`:
   ```ts
   import { betterAuth } from "better-auth";
-  import { jwt, oidcProvider, oAuthProxy } from "better-auth/plugins";
+  import { drizzleAdapter } from "better-auth/adapters/drizzle";
+  import { jwt } from "better-auth/plugins/jwt";
+  import { oidcProvider } from "better-auth/plugins/oidc-provider";
+  import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
+  import { username } from "better-auth/plugins";
+  import { nextCookies } from "better-auth/next-js";
 
   export const auth = betterAuth({
+    secret: process.env.BETTER_AUTH_SECRET!,
+    baseURL: process.env.PRODUCTION_URL ?? process.env.NEXT_PUBLIC_APP_URL,
     basePath: "/api/auth",
-    database: { url: process.env.BETTER_AUTH_DATABASE_URL! },
-    disabledPaths: ["/token"], // use /oauth2/token instead
+    disabledPaths: ["/token"], // OAuth 2.0 clients must call /api/auth/oauth2/token
+    database: drizzleAdapter(db, {
+      provider: "sqlite",
+      schema,
+    }),
+    emailAndPassword: {
+      enabled: true,
+    },
+    hooks: {
+      // Protect internal sign-up + dynamic registration endpoints
+      before: createAuthMiddleware(async (ctx) => {
+        const request = ctx.request;
+        if (!request) return;
+
+        const basePath = new URL(ctx.context.baseURL).pathname;
+        const relativePath = request.url.replace(
+          new RegExp(`^https?://[^/]+${basePath}`),
+          "/",
+        );
+
+        if (["/sign-up/email", "/oauth2/register"].includes(relativePath)) {
+          const headerSecret = request.headers.get("x-internal-signup-secret");
+          if (headerSecret !== process.env.PAYLOAD_CLIENT_SECRET) {
+            throw new Response("Forbidden", { status: 403 });
+          }
+        }
+      }),
+    },
     plugins: [
+      username(),
       jwt({
-        issuer: process.env.JWT_ISSUER!,
-        audience: [process.env.JWT_AUDIENCE!],
-        jwks: { provider: "internal", rotateInterval: "1d" },
+        jwt: {
+          issuer: process.env.JWT_ISSUER!,
+          audience: process.env.JWT_AUDIENCE!.split(","),
+        },
         disableSettingJwtHeader: true,
       }),
       oidcProvider({
         loginPage: "/sign-in",
+        allowDynamicClientRegistration: true,
         metadata: {
           issuer: process.env.JWT_ISSUER!,
         },
-        clients: [
+        trustedClients: [
           {
             clientId: process.env.PAYLOAD_CLIENT_ID!,
             clientSecret: process.env.PAYLOAD_CLIENT_SECRET!,
-            redirectUris: [process.env.PAYLOAD_REDIRECT_URI!],
-            grantTypes: ["authorization_code"],
-            tokenEndpointAuthMethod: "client_secret_basic",
+            type: "web",
+            name: "Payload Admin (Confidential)",
+            redirectURLs: [process.env.PAYLOAD_REDIRECT_URI!],
+            metadata: {
+              tokenEndpointAuthMethod: "client_secret_basic",
+              grantTypes: ["authorization_code"],
+            },
+            skipConsent: true,
           },
           {
             clientId: process.env.PAYLOAD_SPA_CLIENT_ID!,
-            redirectUris: process.env.PAYLOAD_SPA_REDIRECT_URIS!.split(","),
-            postLogoutRedirectUris: process.env.PAYLOAD_SPA_LOGOUT_URIS?.split(","),
-            grantTypes: ["authorization_code"],
-            tokenEndpointAuthMethod: "none",
-            requirePkce: true,
+            type: "public",
+            name: "Payload SPA (PKCE)",
+            redirectURLs: process.env.PAYLOAD_SPA_REDIRECT_URIS!.split(","),
+            metadata: {
+              tokenEndpointAuthMethod: "none",
+              grantTypes: ["authorization_code"],
+              postLogoutRedirectUris:
+                process.env.PAYLOAD_SPA_LOGOUT_URIS?.split(",") ?? [],
+            },
+            skipConsent: true,
           },
         ],
       }),
@@ -77,12 +124,21 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
         productionURL: process.env.PRODUCTION_URL,
         currentURL: process.env.NEXT_PUBLIC_APP_URL,
       }),
+      nextCookies(),
     ],
   });
   ```
 - Provide comma-delimited env vars for SPA redirect/logout URIs to avoid secret leakage in the browser (`PAYLOAD_SPA_REDIRECT_URIS`, `PAYLOAD_SPA_LOGOUT_URIS`). The SPA client omits a secret and enforces PKCE.
+- Two client applications are required:
+  - **Payload Admin (confidential client)** — server-side OAuth exchange for the Next.js/Payload admin UI. Requires `PAYLOAD_CLIENT_ID`, `PAYLOAD_CLIENT_SECRET`, and `PAYLOAD_REDIRECT_URI`. Uses `client_secret_basic` at the token endpoint.
+  - **Payload SPA (public PKCE client)** — browser-based PKCE flow for front-end apps. Requires `PAYLOAD_SPA_CLIENT_ID` and `PAYLOAD_SPA_REDIRECT_URIS`. No secret is issued; PKCE verifier is required.
+- Use the seeding helper to register clients via Better Auth’s official API once the service is deployed:
+  ```bash
+  pnpm clients:seed
+  ```
+  Copy the printed `client_id`/`client_secret` values into `.env.local` (and Vercel) so the trusted client configuration matches runtime credentials.
 - Expose handler via `app/api/auth/[...betterAuth]/route.ts`.
-- Implement the login UI at `/sign-in`, ensure OIDC endpoints (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`, `/oauth2/jwks`) are reachable, and wire up optional account-linking flows if required.
+- Implement the login UI at `/sign-in`, ensure OIDC endpoints (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`, `/jwks`) are reachable, and wire up optional account-linking flows if required.
 - Add webhook endpoints for login events to trigger audit logging or user provisioning if needed.
 
 ### 4. Admin & Management UI
@@ -143,10 +199,72 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
     ```
   - Redirect unauthenticated users; for API calls return 401 with `WWW-Authenticate`.
 - Expose the same logic through a first-party endpoint (`/api/auth/url`) so the admin login component and other SSR routes can fetch a ready-made authorize URL while the server persists the PKCE verifier.
+  ```ts
+  // payload-app/src/app/api/auth/url/route.ts
+  import { cookies } from "next/headers";
+  import { NextResponse } from "next/server";
+  import { createPkcePair } from "@/lib/pkce";
+
+  export async function GET() {
+    const state = crypto.randomUUID();
+    const { verifier, challenge } = await createPkcePair();
+    cookies().set("betterAuthState", JSON.stringify({ state, verifier }), {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+    });
+
+    const authorizeURL = new URL(
+      `${process.env.BETTER_AUTH_URL!}/api/auth/oauth2/authorize`,
+    );
+    authorizeURL.searchParams.set("client_id", process.env.PAYLOAD_CLIENT_ID!);
+    authorizeURL.searchParams.set("redirect_uri", process.env.PAYLOAD_REDIRECT_URI!);
+    authorizeURL.searchParams.set("response_type", "code");
+    authorizeURL.searchParams.set("scope", "openid email profile");
+    authorizeURL.searchParams.set("state", state);
+    authorizeURL.searchParams.set("code_challenge", challenge);
+    authorizeURL.searchParams.set("code_challenge_method", "S256");
+
+    return NextResponse.json({ authorizeURL: authorizeURL.toString() });
+  }
+  ```
 - Provide `/auth/callback` route in Next.js layer:
   1. Receive `code`/`state`, verify CSRF `state`.
-  2. Retrieve stored PKCE verifier, exchange code with Better Auth (`POST ${BETTER_AUTH_URL}/api/auth/oauth2/token`) supplying `code_verifier`, `client_id`, and the confidential `client_secret` if applicable.
-  3. Set `betterAuthToken` (HTTP-only, `SameSite=Lax`) and redirect back to `/admin`.
+  2. Retrieve stored PKCE verifier, exchange code with Better Auth (`POST ${BETTER_AUTH_URL}/api/auth/oauth2/token`) supplying:
+     - `grant_type=authorization_code`
+     - `client_id`
+     - `client_secret` (confidential client only)
+     - `code_verifier`
+  3. Set `betterAuthToken` (HTTP-only, `SameSite=Lax`) with `Set-Cookie` and redirect back to `/admin`.
+     ```ts
+     // payload-app/src/app/auth/callback/route.ts
+     const tokenRes = await fetch(
+       `${process.env.BETTER_AUTH_URL}/api/auth/oauth2/token`,
+       {
+         method: "POST",
+         headers: {
+           "Content-Type": "application/x-www-form-urlencoded",
+           Authorization: `Basic ${Buffer.from(
+             `${process.env.PAYLOAD_CLIENT_ID}:${process.env.PAYLOAD_CLIENT_SECRET}`,
+           ).toString("base64")}`,
+         },
+         body: new URLSearchParams({
+           grant_type: "authorization_code",
+           code,
+           redirect_uri: process.env.PAYLOAD_REDIRECT_URI!,
+           code_verifier,
+         }),
+       },
+     );
+     const { access_token, id_token } = await tokenRes.json();
+     cookies().set("betterAuthToken", access_token, {
+       httpOnly: true,
+       sameSite: "lax",
+       secure: true,
+       path: "/",
+     });
+     ```
 
 ### 4. Admin UI Overrides
 - Override `admin` configuration:
@@ -196,8 +314,8 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
 2. Middleware detects missing session → generates PKCE pair + state, stores them server-side, and redirects to Better Auth’s authorize endpoint with `client_id`, `redirect_uri`, `scope`, `state`, and `code_challenge`.
 3. Better Auth renders `/sign-in`, collects credentials, and returns an authorization code to the callback.
 4. Payload’s callback retrieves the stored `code_verifier`, posts to `/api/auth/oauth2/token` with the verifier + confidential client secret, and receives ID/access tokens.
-5. Payload sets an HttpOnly `betterAuthToken` cookie (or session storage) and reloads `/admin`.
-6. `betterAuthStrategy` validates inbound requests via JWKS, populates `req.user`, and authorization proceeds. Expired tokens trigger middleware to restart the flow.
+5. Payload sets an HttpOnly `betterAuthToken` cookie (or stores the token server side) anchored to the admin domain, then redirects back to `/admin`.
+6. `betterAuthStrategy` (custom Payload auth strategy) pulls the bearer token from the cookie/`Authorization` header, validates it against `https://auth.<domain>/api/auth/jwks`, and populates `req.user`. Expired tokens trigger middleware to restart the flow (step 2).
 
 ### SPA / Public Client
 1. SPA invokes `authClient.oidc.signIn`, which generates PKCE and stores it in session storage before redirecting to Better Auth’s authorize endpoint (no client secret).

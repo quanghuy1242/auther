@@ -38,7 +38,8 @@ export const auth = betterAuth({
         ? requestUrl.pathname.slice(basePathname.length) || "/"
         : requestUrl.pathname;
 
-      if (relativePath === "/sign-up/email") {
+      const restrictedPaths = new Set(["/sign-up/email", "/oauth2/register"]);
+      if (restrictedPaths.has(relativePath)) {
         const headerSecret = request.headers.get("x-internal-signup-secret");
         if (!headerSecret || headerSecret !== env.PAYLOAD_CLIENT_SECRET) {
           throw new Response("Forbidden", { status: 403 });
@@ -57,6 +58,7 @@ export const auth = betterAuth({
     }),
     oidcProvider({
       loginPage: "/sign-in",
+      allowDynamicClientRegistration: true,
       useJWTPlugin: true,
       metadata: {
         issuer: env.JWT_ISSUER,
