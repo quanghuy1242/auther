@@ -5,6 +5,7 @@ import { jwt } from "better-auth/plugins/jwt";
 import { oidcProvider } from "better-auth/plugins/oidc-provider";
 import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
 import { username } from "better-auth/plugins";
+import { createAuthMiddleware } from "better-auth/api";
 
 import { env } from "@/env";
 import * as schema from "@/db/schema";
@@ -23,7 +24,27 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
-    disableSignUp: true,
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      const request = ctx.request;
+      if (!request) {
+        return;
+      }
+
+      const requestUrl = new URL(request.url);
+      const basePathname = new URL(ctx.context.baseURL).pathname;
+      const relativePath = requestUrl.pathname.startsWith(basePathname)
+        ? requestUrl.pathname.slice(basePathname.length) || "/"
+        : requestUrl.pathname;
+
+      if (relativePath === "/sign-up/email") {
+        const headerSecret = request.headers.get("x-internal-signup-secret");
+        if (!headerSecret || headerSecret !== env.PAYLOAD_CLIENT_SECRET) {
+          throw new Response("Forbidden", { status: 403 });
+        }
+      }
+    }),
   },
   plugins: [
     username(),

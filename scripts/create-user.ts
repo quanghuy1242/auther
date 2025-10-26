@@ -27,7 +27,7 @@ async function main() {
         displayUsername
       },
       headers: {
-        
+        "x-internal-signup-secret": process.env.PAYLOAD_CLIENT_SECRET || ""
       }
     });
 
