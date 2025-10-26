@@ -30,6 +30,7 @@ export const auth = betterAuth({
     }),
     oidcProvider({
       loginPage: "/sign-in",
+      useJWTPlugin: true,
       metadata: {
         issuer: env.JWT_ISSUER,
       },
