@@ -19,7 +19,6 @@ export default function SignInPage() {
 
         <section className="space-y-6">
           <div className="space-y-2">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-gray-300">Email</h2>
             <EmailSignInForm />
           </div>
         </section>
