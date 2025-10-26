@@ -54,7 +54,6 @@ export const auth = betterAuth({
         issuer: env.JWT_ISSUER,
         audience: env.JWT_AUDIENCE[0],
       },
-      disableSettingJwtHeader: true,
     }),
     oidcProvider({
       loginPage: "/sign-in",
