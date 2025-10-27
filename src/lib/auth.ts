@@ -23,7 +23,7 @@ const trustedOriginCandidates = [
   ...(env.PAYLOAD_SPA_LOGOUT_URIS ?? []),
 ];
 
-const trustedOrigins = Array.from(
+export const trustedOrigins = Array.from(
   new Set(
     trustedOriginCandidates
       .map((value) => {
