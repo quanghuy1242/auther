@@ -13,7 +13,8 @@
     "ci": "pnpm run lint && pnpm run db:push && pnpm run build",
     "user:create": "tsx scripts/create-user.ts",
     "auth:test": "tsx scripts/test-auth-flow.ts",
-    "clients:seed": "tsx scripts/seed-clients.ts"
+    "clients:seed": "tsx scripts/seed-clients.ts",
+    "build:local": "dotenv -e .env.local -- pnpm build"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
@@ -34,6 +35,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "dotenv-cli": "^10.0.0",
     "drizzle-kit": "^0.31.5",
     "eslint": "^9",
     "eslint-config-next": "16.0.0",
