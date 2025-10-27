@@ -10,7 +10,7 @@
 - **Better Auth Service (`auth-app`)**: Dedicated Next.js (App Router) project deployed to a serverless target (e.g., Vercel) running `better-auth` with the OIDC provider + JWT plugins. Stores user identities in a managed Postgres instance.
 - **Payload CMS (`payload-app`)**: Next.js serverless deployment embedding Payload. Disables local auth, adds a custom auth strategy that validates Better Auth JWTs, and uses middleware to drive OAuth redirects.
 - **Shared Concerns**:
-  - JWKS endpoint exposed by Better Auth for JWT verification.
+  - JWKS endpoint exposed by Better Auth for ID token verification.
     - Production path: `https://<auth-domain>/api/auth/jwks`.
   - Shared secrets/env vars for webhook verification, admin API access, and cookie signing.
   - Observability (structured logs, tracing) routed to a central service (e.g., Sentry).
@@ -175,9 +175,9 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
   };
   ```
 - Implement `betterAuthStrategy.authenticate`:
-  1. Extract token from `Authorization` header or `betterAuthToken` cookie.
+  1. Extract the ID token from the `Authorization` header or `betterAuthIdToken` cookie.
   2. Validate signature & claims using JWKS (`createRemoteJWKSet(new URL(process.env.BETTER_AUTH_JWKS_URL!))`) and enforce expiry/issuer/audience.
-  3. For bearer access tokens, JWKS validation is sufficient; if you choose to accept other token types (e.g., opaque, refresh-session) call Better Auth’s introspection endpoint before trusting them.
+  3. If your middleware also needs resource data (profile, email, etc.), call Better Auth’s `/api/auth/oauth2/userinfo` endpoint with the accompanying opaque access token; do not try to locally verify the access token.
   4. Upsert user document (sync metadata) and return `{ user: { collection: "users", ...doc } }`.
 
 ### 3. Middleware for Admin Redirect
@@ -236,7 +236,7 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
      - `client_id`
      - `client_secret` (confidential client only)
      - `code_verifier`
-  3. Set `betterAuthToken` (HTTP-only, `SameSite=Lax`) with `Set-Cookie` and redirect back to `/admin`.
+  3. Set `betterAuthIdToken` (HTTP-only, `SameSite=Lax`) with `Set-Cookie` and redirect back to `/admin`.
      ```ts
      // payload-app/src/app/auth/callback/route.ts
      const tokenRes = await fetch(
@@ -258,7 +258,7 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
        },
      );
      const { access_token, id_token } = await tokenRes.json();
-     cookies().set("betterAuthToken", access_token, {
+     cookies().set("betterAuthIdToken", id_token, {
        httpOnly: true,
        sameSite: "lax",
        secure: true,
@@ -298,31 +298,32 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
     ],
   });
   ```
-- During `authClient.oidc.signIn`, the plugin generates PKCE values, stores them in session storage, and redirects to Better Auth’s authorize endpoint. The SPA callback reads `code`/`state`, calls `authClient.oidc.handleCallback`, and receives ID/access tokens plus refresh tokens (if enabled).
+- During `authClient.oidc.signIn`, the plugin generates PKCE values, stores them in session storage, and redirects to Better Auth’s authorize endpoint. The SPA callback reads `code`/`state`, calls `authClient.oidc.handleCallback`, and receives an ID token, an opaque access token (for calling Better Auth APIs), plus refresh tokens (if enabled).
 - Persist tokens in memory or secure browser storage (e.g., `IndexedDB` via WebCrypto). Avoid HttpOnly cookies for SPA tokens to prevent CSRF.
-- Provide `authClient.oidc.getAccessToken()` when issuing requests to Payload; attach as `Authorization: Bearer <token>` or leverage `fetch` interceptors.
+- Provide the ID token to Payload requests (e.g., `Authorization: Bearer ${idToken}`) so the CMS can validate it via JWKS. Use the opaque access token only when calling Better Auth endpoints such as `/userinfo`.
 - Implement silent renewal using an iframe or background `refresh_token` call prior to expiry; revoke tokens and clear storage on logout (`authClient.oidc.signOut`).
 - For cross-tab sync, listen for `storage` events (token removal) or use BroadcastChannel to coordinate logout.
 
 ### 6. API Consumers
-- Document expectation for clients to send `Authorization: Bearer <jwt>`.
+- Document expectation for clients to send `Authorization: Bearer <id_token>` (opaque access tokens are only valid against Better Auth’s own endpoints).
 - Implement helper `authenticateRequest` used in hooks/access control: call `payload.auth({ headers: req.headers })` to reuse strategy logic.
 
 ## Authentication Flow
 ### Admin / SSR (Confidential Client)
 1. User navigates to `/admin`.
-2. Middleware detects missing session → generates PKCE pair + state, stores them server-side, and redirects to Better Auth’s authorize endpoint with `client_id`, `redirect_uri`, `scope`, `state`, and `code_challenge`.
-3. Better Auth renders `/sign-in`, collects credentials, and returns an authorization code to the callback.
-4. Payload’s callback retrieves the stored `code_verifier`, posts to `/api/auth/oauth2/token` with the verifier + confidential client secret, and receives ID/access tokens.
-5. Payload sets an HttpOnly `betterAuthToken` cookie (or stores the token server side) anchored to the admin domain, then redirects back to `/admin`.
-6. `betterAuthStrategy` (custom Payload auth strategy) pulls the bearer token from the cookie/`Authorization` header, validates it against `https://auth.<domain>/api/auth/jwks`, and populates `req.user`. Expired tokens trigger middleware to restart the flow (step 2).
+2. Middleware detects missing session → calls `/api/auth/url` server-side to generate PKCE `state` + `verifier`. The endpoint stores the verifier in an HttpOnly cookie and returns the Better Auth authorize URL.
+3. Payload redirects the browser to the returned URL (`https://auth.../api/auth/oauth2/authorize?client_id=...&code_challenge=...`).
+4. Better Auth renders `/sign-in`, collects credentials, sets its session cookie, and redirects to the configured admin `redirect_uri` with an authorization code.
+5. Payload’s `/auth/callback` route reads the stored `state`/`verifier`, verifies CSRF, and posts to `/api/auth/oauth2/token` (confidential client secret + PKCE `code_verifier`) to obtain tokens.
+6. Payload stores the ID token securely (e.g., HttpOnly `betterAuthIdToken` cookie scoped to the admin domain) and redirects back to `/admin`. Store the opaque access token separately only if you plan to call Better Auth’s userinfo endpoint server-side.
+7. `betterAuthStrategy` validates the ID token against `https://auth.<domain>/api/auth/jwks`. Expired tokens trigger middleware to restart the flow at step 2.
 
 ### SPA / Public Client
-1. SPA invokes `authClient.oidc.signIn`, which generates PKCE and stores it in session storage before redirecting to Better Auth’s authorize endpoint (no client secret).
-2. After authentication, Better Auth redirects back to the SPA callback with `code` + `state`.
-3. SPA calls `authClient.oidc.handleCallback`, exchanging the code at `/api/auth/oauth2/token` with the stored `code_verifier`. Tokens are stored client-side (memory or encrypted storage).
-4. SPA adds `Authorization: Bearer <access_token>` to calls against Payload’s REST/GraphQL endpoints; `betterAuthStrategy` validates and hydrates `req.user`.
-5. The SPA schedules silent refresh or uses the refresh token (if issued) to rotate credentials. Logout clears storage and optionally calls `/api/auth/oauth2/logout` to invalidate server-side sessions.
+1. The SPA uses `authClient.oidc.signIn()` (PKCE flow). The plugin generates/verifies state in session storage and builds the authorize URL.
+2. Browser redirects to `https://auth.../api/auth/oauth2/authorize?client_id=<PAYLOAD_SPA_CLIENT_ID>&code_challenge=...` (no secret required).
+3. After authentication, Better Auth redirects back to the SPA callback with `code` + `state`. The SPA calls `authClient.oidc.handleCallback()` which POSTs to `/api/auth/oauth2/token` with the stored PKCE `code_verifier`. Returned tokens stay client-side (memory, secure storage, etc.).
+4. API calls to Payload include `Authorization: Bearer <access_token>`; the Payload strategy validates the token via JWKS.
+5. Silent refresh (via refresh_token) or re-run `signIn()` before expiration. Logout clears SPA storage and optionally calls Better Auth’s logout endpoint.
 
 ## Deployment Strategy
 - **Environments**: dev (local docker Postgres), staging, production. Mirror env vars with secure managers.

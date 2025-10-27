@@ -10,6 +10,7 @@ import { createAuthMiddleware } from "better-auth/api";
 import { env } from "@/env";
 import * as schema from "@/db/schema";
 import { db } from "@/lib/db";
+import { createPayloadUserHooks } from "@/lib/webhooks/payload-hooks";
 
 const baseURL = env.PRODUCTION_URL ?? env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -75,6 +76,9 @@ export const auth = betterAuth({
       }
     }),
   },
+  // databaseHooks: {
+  //   user: createPayloadUserHooks(),
+  // },
   plugins: [
     username(),
     jwt({
