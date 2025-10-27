@@ -1,12 +1,11 @@
 "use server";
 
-import { redirect } from "next/navigation";
-
 import { auth } from "@/lib/auth";
 
 export type EmailSignInState = {
   success: boolean;
   error?: string;
+  redirectUrl?: string;
 };
 
 export async function emailPasswordSignIn(
@@ -35,11 +34,17 @@ export async function emailPasswordSignIn(
     });
 
     if (typeof authorizeQuery === "string" && authorizeQuery.length > 0) {
-      redirect(`/api/auth/oauth2/authorize?${authorizeQuery}`);
+      return {
+        success: true,
+        redirectUrl: `/api/auth/oauth2/authorize?${authorizeQuery}`,
+      };
     }
 
     if (result.redirect && result.url) {
-      redirect(result.url);
+      return {
+        success: true,
+        redirectUrl: result.url,
+      };
     }
   } catch (error) {
     return {
@@ -53,5 +58,6 @@ export async function emailPasswordSignIn(
 
   return {
     success: true,
+    redirectUrl: undefined,
   };
 }

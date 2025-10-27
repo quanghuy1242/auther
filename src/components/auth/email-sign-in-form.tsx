@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 
@@ -22,6 +23,7 @@ function SubmitButton() {
 
 const INITIAL_STATE: EmailSignInState = {
   success: false,
+  redirectUrl: undefined,
 };
 
 export function EmailSignInForm() {
@@ -37,6 +39,12 @@ export function EmailSignInForm() {
     searchParams.get("return_url") ??
     searchParams.get("returnUrl") ??
     undefined;
+
+  useEffect(() => {
+    if (state.redirectUrl) {
+      window.location.assign(state.redirectUrl);
+    }
+  }, [state.redirectUrl]);
 
   return (
     <form action={action} className="space-y-4">
@@ -73,7 +81,9 @@ export function EmailSignInForm() {
       {state.error ? (
         <p className="text-sm text-red-400">{state.error}</p>
       ) : null}
-      {state.success ? (
+      {state.error ? null : state.redirectUrl ? (
+        <p className="text-sm text-emerald-400">Redirecting…</p>
+      ) : state.success ? (
         <p className="text-sm text-emerald-400">You are signed in.</p>
       ) : null}
       <SubmitButton />
