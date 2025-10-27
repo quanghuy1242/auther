@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 
 import { emailPasswordSignIn } from "@/app/sign-in/actions";
@@ -25,9 +26,22 @@ const INITIAL_STATE: EmailSignInState = {
 
 export function EmailSignInForm() {
   const [state, action] = useFormState(emailPasswordSignIn, INITIAL_STATE);
+  const searchParams = useSearchParams();
+  const authorizeQuery = searchParams.toString();
+  const callbackUrl =
+    searchParams.get("callback_url") ??
+    searchParams.get("callbackURL") ??
+    searchParams.get("redirect") ??
+    searchParams.get("redirect_url") ??
+    searchParams.get("redirectURL") ??
+    searchParams.get("return_url") ??
+    searchParams.get("returnUrl") ??
+    undefined;
 
   return (
     <form action={action} className="space-y-4">
+      <input type="hidden" name="authorizeQuery" value={authorizeQuery} />
+      <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
       <div className="space-y-1">
         <label htmlFor="email" className="block text-sm font-medium text-gray-200">
           Email
