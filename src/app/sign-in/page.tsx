@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { EmailSignInForm } from "@/components/auth/email-sign-in-form";
 
 export const metadata: Metadata = {
   title: "Sign in",
 };
+
+export const dynamic = "force-dynamic";
 
 export default function SignInPage() {
   return (
@@ -19,11 +22,12 @@ export default function SignInPage() {
 
         <section className="space-y-6">
           <div className="space-y-2">
-            <EmailSignInForm />
+            <Suspense fallback={<p className="text-sm text-gray-400">Loading…</p>}>
+              <EmailSignInForm />
+            </Suspense>
           </div>
         </section>
       </div>
     </div>
   );
 }
-
