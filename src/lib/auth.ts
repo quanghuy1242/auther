@@ -13,6 +13,33 @@ import { db } from "@/lib/db";
 
 const baseURL = env.PRODUCTION_URL ?? env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+const trustedOriginCandidates = [
+  baseURL,
+  "https://payload.quanghuy.dev",
+  env.NEXT_PUBLIC_APP_URL,
+  env.PRODUCTION_URL,
+  env.PAYLOAD_REDIRECT_URI,
+  ...env.PAYLOAD_SPA_REDIRECT_URIS,
+  ...(env.PAYLOAD_SPA_LOGOUT_URIS ?? []),
+];
+
+const trustedOrigins = Array.from(
+  new Set(
+    trustedOriginCandidates
+      .map((value) => {
+        if (!value) {
+          return undefined;
+        }
+        try {
+          return new URL(value).origin;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((value): value is string => Boolean(value)),
+  ),
+);
+
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   baseURL,
@@ -25,6 +52,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  trustedOrigins,
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       const request = ctx.request;
