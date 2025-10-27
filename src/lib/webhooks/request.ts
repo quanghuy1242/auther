@@ -1,3 +1,5 @@
+import { WEBHOOK_ORIGIN_HEADER, WEBHOOK_ORIGIN_PAYLOAD } from "@/lib/constants";
+
 export type RequestWithContext = Request & {
   context?: Record<string, unknown>;
 };
@@ -7,7 +9,7 @@ export function getWebhookOrigin(request?: RequestWithContext) {
     return undefined;
   }
 
-  const headerOrigin = request.headers.get("x-webhook-origin");
+  const headerOrigin = request.headers.get(WEBHOOK_ORIGIN_HEADER);
   if (headerOrigin) {
     return headerOrigin;
   }
@@ -17,5 +19,5 @@ export function getWebhookOrigin(request?: RequestWithContext) {
 }
 
 export function isPayloadOrigin(request?: RequestWithContext) {
-  return getWebhookOrigin(request) === "payload";
+  return getWebhookOrigin(request) === WEBHOOK_ORIGIN_PAYLOAD;
 }

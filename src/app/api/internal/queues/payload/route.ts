@@ -1,10 +1,18 @@
-import crypto from "node:crypto";
-
 import { Receiver } from "@upstash/qstash";
 import { Redis } from "@upstash/redis";
 
 import { env } from "@/env";
-import { resolveQueueBaseUrl, type PayloadWebhookEvent } from "@/lib/webhooks/payload";
+import {
+  PROCESSED_WEBHOOK_SET_KEY,
+  QSTASH_SIGNATURE_HEADER,
+  WEBHOOK_ID_HEADER,
+  WEBHOOK_ORIGIN_HEADER,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  WEBHOOK_IDEMPOTENCY_TTL_SECONDS,
+} from "@/lib/constants";
+import { resolveQueueTargetUrl, type PayloadWebhookEvent } from "@/lib/webhooks/payload";
+import { createWebhookSignature } from "@/lib/webhooks/signature";
 
 const receiver = new Receiver({
   currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
@@ -13,23 +21,59 @@ const receiver = new Receiver({
 
 const redis = Redis.fromEnv();
 
+async function verifyQStashSignature(body: string, signature: string): Promise<void> {
+  const expectedUrl = resolveQueueTargetUrl();
+  
+  await receiver.verify({
+    signature,
+    body,
+    url: expectedUrl,
+  });
+}
+
+async function parseWebhookEvent(body: string): Promise<PayloadWebhookEvent> {
+  return JSON.parse(body) as PayloadWebhookEvent;
+}
+
+async function ensureIdempotency(eventId: string): Promise<boolean> {
+  const added = await redis.sadd(PROCESSED_WEBHOOK_SET_KEY, eventId);
+  
+  if (added === 0) {
+    return false; // Already processed
+  }
+  
+  await redis.expire(PROCESSED_WEBHOOK_SET_KEY, WEBHOOK_IDEMPOTENCY_TTL_SECONDS);
+  return true;
+}
+
+async function deliverWebhookToPayload(event: PayloadWebhookEvent, body: string): Promise<void> {
+  const response = await fetch(env.PAYLOAD_WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      [WEBHOOK_SIGNATURE_HEADER]: createWebhookSignature(body, env.PAYLOAD_OUTBOUND_WEBHOOK_SECRET),
+      [WEBHOOK_ID_HEADER]: event.id,
+      [WEBHOOK_TIMESTAMP_HEADER]: event.timestamp.toString(),
+      [WEBHOOK_ORIGIN_HEADER]: event.origin,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Payload webhook responded with error: ${response.status}`);
+  }
+}
+
 export async function POST(request: Request) {
   const body = await request.text();
-  const signature =
-    request.headers.get("Upstash-Signature") ?? request.headers.get("upstash-signature");
+  const signature = request.headers.get(QSTASH_SIGNATURE_HEADER);
 
   if (!signature) {
     return new Response("missing-signature", { status: 400 });
   }
 
-  const expectedUrl = `${resolveQueueBaseUrl()}/api/internal/queues/payload`;
-
   try {
-    await receiver.verify({
-      signature,
-      body,
-      url: expectedUrl,
-    });
+    await verifyQStashSignature(body, signature);
   } catch (error) {
     console.error("[qstash] Failed to verify payload queue signature", error);
     return new Response("invalid-signature", { status: 401 });
@@ -37,18 +81,17 @@ export async function POST(request: Request) {
 
   let event: PayloadWebhookEvent;
   try {
-    event = JSON.parse(body) as PayloadWebhookEvent;
+    event = await parseWebhookEvent(body);
   } catch (error) {
     console.error("[qstash] Invalid payload queue body", error);
     return new Response("invalid-body", { status: 400 });
   }
 
   try {
-    const added = await redis.sadd("webhooks:processed", event.id);
-    if (added === 0) {
+    const isNew = await ensureIdempotency(event.id);
+    if (!isNew) {
       return new Response("duplicate", { status: 200 });
     }
-    await redis.expire("webhooks:processed", 60 * 60 * 48);
   } catch (error) {
     console.error("[webhook] Failed to record payload webhook idempotency", {
       webhookId: event.id,
@@ -58,25 +101,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(env.PAYLOAD_WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Webhook-Signature": createSignature(body, env.PAYLOAD_OUTBOUND_WEBHOOK_SECRET),
-        "X-Webhook-Id": event.id,
-        "X-Webhook-Timestamp": event.timestamp.toString(),
-        "X-Webhook-Origin": event.origin,
-      },
-      body,
-    });
-
-    if (!response.ok) {
-      console.error("[webhook] Payload webhook responded with error", {
-        webhookId: event.id,
-        status: response.status,
-      });
-      return new Response("payload-error", { status: 502 });
-    }
+    await deliverWebhookToPayload(event, body);
   } catch (error) {
     console.error("[webhook] Failed to deliver payload webhook", {
       webhookId: event.id,
@@ -86,8 +111,4 @@ export async function POST(request: Request) {
   }
 
   return new Response("delivered", { status: 200 });
-}
-
-function createSignature(body: string, secret: string) {
-  return crypto.createHmac("sha256", secret).update(body).digest("hex");
 }

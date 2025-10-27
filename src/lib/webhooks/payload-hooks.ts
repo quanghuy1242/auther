@@ -9,6 +9,7 @@ import {
   type PayloadWebhookEventType,
 } from "@/lib/webhooks/payload";
 import { isPayloadOrigin, type RequestWithContext } from "@/lib/webhooks/request";
+import { WEBHOOK_ORIGIN_BETTER_AUTH } from "@/lib/constants";
 
 type DatabaseHooks = NonNullable<BetterAuthOptions["databaseHooks"]>;
 type UserHooks = NonNullable<DatabaseHooks["user"]>;
@@ -58,7 +59,7 @@ function shouldPropagate(user: unknown, ctx?: HookContext) {
 async function emitPayloadEvent(type: PayloadWebhookEventType, user: PayloadUserInput) {
   const event = {
     id: randomUUID(),
-    origin: "better-auth" as const,
+    origin: WEBHOOK_ORIGIN_BETTER_AUTH,
     type,
     timestamp: Date.now(),
     data: mapUserToPayload(user),

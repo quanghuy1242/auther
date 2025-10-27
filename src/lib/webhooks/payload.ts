@@ -1,6 +1,11 @@
 import { Client } from "@upstash/qstash";
 
 import { env } from "@/env";
+import { 
+  DEFAULT_LOCAL_BASE_URL, 
+  PAYLOAD_QUEUE_PATH, 
+  WEBHOOK_ORIGIN_BETTER_AUTH 
+} from "@/lib/constants";
 
 const qstash = new Client({
   token: env.QSTASH_TOKEN,
@@ -20,7 +25,7 @@ export type PayloadWebhookUser = {
 
 export type PayloadWebhookEvent = {
   id: string;
-  origin: "better-auth";
+  origin: typeof WEBHOOK_ORIGIN_BETTER_AUTH;
   type: PayloadWebhookEventType;
   timestamp: number;
   data: PayloadWebhookUser;
@@ -36,20 +41,27 @@ export type PayloadUserInput = {
   displayUsername?: string | null;
 };
 
-export async function enqueuePayloadWebhook(event: PayloadWebhookEvent) {
-  const targetUrl = resolveQueueTargetUrl("/api/internal/queues/payload");
-
-  await qstash.publishJSON({
-    url: targetUrl,
-    body: event,
-    retries: 3,
-  });
+/**
+ * Resolves the base URL for queue targets
+ */
+export function resolveQueueBaseUrl(): string {
+  return (
+    env.QUEUE_TARGET_BASE_URL ?? 
+    (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined) ?? 
+    DEFAULT_LOCAL_BASE_URL
+  );
 }
 
-export function resolveQueueTargetUrl(path: string) {
+/**
+ * Resolves the complete queue target URL
+ */
+export function resolveQueueTargetUrl(path = PAYLOAD_QUEUE_PATH): string {
   return `${resolveQueueBaseUrl()}${path}`;
 }
 
+/**
+ * Maps user input to payload webhook user format
+ */
 export function mapUserToPayload(user: PayloadUserInput): PayloadWebhookUser {
   return {
     id: user.id,
@@ -62,16 +74,15 @@ export function mapUserToPayload(user: PayloadUserInput): PayloadWebhookUser {
   };
 }
 
-export function resolveQueueBaseUrl() {
-  const explicitBase = env.QUEUE_TARGET_BASE_URL;
-  if (explicitBase) {
-    return explicitBase;
-  }
+/**
+ * Enqueues a payload webhook event via QStash
+ */
+export async function enqueuePayloadWebhook(event: PayloadWebhookEvent): Promise<void> {
+  const targetUrl = resolveQueueTargetUrl();
 
-  const vercelHost = env.VERCEL_URL;
-  if (vercelHost) {
-    return `https://${vercelHost}`;
-  }
-
-  return "http://localhost:3000";
+  await qstash.publishJSON({
+    url: targetUrl,
+    body: event,
+    retries: 3,
+  });
 }

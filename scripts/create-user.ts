@@ -1,19 +1,18 @@
-import { config as loadEnv } from "dotenv";
+import { loadEnvironment, validateArgs, exitWithError, logSuccess } from "./utils";
 
-loadEnv({ path: ".env.local", override: true });
-loadEnv({ path: ".env", override: false });
+loadEnvironment();
 
 async function main() {
-  const email = process.argv[2];
-  const password = process.argv[3];
-  const name = process.argv[4];
-  const username = process.argv[5];
-  const displayUsername = process.argv[6];
-
-  if (!email || !password || !name || !username || !displayUsername) {
-    console.error("Usage: pnpm user:create <email> <password> <name> <username> <displayUsername>");
-    process.exit(1);
-  }
+  const [email, password, name, username, displayUsername] = validateArgs(
+    [
+      process.argv[2],
+      process.argv[3],
+      process.argv[4],
+      process.argv[5],
+      process.argv[6],
+    ],
+    "Usage: pnpm user:create <email> <password> <name> <username> <displayUsername>"
+  );
 
   const { auth } = await import("../src/lib/auth");
 
@@ -24,27 +23,26 @@ async function main() {
         password,
         name,
         username,
-        displayUsername
+        displayUsername,
       },
       headers: {
-        "x-internal-signup-secret": process.env.PAYLOAD_CLIENT_SECRET || ""
-      }
+        "x-internal-signup-secret": process.env.PAYLOAD_CLIENT_SECRET || "",
+      },
     });
 
     const user = "user" in result ? result.user : null;
+    
     if (!user) {
       console.error("Unexpected response from Better Auth:", result);
       process.exit(1);
     }
 
-    console.log("✔ User created");
-    console.log(`  id: ${user.id}`);
-    console.log(`  email: ${user.email}`);
+    logSuccess("User created", {
+      id: user.id,
+      email: user.email,
+    });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error creating user";
-    console.error(`Failed to create user: ${message}`);
-    process.exit(1);
+    exitWithError("Failed to create user", error);
   }
 }
 

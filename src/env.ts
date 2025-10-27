@@ -3,6 +3,13 @@ import { z } from "zod";
 
 loadEnv({ path: ".env" });
 
+function parseCommaSeparatedList(value: string) {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 const serverSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   BETTER_AUTH_DATABASE_URL: z.string().min(1, "BETTER_AUTH_DATABASE_URL is required"),
@@ -11,32 +18,21 @@ const serverSchema = z.object({
   JWT_AUDIENCE: z
     .string()
     .min(1, "JWT_AUDIENCE must include at least one audience value")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    ),
+    .transform(parseCommaSeparatedList),
   PAYLOAD_CLIENT_ID: z.string().min(1, "PAYLOAD_CLIENT_ID is required"),
   PAYLOAD_CLIENT_SECRET: z.string().min(1, "PAYLOAD_CLIENT_SECRET is required"),
   PAYLOAD_REDIRECT_URI: z.string().url("PAYLOAD_REDIRECT_URI must be a valid URL"),
   PAYLOAD_SPA_CLIENT_ID: z.string().min(1, "PAYLOAD_SPA_CLIENT_ID is required"),
   PAYLOAD_SPA_REDIRECT_URIS: z
     .string()
-    .transform((value) =>
-      value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    ),
+    .transform(parseCommaSeparatedList),
   PAYLOAD_SPA_LOGOUT_URIS: z
     .string()
-    .transform((value) =>
-      value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    )
+    .transform(parseCommaSeparatedList)
+    .optional(),
+  PAYLOAD_PREVIEW_ORIGIN_PATTERNS: z
+    .string()
+    .transform(parseCommaSeparatedList)
     .optional(),
   PRODUCTION_URL: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().optional(),
@@ -92,7 +88,9 @@ export const env: ServerEnv & ClientEnv & {
   JWT_AUDIENCE: string[];
   PAYLOAD_SPA_REDIRECT_URIS: string[];
   PAYLOAD_SPA_LOGOUT_URIS?: string[];
+  PAYLOAD_PREVIEW_ORIGIN_PATTERNS: string[];
 } = {
   ...serverEnv,
   ...clientEnv,
+  PAYLOAD_PREVIEW_ORIGIN_PATTERNS: serverEnv.PAYLOAD_PREVIEW_ORIGIN_PATTERNS ?? [],
 };

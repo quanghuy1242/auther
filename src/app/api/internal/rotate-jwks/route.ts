@@ -2,41 +2,20 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { env } from "@/env";
-import {
-  JWKS_RETENTION_WINDOW_MS,
-  JWKS_ROTATION_INTERVAL_MS,
-  rotateJwksIfNeeded,
-} from "@/lib/jwks-rotation";
+import { rotateJwksIfNeeded } from "@/lib/jwks-rotation";
+import { 
+  JWKS_RETENTION_WINDOW_MS, 
+  JWKS_ROTATION_INTERVAL_MS 
+} from "@/lib/constants";
+import { isAuthorizedRequest } from "@/lib/utils/auth-validation";
 
 export const runtime = "nodejs";
 
-function extractBearerToken(headerValue: string | null): string | null {
-  if (!headerValue) {
-    return null;
-  }
-  const trimmed = headerValue.trim();
-  if (!trimmed.toLowerCase().startsWith("bearer ")) {
-    return null;
-  }
-  return trimmed.slice(7).trim() || null;
-}
-
-function isAuthorized(request: NextRequest): boolean {
-  const expectedSecret = env.CRON_SECRET;
-  const authorizationHeader = request.headers.get("authorization");
-  const bearerToken = extractBearerToken(authorizationHeader);
-  if (bearerToken && bearerToken === expectedSecret) {
-    return true;
-  }
-  const headerSecret = request.headers.get("x-rotation-secret");
-  if (headerSecret && headerSecret === expectedSecret) {
-    return true;
-  }
-  return false;
-}
-
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const authorizationHeader = request.headers.get("authorization");
+  const rotationSecret = request.headers.get("x-rotation-secret");
+  
+  if (!isAuthorizedRequest(authorizationHeader, rotationSecret, env.CRON_SECRET)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 

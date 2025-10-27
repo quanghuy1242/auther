@@ -5,9 +5,11 @@ import { desc, inArray, lte } from "drizzle-orm";
 import { jwks } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-export const JWKS_ROTATION_INTERVAL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
-export const JWKS_RETENTION_WINDOW_MS = JWKS_ROTATION_INTERVAL_MS * 2; // keep old keys for 60 days
+import { extractRowsAffected } from "@/lib/utils/http";
+import { 
+  JWKS_RETENTION_WINDOW_MS, 
+  JWKS_ROTATION_INTERVAL_MS 
+} from "@/lib/constants";
 
 type JwkRecord = typeof jwks.$inferSelect;
 
@@ -25,21 +27,6 @@ async function fetchLatestKey(): Promise<JwkRecord | null> {
   return latest ?? null;
 }
 
-function extractRowsAffected(result: unknown): number {
-  if (result && typeof result === "object") {
-    const rowsAffected = (result as { rowsAffected?: number }).rowsAffected;
-    if (typeof rowsAffected === "number") {
-      return rowsAffected;
-    }
-
-    const changes = (result as { changes?: number }).changes;
-    if (typeof changes === "number") {
-      return changes;
-    }
-  }
-  return 0;
-}
-
 export type JwksRotationResult = {
   rotated: boolean;
   pruned: number;
@@ -50,7 +37,9 @@ export type JwksRotationResult = {
 export async function rotateJwksIfNeeded(now = new Date()): Promise<JwksRotationResult> {
   let latestKey = await fetchLatestKey();
   const nowMs = now.getTime();
-  const latestKeyAgeMs = latestKey ? nowMs - getTimestamp(latestKey.createdAt) : Number.POSITIVE_INFINITY;
+  const latestKeyAgeMs = latestKey 
+    ? nowMs - getTimestamp(latestKey.createdAt) 
+    : Number.POSITIVE_INFINITY;
 
   let rotated = false;
 
