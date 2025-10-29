@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Alert } from "@/components/layout/alert";
-import { Button, Card, CardContent, Badge, Icon } from "@/components/ui";
+import { Card, CardContent, Badge, Icon } from "@/components/ui";
 import Link from "next/link";
 
 export default function AdminDashboard() {

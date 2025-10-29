@@ -44,10 +44,6 @@ async function main() {
 
   const email = process.env.TEST_USER_EMAIL ?? "auth-flow@example.com";
   const password = process.env.TEST_USER_PASSWORD ?? "Passw0rd!";
-  const name = process.env.TEST_USER_NAME ?? "Auth Flow User";
-  const username = process.env.TEST_USER_USERNAME ?? "authflow";
-  const displayUsername =
-    process.env.TEST_USER_DISPLAY_USERNAME ?? "Auth Flow";
 
   const clientId = process.env.PAYLOAD_CLIENT_ID;
   const clientSecret = process.env.PAYLOAD_CLIENT_SECRET;

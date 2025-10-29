@@ -10,7 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "type:generate": "npx @better-auth/cli generate --output ./src/db/schema.ts",
-    "ci": "pnpm run lint && pnpm run db:push && pnpm run build",
+    "ci": "pnpm run lint && pnpm run build",
     "user:create": "tsx scripts/create-user.ts",
     "auth:test": "tsx scripts/test-auth-flow.ts",
     "clients:seed": "tsx scripts/seed-clients.ts",

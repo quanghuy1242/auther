@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 
 export interface TopBarProps {

@@ -6,11 +6,17 @@ import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ZodType } from "zod";
 
+interface FormState {
+  success: boolean;
+  errors?: Record<string, string>;
+  data?: unknown;
+}
+
 export interface FormWrapperProps<TSchema> {
   schema: ZodType<TSchema>;
-  action: (prevState: any, formData: FormData) => Promise<any>;
+  action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   children: React.ReactNode;
-  onSuccess?: (data: any) => void;
+  onSuccess?: (data: unknown) => void;
   className?: string;
 }
 
@@ -25,6 +31,7 @@ export interface FormWrapperProps<TSchema> {
  *   <SubmitButton>Sign In</SubmitButton>
  * </FormWrapper>
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function FormWrapper<TSchema extends Record<string, any>>({
   schema,
   action,
@@ -42,6 +49,7 @@ export function FormWrapper<TSchema extends Record<string, any>>({
   React.useEffect(() => {
     if (state.errors) {
       Object.entries(state.errors).forEach(([field, message]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         methods.setError(field as any, { message: message as string });
       });
     }

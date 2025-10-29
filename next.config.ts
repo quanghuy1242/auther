@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
   },
   
   // Webpack fallback for non-Turbopack builds
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     // Material Symbols tree-shaking
     config.resolve.alias = config.resolve.alias || {};
     config.resolve.alias['@material-symbols/font-400$'] = 
@@ -35,6 +35,7 @@ const nextConfig: NextConfig = {
 
 // Bundle analyzer (optional, run with ANALYZE=true pnpm build)
 if (process.env.ANALYZE === 'true') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const withBundleAnalyzer = require('@next/bundle-analyzer')({
     enabled: true,
   });

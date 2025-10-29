@@ -13,7 +13,7 @@ export type CreateUserState = {
   success: boolean;
   error?: string;
   errors?: Record<string, string>;
-  data?: any;
+  data?: unknown;
 };
 
 export async function createUser(

@@ -4,7 +4,6 @@ import * as React from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
 import { cn } from "@/lib/utils/cn";
 import { Icon } from "./icon";
-import { Button } from "./button";
 
 export interface ModalProps {
   isOpen: boolean;

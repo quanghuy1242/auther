@@ -109,6 +109,7 @@ export const colors = {
  */
 export type PolymorphicComponentProps<
   E extends React.ElementType,
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   P = {}
 > = P & 
   Omit<React.ComponentPropsWithoutRef<E>, keyof P> & {
@@ -120,6 +121,7 @@ export type PolymorphicComponentProps<
  */
 export type PolymorphicComponentPropsWithRef<
   E extends React.ElementType,
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   P = {}
 > = PolymorphicComponentProps<E, P> & {
   ref?: React.ComponentPropsWithRef<E>['ref'];
@@ -201,7 +203,7 @@ export interface PaginationConfig {
 // Form Types
 // ============================================================================
 
-export interface FormState<T = any> {
+export interface FormState<T = unknown> {
   success: boolean;
   error?: string;
   errors?: Record<string, string>;

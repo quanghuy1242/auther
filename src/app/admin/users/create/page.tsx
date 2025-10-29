@@ -15,13 +15,11 @@ const createUserSchema = z.object({
   sendWelcomeEmail: z.boolean().optional(),
 });
 
-type CreateUserFormData = z.infer<typeof createUserSchema>;
-
 export default function CreateUserPage() {
   const router = useRouter();
   const [showSuccess, setShowSuccess] = React.useState(false);
 
-  const handleSuccess = (data: any) => {
+  const handleSuccess = () => {
     setShowSuccess(true);
     setTimeout(() => {
       router.push("/admin/users");
