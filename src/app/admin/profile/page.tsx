@@ -5,8 +5,8 @@ import { ProfileClient } from "./profile-client";
 
 export default async function ProfilePage() {
   const { user, session } = await requireAuth();
-  // Pass userId to avoid double auth check (performance optimization)
-  const sessions = await getUserSessions(user.id);
+  // Get sessions using better-auth API (already authenticated)
+  const sessions = await getUserSessions();
 
   return <ProfileClient user={user} sessions={sessions} currentSessionId={session.id} />;
 }

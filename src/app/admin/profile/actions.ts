@@ -1,11 +1,10 @@
 "use server";
 
 import { z } from "zod";
-import { db } from "@/lib/db";
-import { user as userTable, session as sessionTable } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { auth } from "@/lib/auth";
 import { requireAuth, type SessionInfo } from "@/lib/session";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 const updateProfileSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -27,7 +26,7 @@ export async function updateProfile(
   formData: FormData
 ): Promise<UpdateProfileState> {
   try {
-    const { user } = await requireAuth();
+    await requireAuth(); // Verify authentication
 
     const data = {
       name: formData.get("name") as string,
@@ -47,16 +46,22 @@ export async function updateProfile(
       return { success: false, errors };
     }
 
-    // Update user in database
-    await db
-      .update(userTable)
-      .set({
+    // Update user via better-auth API
+    const result = await auth.api.updateUser({
+      body: {
         name: validated.data.name,
-        username: validated.data.username || null,
-        displayUsername: validated.data.displayUsername || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(userTable.id, user.id));
+        username: validated.data.username || undefined,
+        displayUsername: validated.data.displayUsername || undefined,
+      },
+      headers: await headers(),
+    });
+
+    if (!result) {
+      return {
+        success: false,
+        error: "Failed to update user profile",
+      };
+    }
 
     revalidatePath("/admin/profile");
 
@@ -72,28 +77,30 @@ export async function updateProfile(
 
 /**
  * Get all user sessions
+ * Uses better-auth API instead of direct database access
  */
-export async function getUserSessions(userId?: string): Promise<SessionInfo[]> {
+export async function getUserSessions(): Promise<SessionInfo[]> {
   try {
-    // If userId not provided, fetch from auth
-    const finalUserId = userId || (await requireAuth()).user.id;
+    // Use better-auth API to list sessions
+    const result = await auth.api.listSessions({
+      headers: await headers(),
+    });
 
-    const sessions = await db
-      .select({
-        id: sessionTable.id,
-        userId: sessionTable.userId,
-        expiresAt: sessionTable.expiresAt,
-        token: sessionTable.token,
-        ipAddress: sessionTable.ipAddress,
-        userAgent: sessionTable.userAgent,
-        createdAt: sessionTable.createdAt,
-        updatedAt: sessionTable.updatedAt,
-      })
-      .from(sessionTable)
-      .where(eq(sessionTable.userId, finalUserId))
-      .orderBy(desc(sessionTable.createdAt));
+    if (!result || !Array.isArray(result)) {
+      return [];
+    }
 
-    return sessions;
+    // Transform to SessionInfo format
+    return result.map((session) => ({
+      id: session.id,
+      userId: session.userId,
+      expiresAt: session.expiresAt,
+      token: session.token,
+      ipAddress: session.ipAddress || null,
+      userAgent: session.userAgent || null,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    }));
   } catch (error) {
     console.error("Failed to fetch user sessions:", error);
     return [];
@@ -102,15 +109,17 @@ export async function getUserSessions(userId?: string): Promise<SessionInfo[]> {
 
 /**
  * Revoke a specific session
+ * Uses better-auth API instead of direct database access
  */
-export async function revokeSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
+export async function revokeSession(sessionToken: string): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAuth();
 
-    // Delete the session
-    await db
-      .delete(sessionTable)
-      .where(eq(sessionTable.id, sessionId));
+    // Use better-auth API to revoke session
+    await auth.api.revokeSession({
+      body: { token: sessionToken },
+      headers: await headers(),
+    });
 
     revalidatePath("/admin/profile");
 
@@ -126,15 +135,16 @@ export async function revokeSession(sessionId: string): Promise<{ success: boole
 
 /**
  * Revoke all other sessions except current
+ * Uses better-auth API instead of direct database access
  */
 export async function revokeAllOtherSessions(): Promise<{ success: boolean; error?: string }> {
   try {
-    const { user } = await requireAuth();
+    await requireAuth();
 
-    // Delete all sessions except the current one
-    await db
-      .delete(sessionTable)
-      .where(eq(sessionTable.userId, user.id));
+    // Use better-auth API to revoke other sessions
+    await auth.api.revokeOtherSessions({
+      headers: await headers(),
+    });
 
     revalidatePath("/admin/profile");
 

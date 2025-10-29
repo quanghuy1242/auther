@@ -30,8 +30,8 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
     }
   }, [profileState.success]);
 
-  const handleRevokeSession = async (sessionId: string) => {
-    await revokeSession(sessionId);
+  const handleRevokeSession = async (sessionToken: string) => {
+    await revokeSession(sessionToken);
     setSessionToRevoke(null);
   };
 
@@ -279,7 +279,7 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
                               <Button
                                 variant="danger"
                                 size="sm"
-                                onClick={() => setSessionToRevoke(session.id)}
+                                onClick={() => setSessionToRevoke(session.token)}
                               >
                                 Revoke
                               </Button>
