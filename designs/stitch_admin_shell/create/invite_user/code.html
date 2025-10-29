@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Admin Panel - Add New User</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1773cf",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#111a22",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark">
+<div class="relative flex min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="flex flex-grow">
+<!-- SideNavBar -->
+<aside class="flex h-screen min-h-full flex-col justify-between bg-[#111a22] p-4 w-64 border-r border-white/10 sticky top-0">
+<div class="flex flex-col gap-4">
+<div class="flex items-center gap-3">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Admin Panel Logo" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBCjkpWYAQfZrrq9D1eeFhEYys3js4H5IwsEDipYeQhDQtDrt4nDc-8YFZOQu2qFdKqd-tP3s2UknnI8yQKpuIvgrLPn-2k1Vid1mUH-0Nkxok-F2CrTsSsKQTTmWuwPmM3P1DF9M4CzuuvRLedzA0bVkmGr-4KsDvVCf4cm2NkNP0J605CZLdGqT5PQ1I2h42AaKMRJ8Yv_-X6ZgLx1W5WznpcQOiUl5YBkmJfAIq5RFEUgZL6Zj-gLZhEkvm-mf-OgJpwTQHIrJ0");'></div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-medium leading-normal">Admin Panel</h1>
+<p class="text-[#93adc8] text-sm font-normal leading-normal">Super Admin</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2 mt-4">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-[#243647]" href="#">
+<span class="material-symbols-outlined text-white text-2xl">dashboard</span>
+<p class="text-white text-sm font-medium leading-normal">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary text-white" href="#">
+<span class="material-symbols-outlined fill text-white text-2xl">group</span>
+<p class="text-white text-sm font-medium leading-normal">Users</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-[#243647]" href="#">
+<span class="material-symbols-outlined text-white text-2xl">settings</span>
+<p class="text-white text-sm font-medium leading-normal">Settings</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-[#243647]" href="#">
+<span class="material-symbols-outlined text-white text-2xl">bar_chart</span>
+<p class="text-white text-sm font-medium leading-normal">Reports</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-[#243647]" href="#">
+<span class="material-symbols-outlined text-white text-2xl">pie_chart</span>
+<p class="text-white text-sm font-medium leading-normal">Analytics</p>
+</a>
+</nav>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-[#243647]" href="#">
+<span class="material-symbols-outlined text-white text-2xl">help</span>
+<p class="text-white text-sm font-medium leading-normal">Help</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-[#243647]" href="#">
+<span class="material-symbols-outlined text-white text-2xl">logout</span>
+<p class="text-white text-sm font-medium leading-normal">Logout</p>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 p-8">
+<div class="mx-auto max-w-4xl">
+<!-- PageHeading -->
+<div class="flex flex-wrap justify-between gap-3 mb-6">
+<div class="flex min-w-72 flex-col gap-3">
+<p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">Add New User</p>
+<p class="text-gray-500 dark:text-[#93adc8] text-base font-normal leading-normal">Create an account for a new user or send an invitation to join.</p>
+</div>
+</div>
+<div class="bg-white dark:bg-[#1a2632]/50 rounded-xl shadow-lg p-6">
+<!-- SegmentedButtons -->
+<div class="flex px-4 py-3">
+<div class="flex h-10 w-full max-w-md items-center justify-center rounded-lg bg-gray-100 dark:bg-[#243647] p-1">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-md px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-[#111a22] has-[:checked]:shadow-sm has-[:checked]:text-gray-900 dark:has-[:checked]:text-white text-gray-500 dark:text-[#93adc8] text-sm font-medium leading-normal transition-colors duration-200">
+<span class="truncate">Create User</span>
+<input checked="" class="invisible w-0" name="user_mode" type="radio" value="Create User"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-md px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-[#111a22] has-[:checked]:shadow-sm has-[:checked]:text-gray-900 dark:has-[:checked]:text-white text-gray-500 dark:text-[#93adc8] text-sm font-medium leading-normal transition-colors duration-200">
+<span class="truncate">Invite User</span>
+<input class="invisible w-0" name="user_mode" type="radio" value="Invite User"/>
+</label>
+</div>
+</div>
+<!-- BodyText -->
+<p class="text-gray-600 dark:text-white text-base font-normal leading-normal pb-3 pt-1 px-4">Create an account for the new user and set their password manually.</p>
+<!-- Form Section -->
+<form class="space-y-6 p-4">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- TextField: Full Name -->
+<div class="flex flex-col">
+<label class="text-gray-800 dark:text-white text-base font-medium leading-normal pb-2" for="fullName">Full Name</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#1a2632] focus:border-primary h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] px-4 text-base font-normal leading-normal" id="fullName" placeholder="Enter user's full name" type="text"/>
+</div>
+<!-- TextField: Email Address -->
+<div class="flex flex-col">
+<label class="text-gray-800 dark:text-white text-base font-medium leading-normal pb-2" for="email">Email Address</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#1a2632] focus:border-primary h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] px-4 text-base font-normal leading-normal" id="email" placeholder="user@example.com" type="email"/>
+</div>
+</div>
+<!-- Dropdown: User Role -->
+<div class="flex flex-col">
+<label class="text-gray-800 dark:text-white text-base font-medium leading-normal pb-2" for="userRole">User Role</label>
+<select class="form-select flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#1a2632] focus:border-primary h-12 px-4 text-base font-normal leading-normal" id="userRole">
+<option>Viewer</option>
+<option>Editor</option>
+<option>Admin</option>
+</select>
+</div>
+<!-- Password Fields -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="flex flex-col">
+<label class="text-gray-800 dark:text-white text-base font-medium leading-normal pb-2" for="password">Password</label>
+<div class="relative">
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#1a2632] focus:border-primary h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] px-4 text-base font-normal leading-normal" id="password" placeholder="Enter password" type="password"/>
+<button class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white" type="button">
+<span class="material-symbols-outlined">visibility_off</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col">
+<label class="text-gray-800 dark:text-white text-base font-medium leading-normal pb-2" for="confirmPassword">Confirm Password</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#1a2632] focus:border-primary h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] px-4 text-base font-normal leading-normal" id="confirmPassword" placeholder="Confirm password" type="password"/>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-white/10">
+<button class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors duration-200" type="button">Cancel</button>
+<button class="px-6 py-2 rounded-lg text-sm font-semibold text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-background-light dark:focus:ring-offset-background-dark transition-colors duration-200" type="submit">Create User Account</button>
+</div>
+</form>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>
