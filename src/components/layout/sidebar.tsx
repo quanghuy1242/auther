@@ -1,5 +1,8 @@
+"use client";
+
 import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import type { NavItem } from "@/lib/types";
 
@@ -35,10 +38,12 @@ export function Sidebar({ children }: SidebarProps) {
 
 export interface SidebarNavItemProps {
   item: NavItem;
-  isActive?: boolean;
 }
 
-export function SidebarNavItem({ item, isActive }: SidebarNavItemProps) {
+export function SidebarNavItem({ item }: SidebarNavItemProps) {
+  const pathname = usePathname();
+  const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+
   return (
     <Link
       href={item.href}

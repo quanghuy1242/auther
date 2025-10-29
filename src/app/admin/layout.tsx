@@ -1,5 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
 import {
   Sidebar,
   SidebarSection,
@@ -14,6 +16,9 @@ import {
 } from "@/components/layout";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import type { NavItem } from "@/lib/types";
+
+// Force dynamic rendering for admin pages
+export const dynamic = "force-dynamic";
 
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard" },
@@ -32,11 +37,18 @@ const footerNavItems: NavItem[] = [
   { label: "Logout", href: "/api/auth/logout", icon: "logout" },
 ];
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Get session and redirect if not authenticated
+  const session = await getSession();
+  
+  if (!session) {
+    redirect("/sign-in");
+  }
+
   return (
     <div className="flex h-screen bg-[#111921]">
       {/* Sidebar */}
@@ -78,17 +90,12 @@ export default function AdminLayout({
         {/* Top Bar */}
         <TopBar>
           <TopBarLeft>
-            <Breadcrumbs
-              items={[
-                { label: "Admin", href: "/admin" },
-                { label: "Dashboard" },
-              ]}
-            />
+            <Breadcrumbs />
           </TopBarLeft>
           <TopBarRight>
             <TopBarAutoRefresh />
             <TopBarNotifications />
-            <TopBarUserMenu />
+            <TopBarUserMenu user={session.user} />
           </TopBarRight>
         </TopBar>
 

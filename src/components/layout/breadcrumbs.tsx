@@ -1,24 +1,28 @@
+"use client";
+
 import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import type { BreadcrumbItem } from "@/lib/types";
+import { generateBreadcrumbs } from "@/lib/breadcrumbs";
 
 export interface BreadcrumbsProps {
-  items: BreadcrumbItem[];
+  items?: BreadcrumbItem[];
 }
 
 /**
  * Breadcrumbs navigation component
  * Shows hierarchical navigation path
+ * Auto-generates breadcrumbs from pathname if items not provided
  * 
  * @example
- * <Breadcrumbs items={[
- *   { label: 'Admin', href: '/admin' },
- *   { label: 'Users', href: '/admin/users' },
- *   { label: 'John Doe' }
- * ]} />
+ * <Breadcrumbs /> // Auto-generate from current route
+ * <Breadcrumbs items={[...]} /> // Use custom items
  */
-export function Breadcrumbs({ items }: BreadcrumbsProps) {
+export function Breadcrumbs({ items: customItems }: BreadcrumbsProps) {
+  const pathname = usePathname();
+  const items = customItems || generateBreadcrumbs(pathname);
   return (
     <nav className="flex items-center space-x-2 text-sm" aria-label="Breadcrumb">
       {items.map((item, index) => {

@@ -2,8 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Icon } from "@/components/ui/icon";
 import { Dropdown } from "@/components/ui/dropdown";
+import type { SessionUser } from "@/lib/session";
+import { getUserDisplayName, getUserInitials } from "@/lib/session-utils";
 
 export interface TopBarProps {
   children?: React.ReactNode;
@@ -29,19 +32,35 @@ export function TopBarRight({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center gap-3">{children}</div>;
 }
 
-export function TopBarUserMenu() {
+export function TopBarUserMenu({ user }: { user?: SessionUser }) {
   const router = useRouter();
+
+  // Fallback for when user is not provided
+  const displayName = user ? getUserDisplayName(user) : "Loading...";
+  const email = user?.email || "";
+  const initials = user ? getUserInitials(user) : "?";
+  const avatarUrl = user?.image;
 
   return (
     <Dropdown
       trigger={
         <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#243647] transition-colors">
-          <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center">
-            <Icon name="person" size="sm" className="text-white" />
-          </div>
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={displayName}
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center">
+              <span className="text-white text-sm font-medium">{initials}</span>
+            </div>
+          )}
           <div className="text-left hidden md:block">
-            <p className="text-sm font-medium text-white">Admin User</p>
-            <p className="text-xs text-gray-400">admin@example.com</p>
+            <p className="text-sm font-medium text-white">{displayName}</p>
+            <p className="text-xs text-gray-400">{email}</p>
           </div>
           <Icon name="expand_more" size="sm" className="text-gray-400" />
         </button>
