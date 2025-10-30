@@ -1,5 +1,6 @@
-import { config as loadEnv } from "dotenv";
 import crypto from "node:crypto";
+import { config as loadEnv } from "dotenv";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 loadEnv({ path: ".env.local", override: true });
 loadEnv({ path: ".env", override: false });
@@ -43,10 +44,6 @@ async function main() {
 
   const email = process.env.TEST_USER_EMAIL ?? "auth-flow@example.com";
   const password = process.env.TEST_USER_PASSWORD ?? "Passw0rd!";
-  const name = process.env.TEST_USER_NAME ?? "Auth Flow User";
-  const username = process.env.TEST_USER_USERNAME ?? "authflow";
-  const displayUsername =
-    process.env.TEST_USER_DISPLAY_USERNAME ?? "Auth Flow";
 
   const clientId = process.env.PAYLOAD_CLIENT_ID;
   const clientSecret = process.env.PAYLOAD_CLIENT_SECRET;
@@ -205,6 +202,34 @@ async function main() {
   }
 
   console.log("   • Access token received.");
+
+  if (tokenData.id_token) {
+    const expectedIssuer = process.env.JWT_ISSUER ?? baseUrl;
+    const expectedAudience =
+      process.env.OIDC_EXPECTED_AUDIENCE ?? clientId;
+    try {
+      const jwks = createRemoteJWKSet(new URL(`${baseUrl}/api/auth/jwks`));
+      const { payload } = await jwtVerify(tokenData.id_token, jwks, {
+        issuer: expectedIssuer,
+        audience: expectedAudience,
+      });
+      console.log(
+        "     ↳ Verified ID token payload:",
+        JSON.stringify(
+          {
+            iss: payload.iss,
+            aud: payload.aud,
+            sub: payload.sub,
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to verify ID token:", error);
+      process.exit(1);
+    }
+  }
 
   // Step 5: call userinfo endpoint
   console.log("4) Fetching user info…");

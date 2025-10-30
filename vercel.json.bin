@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/rotate-jwks",
+      "schedule": "0 3 1 * *"
+    }
+  ]
+}

@@ -6,18 +6,21 @@ import { useFormState, useFormStatus } from "react-dom";
 
 import { emailPasswordSignIn } from "@/app/sign-in/actions";
 import type { EmailSignInState } from "@/app/sign-in/actions";
+import { Input, Button } from "@/components/ui";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
 
   return (
-    <button
+    <Button
       type="submit"
-      className="w-full rounded-md bg-black px-4 py-2 text-white transition hover:bg-gray-900 disabled:cursor-not-allowed disabled:bg-gray-600"
+      variant="primary"
+      className="w-full"
       disabled={pending}
+      isLoading={pending}
     >
       {pending ? "Signing in..." : "Sign in"}
-    </button>
+    </Button>
   );
 }
 
@@ -50,34 +53,27 @@ export function EmailSignInForm() {
     <form action={action} className="space-y-4">
       <input type="hidden" name="authorizeQuery" value={authorizeQuery} />
       <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
-      <div className="space-y-1">
-        <label htmlFor="email" className="block text-sm font-medium text-gray-200">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
-          placeholder="admin@example.com"
-          autoComplete="email"
-        />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="password" className="block text-sm font-medium text-gray-200">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
-          placeholder="••••••••"
-          autoComplete="current-password"
-        />
-      </div>
+      
+      <Input
+        id="email"
+        name="email"
+        type="email"
+        label="Email"
+        placeholder="admin@example.com"
+        autoComplete="email"
+        required
+      />
+      
+      <Input
+        id="password"
+        name="password"
+        type="password"
+        label="Password"
+        placeholder="••••••••"
+        autoComplete="current-password"
+        required
+      />
+      
       {state.error ? (
         <p className="text-sm text-red-400">{state.error}</p>
       ) : null}
@@ -86,6 +82,7 @@ export function EmailSignInForm() {
       ) : state.success ? (
         <p className="text-sm text-emerald-400">You are signed in.</p>
       ) : null}
+      
       <SubmitButton />
     </form>
   );

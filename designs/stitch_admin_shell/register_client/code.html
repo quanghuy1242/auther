@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Register New OAuth Client</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1773cf",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#111921",
+                        "card-light": "#ffffff",
+                        "card-dark": "#1a2632",
+                        "text-light": "#1f2937",
+                        "text-dark": "#f9fafb",
+                        "text-secondary-light": "#6b7280",
+                        "text-secondary-dark": "#93adc8",
+                        "border-light": "#e5e7eb",
+                        "border-dark": "#344d65"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="flex h-screen">
+<!-- SideNavBar -->
+<aside class="w-64 flex-shrink-0 bg-card-light dark:bg-card-dark border-r border-border-light dark:border-border-dark">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-4">
+<div class="flex items-center gap-3 p-2">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Admin user avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBQMep3XfZts7ltNXaJrOHmkPSvANDwHtkgGBkW2B_CTJrLt6tT6O8-GjZMVMRmBGz2Jf9iz1OSVIQqw3wgoiBCDK-5lxqFED0qp9vl5Q2oEI2lN9hY4HzbcjwTsJ4i0hkJ71q_0ltUtYUiNHt9TwIs0kW9yUcPFo3EqCWy0nudSeLFFnQTghbQXBR2F5waCA0SG1bys2D3VNd33DjdgAMUkrydexoBkf6KR2SgVQi5zfylW0CTWNXjoyA70JCPjjUK7NXsQTp_-IE");'></div>
+<div class="flex flex-col">
+<h1 class="text-text-light dark:text-text-dark text-base font-medium leading-normal">Admin Panel</h1>
+<p class="text-text-secondary-light dark:text-text-secondary-dark text-sm font-normal leading-normal">Super User</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2 mt-4">
+<a class="flex items-center gap-3 px-3 py-2 text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/5 rounded-lg" href="#">
+<span class="material-symbols-outlined text-text-secondary-light dark:text-text-secondary-dark text-[24px]">dashboard</span>
+<p class="text-sm font-medium">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary" href="#">
+<span class="material-symbols-outlined text-primary text-[24px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+<p class="text-sm font-medium">OAuth Management</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-text-secondary-light dark:text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/5 rounded-lg" href="#">
+<span class="material-symbols-outlined text-text-secondary-light dark:text-text-secondary-dark text-[24px]">settings</span>
+<p class="text-sm font-medium">Settings</p>
+</a>
+</nav>
+</div>
+<button class="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90">
+<span class="truncate">Logout</span>
+</button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto">
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap items-center gap-2 mb-6">
+<a class="text-text-secondary-light dark:text-text-secondary-dark text-sm font-medium leading-normal hover:text-primary" href="#">Admin</a>
+<span class="text-text-secondary-light dark:text-text-secondary-dark text-sm font-medium leading-normal">/</span>
+<a class="text-text-secondary-light dark:text-text-secondary-dark text-sm font-medium leading-normal hover:text-primary" href="#">OAuth Management</a>
+<span class="text-text-secondary-light dark:text-text-secondary-dark text-sm font-medium leading-normal">/</span>
+<span class="text-text-light dark:text-text-dark text-sm font-medium leading-normal">Register Client</span>
+</div>
+<!-- PageHeading -->
+<div class="flex flex-wrap justify-between gap-3 mb-8">
+<div class="flex flex-col gap-2">
+<h1 class="text-text-light dark:text-text-dark text-3xl font-bold tracking-tight">Register New OAuth Client</h1>
+<p class="text-text-secondary-light dark:text-text-secondary-dark text-base font-normal leading-normal">Fill in the details below to register a new OAuth 2.0 client application.</p>
+</div>
+</div>
+<!-- Form Container -->
+<div class="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm">
+<form action="#" class="space-y-8 p-6 sm:p-8" method="POST">
+<!-- Client Metadata Section -->
+<div>
+<h2 class="text-text-light dark:text-text-dark text-lg font-semibold leading-tight tracking-[-0.015em] pb-4 border-b border-border-light dark:border-border-dark">Client Metadata</h2>
+<div class="mt-6 grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+<!-- Client Name -->
+<div class="sm:col-span-1">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="client_name">Client Name</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-text-light dark:text-text-dark focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:border-primary h-11 placeholder:text-text-secondary-light dark:placeholder:text-text-secondary-dark px-3 text-sm" id="client_name" name="client_name" placeholder="e.g., My Awesome App" type="text"/>
+</div>
+<!-- Contacts (Email) -->
+<div class="sm:col-span-1">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="contacts">Contacts (Email)</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-text-light dark:text-text-dark focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:border-primary h-11 placeholder:text-text-secondary-light dark:placeholder:text-text-secondary-dark px-3 text-sm" id="contacts" name="contacts" placeholder="e.g., admin@example.com" type="email"/>
+</div>
+<!-- Client URI -->
+<div class="sm:col-span-1">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="client_uri">Client URI</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-text-light dark:text-text-dark focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:border-primary h-11 placeholder:text-text-secondary-light dark:placeholder:text-text-secondary-dark px-3 text-sm" id="client_uri" name="client_uri" placeholder="https://example.com" type="url"/>
+</div>
+<!-- Logo URI -->
+<div class="sm:col-span-1">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="logo_uri">Logo URI</label>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-text-light dark:text-text-dark focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:border-primary h-11 placeholder:text-text-secondary-light dark:placeholder:text-text-secondary-dark px-3 text-sm" id="logo_uri" name="logo_uri" placeholder="https://example.com/logo.png" type="url"/>
+</div>
+<!-- Redirect URIs -->
+<div class="sm:col-span-2">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="redirect_uris">Redirect URIs</label>
+<textarea class="form-textarea flex w-full min-w-0 flex-1 resize-y overflow-hidden rounded-lg text-text-light dark:text-text-dark focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:border-primary placeholder:text-text-secondary-light dark:placeholder:text-text-secondary-dark p-3 text-sm" id="redirect_uris" name="redirect_uris" placeholder="https://app.example.com/callback
+https://staging.app.example.com/callback" rows="3"></textarea>
+<p class="mt-2 text-xs text-text-secondary-light dark:text-text-secondary-dark">One URI per line. These are the locations where the user will be redirected to after authentication.</p>
+</div>
+</div>
+</div>
+<!-- Authentication & Authorization Section -->
+<div>
+<h2 class="text-text-light dark:text-text-dark text-lg font-semibold leading-tight tracking-[-0.015em] pb-4 border-b border-border-light dark:border-border-dark">Authentication &amp; Authorization</h2>
+<div class="mt-6 grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+<!-- Grant Types -->
+<div class="sm:col-span-1">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="grant_types">Grant Types</label>
+<select class="form-select block w-full rounded-lg border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark shadow-sm focus:border-primary focus:ring-2 focus:ring-primary/50 sm:text-sm h-11 px-3" id="grant_types" name="grant_types">
+<option>authorization_code</option>
+<option>client_credentials</option>
+<option>refresh_token</option>
+<option>implicit</option>
+</select>
+</div>
+<!-- Response Types -->
+<div class="sm:col-span-1">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="response_types">Response Types</label>
+<select class="form-select block w-full rounded-lg border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark shadow-sm focus:border-primary focus:ring-2 focus:ring-primary/50 sm:text-sm h-11 px-3" id="response_types" name="response_types">
+<option>code</option>
+<option>token</option>
+<option>id_token</option>
+</select>
+</div>
+<!-- Token Endpoint Auth Method -->
+<div class="sm:col-span-2">
+<label class="block text-sm font-medium leading-6 text-text-light dark:text-text-dark pb-2" for="token_auth_method">Token Endpoint Auth Method</label>
+<select class="form-select block w-full rounded-lg border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark shadow-sm focus:border-primary focus:ring-2 focus:ring-primary/50 sm:text-sm h-11 px-3" id="token_auth_method" name="token_auth_method">
+<option>client_secret_basic</option>
+<option>client_secret_post</option>
+<option>private_key_jwt</option>
+<option>none</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Trust & Consent Section -->
+<div>
+<h2 class="text-text-light dark:text-text-dark text-lg font-semibold leading-tight tracking-[-0.015em] pb-4 border-b border-border-light dark:border-border-dark">Trust &amp; Consent Settings</h2>
+<div class="mt-6 relative flex items-start">
+<div class="flex h-6 items-center">
+<input class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" id="trusted_client" name="trusted_client" type="checkbox"/>
+</div>
+<div class="ml-3 text-sm leading-6">
+<label class="font-medium text-text-light dark:text-text-dark" for="trusted_client">Mark as Trusted Client</label>
+<p class="text-text-secondary-light dark:text-text-secondary-dark text-xs">Trusted clients are pre-approved and will bypass the user consent screen. Use with caution for internal or highly trusted applications.</p>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-end gap-x-4 pt-6 border-t border-border-light dark:border-border-dark">
+<button class="text-sm font-semibold leading-6 text-text-light dark:text-text-dark hover:bg-black/5 dark:hover:bg-white/5 px-4 py-2 rounded-lg" type="button">Cancel</button>
+<button class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-6 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" type="submit">Register Client</button>
+</div>
+</form>
+</div>
+</div>
+</main>
+</div>
+</body></html>

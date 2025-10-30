@@ -10,35 +10,129 @@ import { createAuthMiddleware } from "better-auth/api";
 import { env } from "@/env";
 import * as schema from "@/db/schema";
 import { db } from "@/lib/db";
+import { DEFAULT_LOCAL_BASE_URL, OAUTH_AUTHORIZE_PATH } from "@/lib/constants";
+import { createWildcardRegexes, partitionWildcardPatterns } from "@/lib/utils/wildcard";
+import { collectOrigins, resolveRelativePath } from "@/lib/utils/url";
+import { 
+  registerPreviewRedirect, 
+  type TrustedClientConfig 
+} from "@/lib/utils/oauth-client";
+import { 
+  createRestrictedSignupPaths, 
+  validateInternalSignupAccess 
+} from "@/lib/utils/auth-middleware";
+// import { createPayloadUserHooks } from "@/lib/webhooks/payload-hooks";
 
-const baseURL = env.PRODUCTION_URL ?? env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
+
+const baseURL =
+  env.PRODUCTION_URL ?? env.NEXT_PUBLIC_APP_URL ?? vercelPreviewURL ?? DEFAULT_LOCAL_BASE_URL;
+const runtimeURL = env.NEXT_PUBLIC_APP_URL ?? vercelPreviewURL ?? baseURL;
+const productionURL = env.PRODUCTION_URL ?? baseURL;
+
+const previewOriginPatterns = env.PAYLOAD_PREVIEW_ORIGIN_PATTERNS;
+const { exact: previewOriginCandidates, wildcard: previewWildcardOrigins } =
+  partitionWildcardPatterns(previewOriginPatterns);
+const previewOriginMatchers = createWildcardRegexes(previewOriginPatterns);
 
 const trustedOriginCandidates = [
   baseURL,
+  runtimeURL,
+  productionURL,
   "https://payload.quanghuy.dev",
-  env.NEXT_PUBLIC_APP_URL,
-  env.PRODUCTION_URL,
+  ...previewOriginCandidates,
   env.PAYLOAD_REDIRECT_URI,
   ...env.PAYLOAD_SPA_REDIRECT_URIS,
   ...(env.PAYLOAD_SPA_LOGOUT_URIS ?? []),
 ];
 
-export const trustedOrigins = Array.from(
-  new Set(
-    trustedOriginCandidates
-      .map((value) => {
-        if (!value) {
-          return undefined;
-        }
-        try {
-          return new URL(value).origin;
-        } catch {
-          return undefined;
-        }
-      })
-      .filter((value): value is string => Boolean(value)),
-  ),
+const wildcardTrustedOrigins = Array.from(
+  new Set(["https://*.quanghuy.dev", ...previewWildcardOrigins]),
 );
+
+const normalizedTrustedOrigins = Array.from(collectOrigins(trustedOriginCandidates));
+
+export const trustedOrigins = Array.from(
+  new Set([...normalizedTrustedOrigins, ...wildcardTrustedOrigins]),
+);
+
+const payloadAdminRedirects = new Set<string>([env.PAYLOAD_REDIRECT_URI]);
+const payloadSPAInitialRedirects = env.PAYLOAD_SPA_REDIRECT_URIS.filter(Boolean);
+const payloadSPARedirects = new Set<string>(payloadSPAInitialRedirects);
+const payloadSPALogoutRedirects = new Set<string>(env.PAYLOAD_SPA_LOGOUT_URIS ?? []);
+
+const payloadAdminClient = {
+  clientId: env.PAYLOAD_CLIENT_ID,
+  clientSecret: env.PAYLOAD_CLIENT_SECRET,
+  type: "web" as const,
+  name: "Payload Admin (Confidential)",
+  redirectURLs: Array.from(payloadAdminRedirects),
+  metadata: {
+    tokenEndpointAuthMethod: "client_secret_basic",
+    grantTypes: ["authorization_code"],
+  },
+  disabled: false,
+  skipConsent: true,
+};
+
+const payloadSPAClient = {
+  clientId: env.PAYLOAD_SPA_CLIENT_ID,
+  type: "public" as const,
+  name: "Payload SPA (PKCE)",
+  redirectURLs: Array.from(payloadSPARedirects),
+  metadata: {
+    tokenEndpointAuthMethod: "none",
+    grantTypes: ["authorization_code"],
+    postLogoutRedirectUris: Array.from(payloadSPALogoutRedirects),
+  },
+  disabled: false,
+  skipConsent: true,
+};
+
+const dynamicRedirectConfig = new Map<string, TrustedClientConfig>([
+  [
+    payloadAdminClient.clientId,
+    {
+      redirectSet: payloadAdminRedirects,
+      client: payloadAdminClient,
+    },
+  ],
+  [
+    payloadSPAClient.clientId,
+    {
+      redirectSet: payloadSPARedirects,
+      client: payloadSPAClient,
+    },
+  ],
+]);
+
+const restrictedSignupPaths = createRestrictedSignupPaths();
+
+const beforeHook = createAuthMiddleware(async (ctx) => {
+  const request = ctx.request;
+  if (!request) {
+    return;
+  }
+
+  const requestUrl = new URL(request.url);
+  const relativePath = resolveRelativePath(requestUrl, ctx.context.baseURL);
+
+  validateInternalSignupAccess(
+    request, 
+    relativePath, 
+    restrictedSignupPaths, 
+    env.PAYLOAD_CLIENT_SECRET
+  );
+
+  if (relativePath === OAUTH_AUTHORIZE_PATH) {
+    registerPreviewRedirect(
+      requestUrl.searchParams.get("client_id"),
+      requestUrl.searchParams.get("redirect_uri"),
+      dynamicRedirectConfig,
+      previewOriginMatchers
+    );
+  }
+});
 
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
@@ -54,27 +148,11 @@ export const auth = betterAuth({
   },
   trustedOrigins,
   hooks: {
-    before: createAuthMiddleware(async (ctx) => {
-      const request = ctx.request;
-      if (!request) {
-        return;
-      }
-
-      const requestUrl = new URL(request.url);
-      const basePathname = new URL(ctx.context.baseURL).pathname;
-      const relativePath = requestUrl.pathname.startsWith(basePathname)
-        ? requestUrl.pathname.slice(basePathname.length) || "/"
-        : requestUrl.pathname;
-
-      const restrictedPaths = new Set(["/sign-up/email", "/oauth2/register"]);
-      if (restrictedPaths.has(relativePath)) {
-        const headerSecret = request.headers.get("x-internal-signup-secret");
-        if (!headerSecret || headerSecret !== env.PAYLOAD_CLIENT_SECRET) {
-          throw new Response("Forbidden", { status: 403 });
-        }
-      }
-    }),
+    before: beforeHook,
   },
+  // databaseHooks: {
+  //   user: createPayloadUserHooks(),
+  // },
   plugins: [
     username(),
     jwt({
@@ -90,38 +168,11 @@ export const auth = betterAuth({
       metadata: {
         issuer: env.JWT_ISSUER,
       },
-      trustedClients: [
-        {
-          clientId: env.PAYLOAD_CLIENT_ID,
-          clientSecret: env.PAYLOAD_CLIENT_SECRET,
-          type: "web",
-          name: "Payload Admin (Confidential)",
-          redirectURLs: [env.PAYLOAD_REDIRECT_URI],
-          metadata: {
-            tokenEndpointAuthMethod: "client_secret_basic",
-            grantTypes: ["authorization_code"],
-          },
-          disabled: false,
-          skipConsent: true,
-        },
-        {
-          clientId: env.PAYLOAD_SPA_CLIENT_ID,
-          type: "public",
-          name: "Payload SPA (PKCE)",
-          redirectURLs: env.PAYLOAD_SPA_REDIRECT_URIS,
-          metadata: {
-            tokenEndpointAuthMethod: "none",
-            grantTypes: ["authorization_code"],
-            postLogoutRedirectUris: env.PAYLOAD_SPA_LOGOUT_URIS ?? [],
-          },
-          disabled: false,
-          skipConsent: true,
-        },
-      ],
+      trustedClients: [payloadAdminClient, payloadSPAClient],
     }),
     oAuthProxy({
-      productionURL: env.PRODUCTION_URL,
-      currentURL: env.NEXT_PUBLIC_APP_URL,
+      productionURL,
+      currentURL: runtimeURL,
     }),
     nextCookies(),
   ],
