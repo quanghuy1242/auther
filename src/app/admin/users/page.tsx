@@ -5,11 +5,29 @@ import { Button } from "@/components/ui";
 import { getUsers } from "./actions";
 import { UsersClient } from "./users-client";
 
-export default async function UsersPage() {
-  const usersData = await getUsers({ page: 1, pageSize: 10 });
+interface UsersPageProps {
+  searchParams: Promise<{
+    page?: string;
+    search?: string;
+    verified?: string;
+  }>;
+}
+
+export default async function UsersPage({ searchParams }: UsersPageProps) {
+  const params = await searchParams;
+  const page = parseInt(params.page || "1", 10);
+  const search = params.search || "";
+  const verified = params.verified === "true" ? true : params.verified === "false" ? false : null;
+
+  const usersData = await getUsers({
+    page,
+    pageSize: 10,
+    search,
+    verified,
+  });
 
   return (
-    <>
+    <div className="max-w-6xl mx-auto">
       <PageHeading
         title="User Management"
         description="Manage, search, and filter all users in the system."
@@ -23,6 +41,6 @@ export default async function UsersPage() {
       />
 
       <UsersClient initialData={usersData} />
-    </>
+    </div>
   );
 }

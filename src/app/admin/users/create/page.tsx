@@ -101,14 +101,13 @@ export default function CreateUserPage() {
   };
 
   return (
-    <>
+    <div className="max-w-4xl mx-auto">
       <PageHeading
         title="Create New User"
         description="Add a new user account to the system"
       />
 
-      <div className="max-w-2xl">
-        <Card>
+      <Card>
           <CardContent className="pt-6">
             {showSuccess ? (
               <div className="text-center py-8">
@@ -136,7 +135,6 @@ export default function CreateUserPage() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </>
+    </div>
   );
 }

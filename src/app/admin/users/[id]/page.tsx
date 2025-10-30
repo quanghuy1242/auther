@@ -16,5 +16,9 @@ export default async function UserDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  return <UserDetailClient user={user} />;
+  return (
+    <div className="max-w-6xl mx-auto">
+      <UserDetailClient user={user} />
+    </div>
+  );
 }

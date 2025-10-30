@@ -5,11 +5,29 @@ import { Button } from "@/components/ui";
 import { getOAuthClients } from "./actions";
 import { ClientsClient } from "./clients-client";
 
-export default async function ClientsPage() {
-  const clientsData = await getOAuthClients({ page: 1, pageSize: 10 });
+interface ClientsPageProps {
+  searchParams: Promise<{
+    page?: string;
+    search?: string;
+    type?: string;
+  }>;
+}
+
+export default async function ClientsPage({ searchParams }: ClientsPageProps) {
+  const params = await searchParams;
+  const page = parseInt(params.page || "1", 10);
+  const search = params.search || "";
+  const type = params.type === "trusted" || params.type === "dynamic" ? params.type : null;
+
+  const clientsData = await getOAuthClients({
+    page,
+    pageSize: 10,
+    search,
+    type,
+  });
 
   return (
-    <>
+    <div className="max-w-6xl mx-auto">
       <PageHeading
         title="OAuth Client Management"
         description="Manage trusted and dynamically registered OAuth clients."
@@ -23,6 +41,6 @@ export default async function ClientsPage() {
       />
 
       <ClientsClient initialData={clientsData} />
-    </>
+    </div>
   );
 }

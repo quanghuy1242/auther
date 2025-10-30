@@ -3,7 +3,7 @@
 import * as React from "react";
 import { z } from "zod";
 import { PageHeading } from "@/components/layout/page-heading";
-import { Card, CardContent, Button, Icon } from "@/components/ui";
+import { Card, CardContent, Button, Icon, Badge, UrlListBuilder } from "@/components/ui";
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { registerClient, type RegisterClientState } from "./actions";
 import { useRouter } from "next/navigation";
@@ -17,10 +17,86 @@ const registerClientSchema = z.object({
   tokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"], "Invalid auth method"),
 });
 
+const GRANT_TYPES = [
+  { value: "authorization_code", label: "Authorization Code", description: "Standard server-side flow" },
+  { value: "refresh_token", label: "Refresh Token", description: "Get new access tokens" },
+  { value: "client_credentials", label: "Client Credentials", description: "Machine-to-machine auth" },
+  { value: "implicit", label: "Implicit", description: "Legacy browser flow (not recommended)" },
+  { value: "password", label: "Password", description: "Resource owner password (not recommended)" },
+];
+
+function GrantTypesSelector() {
+  const [selectedGrants, setSelectedGrants] = React.useState<string[]>(["authorization_code", "refresh_token"]);
+  const [grantTypesInput, setGrantTypesInput] = React.useState("authorization_code, refresh_token");
+
+  const toggleGrant = (grantType: string) => {
+    const newSelected = selectedGrants.includes(grantType)
+      ? selectedGrants.filter(g => g !== grantType)
+      : [...selectedGrants, grantType];
+    
+    setSelectedGrants(newSelected);
+    setGrantTypesInput(newSelected.join(", "));
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-200 mb-3">
+        Grant Types
+      </label>
+      <div className="space-y-3">
+        {GRANT_TYPES.map((grant) => (
+          <label
+            key={grant.value}
+            className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+          >
+            <input
+              type="checkbox"
+              checked={selectedGrants.includes(grant.value)}
+              onChange={() => toggleGrant(grant.value)}
+              className="mt-1 w-4 h-4 rounded border-gray-600 text-[#1773cf] focus:ring-[#1773cf] focus:ring-offset-0 bg-[#1a1d24]"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-white">{grant.label}</span>
+                <code className="text-xs text-gray-400 bg-[#1a1d24] px-2 py-0.5 rounded">{grant.value}</code>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{grant.description}</p>
+            </div>
+          </label>
+        ))}
+      </div>
+      <input
+        type="hidden"
+        name="grantTypes"
+        value={grantTypesInput}
+      />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <span className="text-sm text-gray-400">Selected:</span>
+        {selectedGrants.length === 0 ? (
+          <span className="text-sm text-gray-500">None</span>
+        ) : (
+          selectedGrants.map((grant) => (
+            <Badge key={grant} variant="default">
+              {grant}
+            </Badge>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function RegisterClientPage() {
   const router = useRouter();
   const [clientData, setClientData] = React.useState<{ clientId: string; clientSecret?: string } | null>(null);
   const [copied, setCopied] = React.useState<"id" | "secret" | null>(null);
+  const [redirectUrls, setRedirectUrls] = React.useState<string[]>([]);
+  const [redirectUrlsInput, setRedirectUrlsInput] = React.useState("");
+
+  // Keep redirectURLs input in sync with the URL list
+  React.useEffect(() => {
+    setRedirectUrlsInput(redirectUrls.join("\n"));
+  }, [redirectUrls]);
 
   const handleSuccess = (data: unknown) => {
     const result = data as RegisterClientState["data"];
@@ -37,14 +113,13 @@ export default function RegisterClientPage() {
 
   if (clientData) {
     return (
-      <>
+      <div className="max-w-4xl mx-auto">
         <PageHeading
           title="Client Registered Successfully"
           description="Save these credentials securely - the secret cannot be retrieved again"
         />
 
-        <div className="max-w-3xl space-y-6">
-          <Card>
+        <Card>
             <CardContent className="pt-6 space-y-6">
               <div className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                 <Icon name="warning" className="text-yellow-500 text-2xl flex-shrink-0" />
@@ -121,20 +196,18 @@ export default function RegisterClientPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="max-w-4xl mx-auto">
       <PageHeading
         title="Register OAuth Client"
         description="Create a new OAuth 2.0 client application"
       />
 
-      <div className="max-w-3xl">
-        <Card>
+      <Card>
           <CardContent className="pt-6">
             <FormWrapper
               schema={registerClientSchema}
@@ -163,18 +236,20 @@ export default function RegisterClientPage() {
               />
 
               <div>
-                <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Redirect URIs <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  name="redirectURLs"
-                  className="w-full px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent resize-y min-h-[120px]"
-                  placeholder="https://example.com/callback&#10;https://example.com/auth/callback&#10;http://localhost:3000/callback"
-                  required
+                <UrlListBuilder
+                  urls={redirectUrls}
+                  onChange={setRedirectUrls}
+                  placeholder="https://example.com/callback"
+                  label="Redirect URIs"
+                  description="These are the allowed callback URLs after authentication."
+                  minUrls={1}
+                  validateUrl={true}
                 />
-                <p className="text-sm text-gray-400 mt-1">
-                  Enter one URL per line. These are the allowed callback URLs after authentication.
-                </p>
+                <input
+                  type="hidden"
+                  name="redirectURLs"
+                  value={redirectUrlsInput}
+                />
               </div>
 
               <ControlledSelect
@@ -189,21 +264,7 @@ export default function RegisterClientPage() {
                 ]}
               />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Grant Types
-                </label>
-                <input
-                  type="text"
-                  name="grantTypes"
-                  className="w-full px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent"
-                  placeholder="authorization_code, refresh_token"
-                  defaultValue="authorization_code, refresh_token"
-                />
-                <p className="text-sm text-gray-400 mt-1">
-                  Comma-separated list of allowed OAuth 2.0 grant types
-                </p>
-              </div>
+              <GrantTypesSelector />
 
               <ControlledCheckbox
                 name="trusted"
@@ -226,7 +287,6 @@ export default function RegisterClientPage() {
             </FormWrapper>
           </CardContent>
         </Card>
-      </div>
-    </>
+    </div>
   );
 }

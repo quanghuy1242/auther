@@ -50,3 +50,11 @@ export const JWKS_ROTATION_INTERVAL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 export const JWKS_RETENTION_WINDOW_MS = JWKS_ROTATION_INTERVAL_MS * 2; // 60 days
 export const WEBHOOK_MAX_AGE_MS = 5 * 60_000; // 5 minutes
 export const WEBHOOK_IDEMPOTENCY_TTL_SECONDS = 60 * 60 * 48; // 48 hours
+
+/**
+ * Get human-readable rotation cadence display
+ */
+export function getRotationCadenceDisplay(ms: number = JWKS_ROTATION_INTERVAL_MS): string {
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+  return `${days} days`;
+}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { Badge, Button, Input } from "@/components/ui";
 import type { GetClientsResult } from "./actions";
@@ -11,8 +12,21 @@ interface ClientsClientProps {
 }
 
 export function ClientsClient({ initialData }: ClientsClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = React.useState("");
-  const [filterType, setFilterType] = React.useState<"all" | "trusted" | "dynamic">("all");
+  const [isPending, startTransition] = React.useTransition();
+  const isInitialMount = React.useRef(true);
+  
+  const filterType = (searchParams.get("type") as "all" | "trusted" | "dynamic") || "all";
+
+  // Initialize search from URL params only on mount
+  React.useEffect(() => {
+    if (isInitialMount.current) {
+      setSearch(searchParams.get("search") || "");
+      isInitialMount.current = false;
+    }
+  }, [searchParams]);
 
   const formatDate = (date: Date | null) => {
     if (!date) return "Never";
@@ -25,6 +39,48 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
 
   const getClientType = (userId: string | null): "trusted" | "dynamic" => {
     return userId ? "trusted" : "dynamic";
+  };
+
+  // Debounced search effect
+  React.useEffect(() => {
+    if (isInitialMount.current) return; // Skip on initial mount
+    
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (search) {
+        params.set("search", search);
+      } else {
+        params.delete("search");
+      }
+      params.set("page", "1"); // Reset to page 1 on search
+      startTransition(() => {
+        router.push(`/admin/clients?${params.toString()}`);
+      });
+    }, 300);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, router]);
+
+  const handleFilterChange = (type: "all" | "trusted" | "dynamic") => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (type === "all") {
+      params.delete("type");
+    } else {
+      params.set("type", type);
+    }
+    params.set("page", "1"); // Reset to page 1 on filter change
+    startTransition(() => {
+      router.push(`/admin/clients?${params.toString()}`);
+    });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", newPage.toString());
+    startTransition(() => {
+      router.push(`/admin/clients?${params.toString()}`);
+    });
   };
 
   return (
@@ -49,21 +105,24 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
             <Button
               variant={filterType === "all" ? "primary" : "secondary"}
               size="sm"
-              onClick={() => setFilterType("all")}
+              onClick={() => handleFilterChange("all")}
+              disabled={isPending}
             >
               All
             </Button>
             <Button
               variant={filterType === "trusted" ? "primary" : "secondary"}
               size="sm"
-              onClick={() => setFilterType("trusted")}
+              onClick={() => handleFilterChange("trusted")}
+              disabled={isPending}
             >
               Trusted
             </Button>
             <Button
               variant={filterType === "dynamic" ? "primary" : "secondary"}
               size="sm"
-              onClick={() => setFilterType("dynamic")}
+              onClick={() => handleFilterChange("dynamic")}
+              disabled={isPending}
             >
               Dynamic
             </Button>
@@ -186,16 +245,18 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
           <Button
             variant="secondary"
             size="sm"
-            disabled={initialData.page <= 1}
+            disabled={initialData.page <= 1 || isPending}
             leftIcon="chevron_left"
+            onClick={() => handlePageChange(initialData.page - 1)}
           >
             Previous
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            disabled={initialData.page >= initialData.totalPages}
+            disabled={initialData.page >= initialData.totalPages || isPending}
             rightIcon="chevron_right"
+            onClick={() => handlePageChange(initialData.page + 1)}
           >
             Next
           </Button>

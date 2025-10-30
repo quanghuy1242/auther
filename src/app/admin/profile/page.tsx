@@ -8,5 +8,9 @@ export default async function ProfilePage() {
   // Get sessions using better-auth API (already authenticated)
   const sessions = await getUserSessions();
 
-  return <ProfileClient user={user} sessions={sessions} currentSessionId={session.id} />;
+  return (
+    <div className="max-w-6xl mx-auto">
+      <ProfileClient user={user} sessions={sessions} currentSessionId={session.id} />
+    </div>
+  );
 }

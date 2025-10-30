@@ -6,7 +6,7 @@ import Link from "next/link";
 
 export default function AdminDashboard() {
   return (
-    <>
+    <div className="max-w-6xl mx-auto">
       {/* Alert Banner */}
       <Alert variant="warning" title="System Maintenance" className="mb-6">
         Scheduled maintenance window: Tonight at 2:00 AM UTC (Est. 30 minutes)
@@ -161,6 +161,6 @@ export default function AdminDashboard() {
           </div>
         </CardContent>
       </Card>
-    </>
+    </div>
   );
 }

@@ -7,12 +7,12 @@ export default async function KeysPage() {
   const keys = await getJwksKeys();
 
   return (
-    <>
+    <div className="max-w-6xl mx-auto">
       <PageHeading
         title="JWKS Key Management"
         description="Manage JSON Web Key Sets for token signing"
       />
       <KeysClient initialKeys={keys} />
-    </>
+    </div>
   );
 }

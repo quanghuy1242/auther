@@ -18,7 +18,7 @@ export function Sidebar({ children }: SidebarProps) {
   return (
     <aside className="w-64 h-screen bg-[#1a2632] border-r border-[#243647] flex flex-col">
       {/* Logo Section */}
-      <div className="px-6 py-5 border-b border-[#243647]">
+      <div className="h-16 px-6 py-3 border-b border-[#243647]">
         <div className="flex items-center gap-3">
           <Icon name="lock" size="lg" className="text-[#1773cf]" filled />
           <div>

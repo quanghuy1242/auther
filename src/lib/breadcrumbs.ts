@@ -7,7 +7,7 @@ const routeLabels: Record<string, string> = {
   "/admin/clients": "OAuth Clients",
   "/admin/sessions": "Sessions",
   "/admin/keys": "JWKS Keys",
-  "/admin/settings": "Configuration",
+  "/admin/settings": "Configuration & Secrets",
   "/admin/profile": "Profile Settings",
   "/components-demo": "Component Showcase",
 };
