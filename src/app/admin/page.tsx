@@ -3,14 +3,32 @@ import { PageHeading } from "@/components/layout/page-heading";
 import { Alert } from "@/components/layout/alert";
 import { Card, CardContent, Badge, Icon } from "@/components/ui";
 import Link from "next/link";
+import { getDashboardStats, getRecentSignIns } from "./actions";
 
-export default function AdminDashboard() {
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  
+  if (seconds < 60) return `${seconds} seconds ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
+export default async function AdminDashboard() {
+  const stats = await getDashboardStats();
+  const recentSignIns = await getRecentSignIns(3);
+
   return (
     <div className="max-w-6xl mx-auto">
       {/* Alert Banner */}
-      <Alert variant="warning" title="System Maintenance" className="mb-6">
-        Scheduled maintenance window: Tonight at 2:00 AM UTC (Est. 30 minutes)
-      </Alert>
+      {stats.jwks.daysOld >= 25 && (
+        <Alert variant="warning" title="JWKS Key Rotation Recommended" className="mb-6">
+          Your signing key is {stats.jwks.latestKeyAge} old. Consider rotating keys to maintain security best practices.
+        </Alert>
+      )}
 
       {/* Page Header */}
       <PageHeading
@@ -27,8 +45,11 @@ export default function AdminDashboard() {
                 <Icon name="group" size="lg" className="text-[#1773cf]" />
               </div>
               <div className="flex-1">
-                <p className="text-2xl font-bold text-white">1,234</p>
+                <p className="text-2xl font-bold text-white">{stats.users.total.toLocaleString()}</p>
                 <p className="text-sm text-gray-400">Total Users</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats.users.verified} verified, {stats.users.unverified} unverified
+                </p>
               </div>
             </div>
           </CardContent>
@@ -41,8 +62,11 @@ export default function AdminDashboard() {
                 <Icon name="apps" size="lg" className="text-green-500" />
               </div>
               <div className="flex-1">
-                <p className="text-2xl font-bold text-white">56</p>
+                <p className="text-2xl font-bold text-white">{stats.clients.total}</p>
                 <p className="text-sm text-gray-400">OAuth Clients</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats.clients.trusted} trusted, {stats.clients.dynamic} dynamic
+                </p>
               </div>
             </div>
           </CardContent>
@@ -55,8 +79,9 @@ export default function AdminDashboard() {
                 <Icon name="schedule" size="lg" className="text-yellow-500" />
               </div>
               <div className="flex-1">
-                <p className="text-2xl font-bold text-white">892</p>
+                <p className="text-2xl font-bold text-white">{stats.activeSessions.toLocaleString()}</p>
                 <p className="text-sm text-gray-400">Active Sessions</p>
+                <p className="text-xs text-gray-500 mt-1">All good</p>
               </div>
             </div>
           </CardContent>
@@ -69,8 +94,16 @@ export default function AdminDashboard() {
                 <Icon name="key" size="lg" className="text-purple-500" />
               </div>
               <div className="flex-1">
-                <p className="text-2xl font-bold text-white">4</p>
+                <p className="text-2xl font-bold text-white">{stats.jwks.total}</p>
                 <p className="text-sm text-gray-400">JWKS Keys</p>
+                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                  Latest: {stats.jwks.latestKeyAge}
+                  {stats.jwks.isHealthy ? (
+                    <Badge variant="success" className="text-xs">Healthy</Badge>
+                  ) : (
+                    <Badge variant="warning" className="text-xs">Rotate Soon</Badge>
+                  )}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -134,31 +167,32 @@ export default function AdminDashboard() {
               View all
             </Link>
           </div>
-          <div className="space-y-3">
-            {[
-              { user: "john.doe@example.com", ip: "192.168.1.1", time: "2 minutes ago", status: "success" },
-              { user: "jane.smith@example.com", ip: "10.0.0.45", time: "15 minutes ago", status: "success" },
-              { user: "bob.wilson@example.com", ip: "172.16.0.10", time: "1 hour ago", status: "failed" },
-            ].map((activity, index) => (
-              <div key={index} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center">
-                    <Icon name="person" size="sm" className="text-white" />
+          {recentSignIns.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <Icon name="info" className="text-4xl mb-2" />
+              <p>No recent sign-in activity</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentSignIns.map((activity) => (
+                <div key={activity.id} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center">
+                      <Icon name="person" size="sm" className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{activity.userEmail}</p>
+                      <p className="text-xs text-gray-400">{activity.ipAddress || "Unknown IP"}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{activity.user}</p>
-                    <p className="text-xs text-gray-400">{activity.ip}</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">{formatTimeAgo(activity.createdAt)}</span>
+                    <Badge variant="success">Success</Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-400">{activity.time}</span>
-                  <Badge variant={activity.status === "success" ? "success" : "danger"}>
-                    {activity.status}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
