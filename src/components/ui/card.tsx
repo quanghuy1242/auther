@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils/cn";
+import { CARD_BG_COLOR, BORDER_COLOR_DATA } from "@/lib/constants";
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: "default" | "bordered";
@@ -18,15 +19,20 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
  * </Card>
  */
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, variant = "default", ...props }, ref) => {
+  ({ className, variant = "default", style, ...props }, ref) => {
     return (
       <div
         ref={ref}
         className={cn(
-          "rounded-xl bg-[#1a2632] p-6",
-          variant === "bordered" && "border border-[#243647]",
+          "rounded-xl p-6",
+          variant === "bordered" && "border",
           className
         )}
+        style={{
+          backgroundColor: CARD_BG_COLOR,
+          ...(variant === "bordered" && { borderColor: BORDER_COLOR_DATA }),
+          ...style,
+        }}
         {...props}
       />
     );
@@ -89,7 +95,7 @@ export const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center gap-3 mt-6 pt-6 border-t border-gray-700", className)}
+    className={cn("flex items-center gap-3 mt-6 pt-6 border-t border-white/10", className)}
     {...props}
   />
 ));

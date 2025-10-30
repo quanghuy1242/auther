@@ -60,3 +60,7 @@ export { UrlListBuilder } from "./url-list-builder";
 export type { UrlListBuilderProps } from "./url-list-builder";
 
 export { ResponsiveTable } from "./responsive-table";
+
+export { MetricsCard } from "./metrics-card";
+
+export { WebhookSecretField } from "./webhook-secret-field";

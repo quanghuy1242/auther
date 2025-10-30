@@ -9,3 +9,6 @@ export { SubmitButton } from "./submit-button";
 export { ControlledSelect } from "./controlled-select";
 
 export { ControlledCheckbox } from "./controlled-checkbox";
+
+export { EventSelector } from "./event-selector";
+export type { EventOption } from "./event-selector";

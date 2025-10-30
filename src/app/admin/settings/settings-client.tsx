@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Icon, Checkbox, CopyableField, UrlListBuilder } from "@/components/ui";
+import { Card, CardHeader, CardTitle, CardContent, Button, Checkbox, CopyableField, UrlListBuilder } from "@/components/ui";
+import { SecretStatusRow } from "@/components/admin";
+import { cardBackgroundStyle } from "@/lib/constants";
 import type { SettingsData } from "./types";
 
 interface SettingsClientProps {
@@ -38,14 +40,14 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
   return (
     <div className="flex flex-col gap-8">
         {/* Section: Environment Configuration */}
-        <Card className="bg-[#1a2633]/50 border border-white/10">
+        <Card className="border border-white/10" style={cardBackgroundStyle}>
           <CardHeader className="border-b border-white/10">
             <CardTitle className="text-lg font-bold">Environment Configuration</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               These values are derived from your environment and cannot be changed here.
             </p>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent>
             <div className="flex flex-col">
               <CopyableField label="Issuer" value={initialData.environment.issuer} />
               <CopyableField label="Base URL" value={initialData.environment.baseUrl} />
@@ -60,14 +62,14 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: JWT Audiences */}
-        <Card className="bg-[#1a2633]/50 border border-white/10">
+        <Card className="border border-white/10" style={cardBackgroundStyle}>
           <CardHeader className="border-b border-white/10">
             <CardTitle className="text-lg font-bold">JWT Audiences</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Configure allowed audiences for JWT token validation. At least one audience is required.
             </p>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent>
             <UrlListBuilder
               urls={jwtAudiences}
               onChange={setJwtAudiences}
@@ -79,14 +81,14 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Feature Flags */}
-        <Card className="bg-[#1a2633]/50 border border-white/10">
+        <Card className="border border-white/10" style={cardBackgroundStyle}>
           <CardHeader className="border-b border-white/10">
             <CardTitle className="text-lg font-bold">Feature Flags</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Enable or disable specific application features.
             </p>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent>
             <div className="flex items-center justify-between">
               <div className="pr-4 flex-1">
                 <p className="text-white font-medium">Allow Dynamic Client Registration</p>
@@ -103,14 +105,14 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Internal API Secrets */}
-        <Card className="bg-[#1a2633]/50 border border-white/10">
+        <Card className="border border-white/10" style={cardBackgroundStyle}>
           <CardHeader className="border-b border-white/10">
             <CardTitle className="text-lg font-bold">Internal API Secrets</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Manage the status of internal secrets used for service-to-service communication.
             </p>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent>
             <div className="space-y-4">
               <SecretStatusRow secret={initialData.secrets.betterAuthSecret} />
               <SecretStatusRow secret={initialData.secrets.cronSecret} />
@@ -120,14 +122,14 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Webhook Registration */}
-        <Card className="bg-[#1a2633]/50 border border-white/10">
+        <Card className="border border-white/10" style={cardBackgroundStyle}>
           <CardHeader className="border-b border-white/10">
             <CardTitle className="text-lg font-bold">Webhook Registration (Payload CMS)</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Configure webhook delivery to Payload CMS for user sync events and bidirectional synchronization.
             </p>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent>
             <div className="space-y-6">
               {/* Webhook URL */}
               <div>
@@ -172,40 +174,5 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
           </Button>
         </div>
       </div>
-  );
-}
-
-interface SecretStatusRowProps {
-  secret: {
-    name: string;
-    isSet: boolean;
-    description: string;
-  };
-}
-
-function SecretStatusRow({ secret }: SecretStatusRowProps) {
-  return (
-    <div className="flex items-start sm:items-center justify-between py-3 px-4 bg-[#111921] rounded-lg border border-white/10 gap-3">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <p className="text-white font-medium font-mono text-sm break-all">{secret.name}</p>
-        <div className="relative group flex-shrink-0">
-          <Icon name="info" className="!text-base text-white/50 cursor-pointer" />
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-[#0d131a] border border-white/10 rounded-lg text-xs text-[#93adc8] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-            {secret.description}
-          </div>
-        </div>
-      </div>
-      <div className="flex-shrink-0">
-        {secret.isSet ? (
-          <Badge variant="success" dot>
-            Set
-          </Badge>
-        ) : (
-          <Badge variant="warning" dot>
-            Not Set
-          </Badge>
-        )}
-      </div>
-    </div>
   );
 }

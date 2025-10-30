@@ -43,7 +43,7 @@ export function Checkbox({
           className={cn(
             "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full",
             "border-2 border-transparent transition-colors duration-200 ease-in-out",
-            "focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:ring-offset-2 focus:ring-offset-gray-900",
+            "focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:ring-offset-2 focus:ring-offset-gray-900 self-center",
             checked ? "bg-[#1773cf]" : "bg-gray-700",
             disabled && "cursor-not-allowed opacity-50"
           )}

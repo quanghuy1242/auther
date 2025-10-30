@@ -13,6 +13,7 @@ const mainNavItems: NavItem[] = [
   { label: "OAuth Clients", href: "/admin/clients", icon: "apps" },
   { label: "Sessions", href: "/admin/sessions", icon: "schedule" },
   { label: "JWKS Keys", href: "/admin/keys", icon: "key" },
+  { label: "Webhooks", href: "/admin/webhooks", icon: "webhook" },
 ];
 
 const settingsNavItems: NavItem[] = [

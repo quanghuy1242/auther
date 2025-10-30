@@ -4,18 +4,7 @@ import { Alert } from "@/components/layout/alert";
 import { Card, CardContent, Badge, Icon } from "@/components/ui";
 import Link from "next/link";
 import { getDashboardStats, getRecentSignIns } from "./actions";
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  
-  if (seconds < 60) return `${seconds} seconds ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days > 1 ? 's' : ''} ago`;
-}
+import { formatTimeAgo } from "@/lib/utils/date-formatter";
 
 export default async function AdminDashboard() {
   const stats = await getDashboardStats();
@@ -175,7 +164,7 @@ export default async function AdminDashboard() {
           ) : (
             <div className="space-y-3">
               {recentSignIns.map((activity) => (
-                <div key={activity.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-2 border-b border-gray-700 last:border-0 gap-3 sm:gap-0">
+                <div key={activity.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-2 border-b border-white/10 last:border-0 gap-3 sm:gap-0">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center flex-shrink-0">
                       <Icon name="person" size="sm" className="text-white" />

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, Button, Icon, Badge, UrlListBuilder } from "@/components/ui";
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
+import { useCopyToClipboard } from "@/lib/utils/clipboard";
 import { registerClient, type RegisterClientState } from "./actions";
 import { useRouter } from "next/navigation";
 
@@ -47,18 +48,19 @@ function GrantTypesSelector() {
         {GRANT_TYPES.map((grant) => (
           <label
             key={grant.value}
-            className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 hover:border-gray-600 cursor-pointer transition-colors"
+            className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
           >
             <input
               type="checkbox"
               checked={selectedGrants.includes(grant.value)}
               onChange={() => toggleGrant(grant.value)}
-              className="mt-1 w-4 h-4 rounded border-gray-600 text-[#1773cf] focus:ring-[#1773cf] focus:ring-offset-0 bg-[#1a1d24]"
+              className="mt-1 w-4 h-4 rounded border-2 border-white/20 text-[#1773cf] focus:ring-[#1773cf] focus:ring-offset-0"
+              style={{ backgroundColor: '#0a0f14' }}
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-white">{grant.label}</span>
-                <code className="text-xs text-gray-400 bg-[#1a1d24] px-2 py-0.5 rounded">{grant.value}</code>
+                <code className="text-xs text-gray-400 px-2 py-0.5 rounded" style={{ backgroundColor: '#0a0f14' }}>{grant.value}</code>
               </div>
               <p className="text-xs text-gray-400 mt-1">{grant.description}</p>
             </div>
@@ -89,7 +91,7 @@ function GrantTypesSelector() {
 export default function RegisterClientPage() {
   const router = useRouter();
   const [clientData, setClientData] = React.useState<{ clientId: string; clientSecret?: string } | null>(null);
-  const [copied, setCopied] = React.useState<"id" | "secret" | null>(null);
+  const { copied, handleCopy: copyToClipboard } = useCopyToClipboard<"id" | "secret">();
   const [redirectUrls, setRedirectUrls] = React.useState<string[]>([]);
   const [redirectUrlsInput, setRedirectUrlsInput] = React.useState("");
 
@@ -105,15 +107,9 @@ export default function RegisterClientPage() {
     }
   };
 
-  const copyToClipboard = (text: string, type: "id" | "secret") => {
-    navigator.clipboard.writeText(text);
-    setCopied(type);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
   if (clientData) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <PageHeading
           title="Client Registered Successfully"
           description="Save these credentials securely - the secret cannot be retrieved again"
@@ -135,7 +131,7 @@ export default function RegisterClientPage() {
                     Client ID
                   </label>
                   <div className="flex gap-2">
-                    <code className="flex-1 px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-sm text-white font-mono">
+                    <code className="flex-1 px-4 py-3 border border-white/10 rounded-lg text-sm text-white font-mono" style={{ backgroundColor: '#0a0f14' }}>
                       {clientData.clientId}
                     </code>
                     <Button
@@ -162,7 +158,7 @@ export default function RegisterClientPage() {
                       Client Secret
                     </label>
                     <div className="flex gap-2">
-                      <code className="flex-1 px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-sm text-white font-mono break-all">
+                      <code className="flex-1 px-4 py-3 border border-white/10 rounded-lg text-sm text-white font-mono break-all" style={{ backgroundColor: '#0a0f14' }}>
                         {clientData.clientSecret}
                       </code>
                       <Button
@@ -201,7 +197,7 @@ export default function RegisterClientPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <PageHeading
         title="Register OAuth Client"
         description="Create a new OAuth 2.0 client application"

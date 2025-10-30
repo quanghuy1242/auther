@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Webhook Registration</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1773cf",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#111921",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-gray-800 dark:text-gray-200">
+<div class="relative flex min-h-screen">
+<!-- SideNavBar -->
+<aside class="flex-shrink-0 w-64 bg-white dark:bg-[#111a22] border-r border-gray-200 dark:border-gray-800">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-4">
+<div class="flex items-center gap-3 px-2">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Admin user avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAVa55L2L3E0G0ZajHNrdxTZYGDzJ9UeUmjOn3TVK7YG_3pwsICKPMdGD9SlPMJXwCbJ1gnIIi0e8NEvKBBDpp_1GVPKtms9Jqv0-ngMHxp7uYRzMUbYJjeYwfTMpiOvP9s8iqrvcqiqzLANfSARsF-QmHGVvGub7xslJN7XeC4-VPmf2qxmMFBufosaj9gJ5bc9awZ4aiVrQIRKWRj7B4Z9HrhBf1CikmSQNcLTlGmQlxwGfTzkvXjjck9xvKdB580iwLiWy6bFlc");'></div>
+<div class="flex flex-col">
+<h1 class="text-gray-900 dark:text-white text-base font-medium leading-normal">Admin Panel</h1>
+<p class="text-gray-500 dark:text-[#93adc8] text-sm font-normal leading-normal">admin@example.com</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2 mt-4">
+<a class="flex items-center gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-primary/20" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<p class="text-sm font-medium leading-normal">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/20 text-primary dark:bg-primary/30 dark:text-white" href="#">
+<span class="material-symbols-outlined">webhook</span>
+<p class="text-sm font-medium leading-normal">Webhooks</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-primary/20" href="#">
+<span class="material-symbols-outlined">key</span>
+<p class="text-sm font-medium leading-normal">API Keys</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-primary/20" href="#">
+<span class="material-symbols-outlined">group</span>
+<p class="text-sm font-medium leading-normal">Users</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-primary/20" href="#">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-sm font-medium leading-normal">Settings</p>
+</a>
+</nav>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-primary/20" href="#">
+<span class="material-symbols-outlined">description</span>
+<p class="text-sm font-medium leading-normal">Documentation</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-primary/20" href="#">
+<span class="material-symbols-outlined">help</span>
+<p class="text-sm font-medium leading-normal">Support</p>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 p-6 sm:p-8 md:p-12">
+<div class="max-w-4xl mx-auto">
+<!-- PageHeading -->
+<div class="mb-8">
+<h1 class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">Register New Webhook</h1>
+<p class="text-gray-500 dark:text-[#93adc8] text-base font-normal leading-normal mt-2">Configure a new endpoint to receive event notifications.</p>
+</div>
+<!-- Form Section -->
+<div class="space-y-8 bg-white dark:bg-[#111a22] p-8 rounded-xl border border-gray-200 dark:border-gray-800">
+<!-- Display Name and Webhook URL -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<label class="flex flex-col">
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal pb-2">Display name (optional)</p>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-background-light dark:bg-[#1a2632] h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] px-4 text-base font-normal leading-normal" placeholder="My Production Webhook" value=""/>
+</label>
+<label class="flex flex-col">
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal pb-2">Webhook URL</p>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-background-light dark:bg-[#1a2632] h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] px-4 text-base font-normal leading-normal" placeholder="https://api.example.com/webhook-receiver" value=""/>
+</label>
+</div>
+<!-- Secret Field -->
+<div class="flex flex-col">
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal pb-2">Secret</p>
+<div class="relative flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg bg-yellow-500/10 dark:bg-yellow-400/10 border border-yellow-500/20 dark:border-yellow-400/20">
+<span class="material-symbols-outlined text-yellow-600 dark:text-yellow-400 !text-2xl">warning</span>
+<p class="text-yellow-800 dark:text-yellow-300 text-sm">This is the only time you will see this secret. Copy it now and store it securely.</p>
+</div>
+<div class="flex w-full items-stretch rounded-lg mt-3">
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-l-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-0 border border-r-0 border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#243647] h-12 placeholder:text-gray-400 dark:placeholder:text-[#93adc8] p-3 text-base font-mono" readonly="" value="whsec_aBcDeFgHiJkLmNoPqRsTuVwXyZ123456"/>
+<button aria-label="Copy secret" class="text-gray-500 dark:text-[#93adc8] flex border border-l-0 border-gray-300 dark:border-[#344d65] bg-gray-50 dark:bg-[#243647] hover:bg-gray-100 dark:hover:bg-gray-700 items-center justify-center px-4 rounded-r-lg">
+<span class="material-symbols-outlined !text-xl">content_copy</span>
+</button>
+</div>
+<button class="text-primary hover:underline text-sm font-medium mt-2 text-left w-fit">Regenerate secret</button>
+</div>
+<!-- Status Toggle -->
+<div class="flex items-center justify-between">
+<div>
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal">Status</p>
+<p class="text-gray-500 dark:text-gray-400 text-sm">Toggle to enable or disable this webhook.</p>
+</div>
+<button aria-checked="true" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-background-dark" role="switch" type="button">
+<span class="sr-only">Use setting</span>
+<span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5"></span>
+</button>
+</div>
+<!-- Event Subscriptions -->
+<div>
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal">Event subscriptions</p>
+<p class="text-gray-500 dark:text-gray-400 text-sm mt-1 mb-4">Select all events you want to be notified about.</p>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+<label class="flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-background-light dark:bg-[#1a2632] has-[:checked]:bg-primary/10 has-[:checked]:border-primary/50 cursor-pointer">
+<input class="form-checkbox rounded text-primary bg-transparent border-gray-400 dark:border-gray-600 focus:ring-primary/50" type="checkbox"/>
+<span class="text-sm font-medium text-gray-800 dark:text-gray-300">order.created</span>
+</label>
+<label class="flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-background-light dark:bg-[#1a2632] has-[:checked]:bg-primary/10 has-[:checked]:border-primary/50 cursor-pointer">
+<input checked="" class="form-checkbox rounded text-primary bg-transparent border-gray-400 dark:border-gray-600 focus:ring-primary/50" type="checkbox"/>
+<span class="text-sm font-medium text-gray-800 dark:text-gray-300">order.paid</span>
+</label>
+<label class="flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-background-light dark:bg-[#1a2632] has-[:checked]:bg-primary/10 has-[:checked]:border-primary/50 cursor-pointer">
+<input class="form-checkbox rounded text-primary bg-transparent border-gray-400 dark:border-gray-600 focus:ring-primary/50" type="checkbox"/>
+<span class="text-sm font-medium text-gray-800 dark:text-gray-300">stock.low</span>
+</label>
+<label class="flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-background-light dark:bg-[#1a2632] has-[:checked]:bg-primary/10 has-[:checked]:border-primary/50 cursor-pointer">
+<input checked="" class="form-checkbox rounded text-primary bg-transparent border-gray-400 dark:border-gray-600 focus:ring-primary/50" type="checkbox"/>
+<span class="text-sm font-medium text-gray-800 dark:text-gray-300">user.updated</span>
+</label>
+</div>
+</div>
+<!-- Advanced Options (Collapsible) -->
+<details class="space-y-6">
+<summary class="flex items-center gap-2 cursor-pointer text-base font-medium text-gray-900 dark:text-white list-none">
+                            Advanced Options
+                            <span class="material-symbols-outlined text-gray-500 transition-transform duration-200 details-open:rotate-180">expand_more</span>
+</summary>
+<div class="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<label class="flex flex-col">
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal pb-2">Retry Policy</p>
+<select class="form-select flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-background-light dark:bg-[#1a2632] h-12 px-4 text-base font-normal leading-normal">
+<option>Exponential backoff (recommended)</option>
+<option>Linear</option>
+<option>No retries</option>
+</select>
+</label>
+<label class="flex flex-col">
+<p class="text-gray-900 dark:text-white text-base font-medium leading-normal pb-2">Delivery Format</p>
+<select class="form-select flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 dark:border-[#344d65] bg-background-light dark:bg-[#1a2632] h-12 px-4 text-base font-normal leading-normal">
+<option>JSON</option>
+<option>Form-encoded</option>
+</select>
+</label>
+</div>
+<button class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" type="button">
+<span class="material-symbols-outlined !text-xl">send</span>
+                                Send sample payload now
+                            </button>
+</div>
+</details>
+</div>
+<!-- Action Buttons -->
+<div class="flex justify-end gap-4 mt-8">
+<button class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-transparent px-6 py-3 text-base font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" type="button">Cancel</button>
+<button class="rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white hover:bg-primary/90 transition-colors" type="submit">Save Webhook</button>
+</div>
+</div>
+</main>
+</div>
+<style>
+        details>summary {
+            list-style: none;
+        }
+        details>summary::-webkit-details-marker {
+            display: none;
+        }
+        details[open] .details-open\:rotate-180 {
+            transform: rotate(180deg);
+        }
+    </style>
+</body></html>

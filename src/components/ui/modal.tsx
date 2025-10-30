@@ -20,7 +20,7 @@ const sizeStyles = {
   sm: "w-[calc(100%-2rem)] md:max-w-md",
   md: "w-[calc(100%-2rem)] md:max-w-lg",
   lg: "w-[calc(100%-2rem)] md:max-w-2xl",
-  xl: "w-[calc(100%-2rem)] md:max-w-4xl",
+  xl: "w-[calc(100%-2rem)] md:max-w-6xl",
 };
 
 /**

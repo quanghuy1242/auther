@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { Badge, Button, Input, ResponsiveTable } from "@/components/ui";
+import { formatDate } from "@/lib/utils/date-formatter";
 import type { GetClientsResult } from "./actions";
 
 interface ClientsClientProps {
@@ -27,15 +28,6 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
       isInitialMount.current = false;
     }
   }, [searchParams]);
-
-  const formatDate = (date: Date | null) => {
-    if (!date) return "Never";
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(new Date(date));
-  };
 
   const getClientType = (userId: string | null): "trusted" | "dynamic" => {
     return userId ? "trusted" : "dynamic";
@@ -131,7 +123,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-[#344d65]">
+      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-[#344d65]">
         <ResponsiveTable
           columns={[
             {
@@ -216,7 +208,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
             const clientType = getClientType(client.userId);
             return (
               <Link href={`/admin/clients/${client.clientId}`}>
-                <div className="bg-[#1a2632] rounded-lg p-4 space-y-3 border border-[#344d65] hover:border-[#1773cf] transition-colors active:bg-[#243647]">
+                <div className="rounded-lg p-4 space-y-3 border border-[#344d65] hover:border-[#1773cf] transition-colors" style={{ backgroundColor: '#1a2632' }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">

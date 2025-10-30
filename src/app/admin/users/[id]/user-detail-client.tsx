@@ -5,6 +5,7 @@ import { useFormState } from "react-dom";
 import Image from "next/image";
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input, Label, Tabs, Modal } from "@/components/ui";
 import { Icon } from "@/components/ui/icon";
+import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
 import { 
   updateUserProfile, 
   toggleEmailVerification, 
@@ -64,24 +65,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
   const handleForceLogout = async () => {
     await forceLogoutUser(user.id);
     setShowForceLogoutModal(false);
-  };
-
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(date));
-  };
-
-  const formatDateShort = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(date));
   };
 
   const getProviderName = (providerId: string) => {

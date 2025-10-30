@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardHeader, CardTitle, CardContent, Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Badge, Modal, Icon } from "@/components/ui";
+import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Badge, Modal, Icon } from "@/components/ui";
 import { rotateKeys, type JwksKey } from "./actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
+import { formatDate, formatAge } from "@/lib/utils/date-formatter";
+import { Alert } from "@/components/layout";
 
 interface KeysClientProps {
   initialKeys: JwksKey[];
@@ -40,54 +42,21 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
     }
   };
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZoneName: "short",
-    }).format(new Date(date));
-  };
-
-  const formatAge = (ageMs: number) => {
-    const days = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    if (days > 0) {
-      return `${days} day${days > 1 ? "s" : ""} ${hours} hour${hours > 1 ? "s" : ""}`;
-    }
-    return `${hours} hour${hours > 1 ? "s" : ""}`;
-  };
-
   const rotationIntervalDays = Math.floor(JWKS_ROTATION_INTERVAL_MS / (1000 * 60 * 60 * 24));
 
   return (
     <>
       {/* Alert Card */}
-      <Card className="mb-6 bg-blue-500/10 border-blue-500/30">
-        <CardContent>
-          <div className="flex items-start gap-3">
-            <Icon name="info" className="text-blue-400 mt-0.5" />
-            <div>
-              <p className="text-sm text-blue-400 font-medium">
-                JWKS Rotation Policy
-              </p>
-              <p className="text-sm text-gray-300 mt-1">
-                Keys are automatically rotated every {rotationIntervalDays} days. Old keys are retained for
-                validation during the transition period.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Alert variant="info" className="mb-6" title="JWKS Rotation Policy">
+        Keys are automatically rotated every {rotationIntervalDays} days. Old keys are retained for
+        validation during the transition period.
+      </Alert>
 
       {/* Current Active Keys */}
-      <Card className="mb-6">
-        <CardHeader>
+      <div className="mb-6 rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
+        <div className="p-6 border-b border-white/10">
           <div className="flex justify-between items-center">
-            <CardTitle>Current Active Keys</CardTitle>
+            <h3 className="text-lg font-semibold text-white">Current Active Keys</h3>
             <Button
               variant="primary"
               leftIcon="sync"
@@ -96,8 +65,8 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
               Rotate JWKS
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="p-6">
           {keys.length > 0 ? (
             <Table>
               <TableHeader>
@@ -154,15 +123,15 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Configuration Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Rotation Configuration</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
+        <div className="p-6 border-b border-white/10">
+          <h3 className="text-lg font-semibold text-white">Rotation Configuration</h3>
+        </div>
+        <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <p className="text-sm font-medium text-gray-400">Rotation Interval</p>
@@ -181,8 +150,8 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
               <p className="text-lg font-semibold text-white mt-1">{keys.length}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Rotation Confirmation Modal */}
       <Modal

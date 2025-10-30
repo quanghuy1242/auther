@@ -4,6 +4,8 @@ import * as React from "react";
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Icon, Label, Modal } from "@/components/ui";
+import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
+import { useCopyToClipboard } from "@/lib/utils/clipboard";
 import { 
   updateClient, 
   rotateClientSecret, 
@@ -24,7 +26,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
   const [showSecretModal, setShowSecretModal] = React.useState(false);
   const [newSecret, setNewSecret] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState<"id" | "secret" | null>(null);
+  const { copied, handleCopy: copyToClipboard } = useCopyToClipboard<"id" | "secret">();
 
   const updateWithClientId = updateClient.bind(null, client.clientId);
   const [updateState, updateAction] = useFormState<UpdateClientState, FormData>(
@@ -59,31 +61,6 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     if (result.success) {
       router.push("/admin/clients");
     }
-  };
-
-  const copyToClipboard = (text: string, type: "id" | "secret") => {
-    navigator.clipboard.writeText(text);
-    setCopied(type);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const formatDate = (date: Date | null) => {
-    if (!date) return "Never";
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(date));
-  };
-
-  const formatDateShort = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(date));
   };
 
   const isTrusted = client.metadata.trusted || client.userId === null;
@@ -159,7 +136,8 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                       name="name"
                       type="text"
                       defaultValue={client.name || ""}
-                      className="w-full px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent mt-1"
+                      className="w-full px-4 py-3 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent mt-1"
+                      style={{ backgroundColor: '#0a0f14' }}
                       required
                     />
                     {updateState.errors?.name && (
@@ -172,7 +150,8 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                       id="redirectURLs"
                       name="redirectURLs"
                       defaultValue={client.redirectURLs.join("\n")}
-                      className="w-full px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent resize-y min-h-[120px] mt-1"
+                      className="w-full px-4 py-3 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent resize-y min-h-[120px] mt-1"
+                      style={{ backgroundColor: '#0a0f14' }}
                       required
                     />
                     <p className="text-sm text-gray-400 mt-1">One URL per line</p>
@@ -254,7 +233,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
               <div>
                 <Label className="text-gray-400 block mb-2">Client ID</Label>
                 <div className="flex gap-2">
-                  <code className="flex-1 px-3 py-2 bg-[#1a1d24] border border-gray-700 rounded text-sm text-white font-mono break-all">
+                  <code className="flex-1 px-3 py-2 border border-white/10 rounded text-sm text-white font-mono break-all" style={{ backgroundColor: '#0a0f14' }}>
                     {client.clientId}
                   </code>
                   <Button
@@ -271,7 +250,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                 <div>
                   <Label className="text-gray-400 block mb-2">Client Secret</Label>
                   <div className="flex gap-2 mb-2">
-                    <code className="flex-1 px-3 py-2 bg-[#1a1d24] border border-gray-700 rounded text-sm text-gray-500 font-mono">
+                    <code className="flex-1 px-3 py-2 border border-white/10 rounded text-sm text-gray-500 font-mono" style={{ backgroundColor: '#0a0f14' }}>
                       ••••••••••••••••
                     </code>
                   </div>
@@ -374,7 +353,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
             <div>
               <Label className="text-gray-400 block mb-2">New Client Secret</Label>
               <div className="flex gap-2">
-                <code className="flex-1 px-4 py-3 bg-[#1a1d24] border border-gray-700 rounded-lg text-sm text-white font-mono break-all">
+                <code className="flex-1 px-4 py-3 border border-white/10 rounded-lg text-sm text-white font-mono break-all" style={{ backgroundColor: '#0a0f14' }}>
                   {newSecret}
                 </code>
                 <Button

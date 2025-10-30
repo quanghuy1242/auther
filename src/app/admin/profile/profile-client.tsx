@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input, Label, 
 import { updateProfile, revokeSession, revokeAllOtherSessions, type UpdateProfileState } from "./actions";
 import type { SessionUser, SessionInfo } from "@/lib/session";
 import { getUserInitials } from "@/lib/session-utils";
+import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
 
 interface ProfileClientProps {
   user: SessionUser;
@@ -38,24 +39,6 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
   const handleRevokeAllSessions = async () => {
     await revokeAllOtherSessions();
     setShowRevokeAllModal(false);
-  };
-
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(date));
-  };
-
-  const formatDateShort = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(new Date(date));
   };
 
   return (

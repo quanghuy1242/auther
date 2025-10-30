@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { Badge, Button, Input, ResponsiveTable } from "@/components/ui";
+import { formatDateShort } from "@/lib/utils/date-formatter";
 import type { GetUsersResult } from "./actions";
 
 interface UsersClientProps {
@@ -27,14 +28,6 @@ export function UsersClient({ initialData }: UsersClientProps) {
       isInitialMount.current = false;
     }
   }, [searchParams]);
-
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(new Date(date));
-  };
 
   const getProviderIcon = (providerId: string) => {
     const icons: Record<string, string> = {
@@ -137,7 +130,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
       </div>
 
       {/* Responsive Table */}
-      <div className="overflow-hidden rounded-lg border border-[#344d65]">
+      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-[#344d65]">
         <ResponsiveTable
           columns={[
             {
@@ -158,7 +151,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
               key: "createdAt",
               header: "Date Created",
               render: (user) => (
-                <span className="text-sm text-[#93adc8]">{formatDate(user.createdAt)}</span>
+                <span className="text-sm text-[#93adc8]">{formatDateShort(user.createdAt)}</span>
               ),
             },
             {
@@ -215,7 +208,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
           data={initialData.users}
           keyExtractor={(user) => user.id}
           mobileCardRender={(user) => (
-            <div className="bg-[#1a2632] rounded-lg p-4 border border-[#344d65] space-y-3">
+            <div className="rounded-lg p-4 border border-[#344d65] sm:border-0 space-y-3" style={{ backgroundColor: '#1a2632' }}>
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-white">{user.name}</p>
@@ -251,7 +244,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
                 </Link>
               </div>
               <div className="text-xs text-gray-500">
-                Created {formatDate(user.createdAt)}
+                Created {formatDateShort(user.createdAt)}
               </div>
             </div>
           )}

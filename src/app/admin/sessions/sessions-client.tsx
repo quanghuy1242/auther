@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Card, CardContent, Button, Icon, Badge, Input, Checkbox, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Modal } from "@/components/ui";
+import { Button, Icon, Badge, Input, Checkbox, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Modal } from "@/components/ui";
 import { revokeSession, revokeExpiredSessions } from "../actions";
+import { formatTimeAgo } from "@/lib/utils/date-formatter";
+import { parseUserAgent } from "@/lib/utils/user-agent";
 
 interface Session {
   id: string;
@@ -24,31 +26,6 @@ interface SessionsClientProps {
   totalPages: number;
   initialSearch: string;
   initialActiveOnly: boolean;
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function parseUserAgent(ua: string | null): string {
-  if (!ua) return "Unknown Device";
-  
-  // Simple parsing for common browsers and OS
-  if (ua.includes("Chrome")) return "Chrome";
-  if (ua.includes("Firefox")) return "Firefox";
-  if (ua.includes("Safari") && !ua.includes("Chrome")) return "Safari";
-  if (ua.includes("Edge")) return "Edge";
-  if (ua.includes("Mobile")) return "Mobile Browser";
-  
-  return "Web Browser";
 }
 
 export function SessionsClient({
@@ -148,8 +125,8 @@ export function SessionsClient({
 
   return (
     <>
-      <Card className="mb-6 p-0">
-        <CardContent className="p-6">
+      <div className="mb-6 p-0 rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
+        <div className="p-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex-1 w-full sm:max-w-md">
               <Input
@@ -179,11 +156,11 @@ export function SessionsClient({
           <div className="mt-4 text-sm text-gray-400">
             Showing {initialSessions.length} of {initialTotal} sessions
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card>
-        <CardContent className="p-0">
+      <div className="rounded-lg border-0 sm:border sm:border-[#344d65]" style={{ backgroundColor: '#1a2632' }}>
+        <div className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -287,8 +264,8 @@ export function SessionsClient({
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Revoke Modal */}
       {revokeModalSession && (
@@ -301,7 +278,7 @@ export function SessionsClient({
             <p className="text-sm text-gray-400">
               Are you sure you want to revoke this session? The user will be logged out immediately.
             </p>
-            <div className="bg-[#111921] p-4 rounded-lg space-y-2">
+            <div className="p-4 rounded-lg border border-white/10 space-y-2" style={{ backgroundColor: '#0a0f14' }}>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">User:</span>
                 <span className="text-white">{revokeModalSession.userEmail}</span>

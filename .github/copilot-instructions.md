@@ -12,33 +12,36 @@ tools to resolve library id and get library docs without me having to explicitly
 
 ## Guiding Principles
 
-### 1. Centralize, Don't Duplicate
+### 1. **Centralize, Don't Duplicate** ⭐
 
-- **Never scatter utility logic** across feature folders or components
-- Check for existing utilities before writing new helper functions
+- **NEVER scatter utility logic** across feature folders or components
+- **ALWAYS check for existing utilities** before writing new helper functions
 - If a utility doesn't exist, create it in the appropriate shared location
 - Follow the principle: **Write once, import everywhere**
+- **Component reusability is MANDATORY** - extract shared UI patterns into `src/components/`
 
-### 2. Extend Over Inline
+### 2. **Extend Over Inline** ⭐
 
-- **Always look for existing utilities** that can be extended
+- **ALWAYS look for existing utilities** that can be extended
+- **NEVER write inline functions** when a centralized helper exists or can be created
 - Prefer updating a centralized helper over writing inline logic
 - If an edge case isn't covered, enhance the utility rather than work around it
 - Inline functions should be the last resort, not the first choice
 
-### 3. Design for Reusability
+### 3. **Design for Reusability** ⭐
 
 - Write utilities that are:
   - **Side-effect free** - Pure functions wherever possible
   - **Type-safe** - Leverage TypeScript for compile-time safety
   - **Defensive** - Handle malformed input gracefully
   - **Composable** - Small, focused functions that work together
+- **Extract repeated patterns immediately** - Don't wait for the third occurrence
 
 ### 4. Follow Established Patterns
 
 - Study existing implementations before creating new features
 - Reuse design patterns consistently across the codebase
-- When you see a pattern repeated 2+ times, extract it into a utility
+- **When you see a pattern repeated 2+ times, extract it into a utility/component**
 - Document patterns so future implementations stay consistent
 
 ### 5. Keep Dependencies Shallow

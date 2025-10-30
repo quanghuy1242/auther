@@ -43,7 +43,7 @@ export function Alert({ variant = "info", title, children, onClose, className }:
       role="alert"
     >
       <div className="flex items-start gap-3">
-        <Icon name={iconMap[variant]} size="sm" className="mt-0.5 flex-shrink-0" />
+        <Icon name={iconMap[variant]} size="sm" className="mt-0.5 flex-shrink-0 self-center" />
         <div className="flex-1 min-w-0">
           {title && (
             <h4 className="text-sm font-semibold mb-1">{title}</h4>

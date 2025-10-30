@@ -58,3 +58,28 @@ export function getRotationCadenceDisplay(ms: number = JWKS_ROTATION_INTERVAL_MS
   const days = Math.floor(ms / (1000 * 60 * 60 * 24));
   return `${days} days`;
 }
+
+// ============================================================================
+// UI STYLING CONSTANTS
+// ============================================================================
+
+/**
+ * Shared styling constants used across the application
+ * These values must be used as inline styles, not in Tailwind arbitrary values
+ * to avoid CSS parsing errors with hex colors.
+ */
+export const CARD_BG_COLOR = '#1a2632';
+export const BORDER_COLOR_DATA = '#344d65'; // For tables and data sections
+export const BORDER_COLOR_SUBTLE = 'rgba(255, 255, 255, 0.1)'; // For UI elements
+
+/**
+ * Common inline style objects for consistent styling
+ */
+export const cardBackgroundStyle = {
+  backgroundColor: CARD_BG_COLOR,
+} as const;
+
+export const cardWithBorderStyle = {
+  backgroundColor: CARD_BG_COLOR,
+  borderColor: BORDER_COLOR_SUBTLE,
+} as const;
