@@ -2,10 +2,8 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { desc, eq, gt, count, and, lt } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { session, user } from "@/db/schema";
+import { sessionRepository } from "@/lib/repositories";
 import { getUserStats } from "@/app/admin/users/actions";
 import { getClientStats } from "@/app/admin/clients/actions";
 import { getJwksKeys } from "@/app/admin/keys/actions";
@@ -19,7 +17,7 @@ export async function signOut() {
   await auth.api.signOut({
     headers: await headers(),
   });
-  
+
   redirect("/sign-in");
 }
 
@@ -28,23 +26,20 @@ export async function signOut() {
  */
 export async function getDashboardStats() {
   try {
-    const [userStats, clientStats, activeSessionsResult, keys] = await Promise.all([
+    const [userStats, clientStats, activeSessions, keys] = await Promise.all([
       getUserStats(),
       getClientStats(),
-      db.select({ value: count() })
-        .from(session)
-        .where(gt(session.expiresAt, new Date())),
+      sessionRepository.countActive(),
       getJwksKeys(),
     ]);
-
-    // Get active sessions count
-    const activeSessions = activeSessionsResult[0]?.value || 0;
 
     // Get latest JWKS key info
     const latestKey = keys[0];
     const keyAge = latestKey ? Date.now() - latestKey.createdAt.getTime() : 0;
     const keyAgeDays = Math.floor(keyAge / (1000 * 60 * 60 * 24));
-    const keyAgeHours = Math.floor((keyAge % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const keyAgeHours = Math.floor(
+      (keyAge % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+    );
     const isKeyHealthy = keyAge < JWKS_ROTATION_INTERVAL_MS;
 
     return {
@@ -53,7 +48,8 @@ export async function getDashboardStats() {
       activeSessions,
       jwks: {
         total: keys.length,
-        latestKeyAge: keyAgeDays > 0 ? `${keyAgeDays}d ${keyAgeHours}h` : `${keyAgeHours}h`,
+        latestKeyAge:
+          keyAgeDays > 0 ? `${keyAgeDays}d ${keyAgeHours}h` : `${keyAgeHours}h`,
         isHealthy: isKeyHealthy,
         daysOld: keyAgeDays,
       },
@@ -79,22 +75,8 @@ export async function getDashboardStats() {
  */
 export async function getRecentSignIns(limit = 10) {
   try {
-    const recentSessions = await db
-      .select({
-        id: session.id,
-        userId: session.userId,
-        userEmail: user.email,
-        userName: user.name,
-        ipAddress: session.ipAddress,
-        userAgent: session.userAgent,
-        createdAt: session.createdAt,
-      })
-      .from(session)
-      .innerJoin(user, eq(session.userId, user.id))
-      .orderBy(desc(session.createdAt))
-      .limit(limit);
-
-    return recentSessions;
+    const sessions = await sessionRepository.findRecent(limit);
+    return sessions;
   } catch (error) {
     console.error("Failed to fetch recent sign-ins:", error);
     return [];
@@ -116,66 +98,17 @@ export async function getSessions({
   activeOnly?: boolean;
 } = {}) {
   try {
-    const offset = (page - 1) * pageSize;
-    const now = new Date();
-
-    // Build where conditions
-    const conditions = [];
-    
-    if (activeOnly) {
-      conditions.push(gt(session.expiresAt, now));
-    }
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-    // Get total count
-    const [totalResult] = await db
-      .select({ value: count() })
-      .from(session)
-      .innerJoin(user, eq(session.userId, user.id))
-      .where(whereClause);
-
-    const total = totalResult?.value || 0;
-
-    // Get sessions
-    let sessions = await db
-      .select({
-        id: session.id,
-        userId: session.userId,
-        userEmail: user.email,
-        userName: user.name,
-        ipAddress: session.ipAddress,
-        userAgent: session.userAgent,
-        createdAt: session.createdAt,
-        expiresAt: session.expiresAt,
-        updatedAt: session.updatedAt,
-      })
-      .from(session)
-      .innerJoin(user, eq(session.userId, user.id))
-      .where(whereClause)
-      .orderBy(desc(session.createdAt))
-      .limit(pageSize)
-      .offset(offset);
-
-    // Apply text search filter if provided
-    if (search) {
-      const searchLower = search.toLowerCase();
-      sessions = sessions.filter(
-        (s) =>
-          s.userEmail?.toLowerCase().includes(searchLower) ||
-          s.userName?.toLowerCase().includes(searchLower) ||
-          s.ipAddress?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    const totalPages = Math.ceil(total / pageSize);
+    const result = await sessionRepository.findMany(page, pageSize, {
+      activeOnly,
+      search,
+    });
 
     return {
-      sessions,
-      total,
-      page,
-      pageSize,
-      totalPages,
+      sessions: result.items,
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
     };
   } catch (error) {
     console.error("Failed to fetch sessions:", error);
@@ -194,14 +127,15 @@ export async function getSessions({
  */
 export async function revokeSession(sessionId: string) {
   try {
-    await db.delete(session).where(eq(session.id, sessionId));
-    
-    return { success: true };
+    const success = await sessionRepository.delete(sessionId);
+
+    return { success };
   } catch (error) {
     console.error("Failed to revoke session:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to revoke session",
+      error:
+        error instanceof Error ? error.message : "Failed to revoke session",
     };
   }
 }
@@ -211,17 +145,17 @@ export async function revokeSession(sessionId: string) {
  */
 export async function revokeExpiredSessions() {
   try {
-    const now = new Date();
-    const result = await db
-      .delete(session)
-      .where(lt(session.expiresAt, now));
-    
-    return { success: true, count: result.rowsAffected };
+    const count = await sessionRepository.deleteExpired();
+
+    return { success: true, count };
   } catch (error) {
     console.error("Failed to revoke expired sessions:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to revoke expired sessions",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to revoke expired sessions",
     };
   }
 }

@@ -1,18 +1,11 @@
 "use server";
 
-import { db } from "@/lib/db";
-import { jwks } from "@/db/schema";
-import { desc } from "drizzle-orm";
 import { rotateJwksIfNeeded } from "@/lib/jwks-rotation";
-import { JWKS_RETENTION_WINDOW_MS } from "@/lib/constants";
+import { jwksRepository } from "@/lib/repositories";
+import type { JwksKeyWithStatus } from "@/lib/repositories";
 
-export interface JwksKey {
-  id: string;
-  publicKey: string;
-  createdAt: Date;
-  age: number;
-  status: "ok" | "breached";
-}
+// Re-export type
+export type { JwksKeyWithStatus as JwksKey };
 
 export interface RotationResult {
   success: boolean;
@@ -25,29 +18,9 @@ export interface RotationResult {
 /**
  * Fetch all JWKS keys from database
  */
-export async function getJwksKeys(): Promise<JwksKey[]> {
+export async function getJwksKeys(): Promise<JwksKeyWithStatus[]> {
   try {
-    const keys = await db
-      .select({
-        id: jwks.id,
-        publicKey: jwks.publicKey,
-        createdAt: jwks.createdAt,
-      })
-      .from(jwks)
-      .orderBy(desc(jwks.createdAt));
-
-    const now = Date.now();
-    
-    return keys.map((key) => {
-      const age = now - key.createdAt.getTime();
-      const status = age > JWKS_RETENTION_WINDOW_MS ? "breached" : "ok";
-
-      return {
-        ...key,
-        age,
-        status,
-      };
-    });
+    return await jwksRepository.findAllWithStatus();
   } catch (error) {
     console.error("Failed to fetch JWKS keys:", error);
     return [];

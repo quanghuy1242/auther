@@ -1,13 +1,15 @@
 "use server";
 
-import { db } from "@/lib/db";
-import { user as userTable, account as accountTable, session as sessionTable } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "@/lib/session";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  userRepository,
+  sessionRepository,
+  accountRepository,
+} from "@/lib/repositories";
 
 export interface UserDetail {
   id: string;
@@ -27,18 +29,30 @@ export interface UserDetail {
   }>;
   sessions: Array<{
     id: string;
+    userId: string;
+    userEmail: string | null;
+    userName: string | null;
     token: string;
-    expiresAt: Date;
     ipAddress: string | null;
     userAgent: string | null;
     createdAt: Date;
+    expiresAt: Date;
+    updatedAt: Date;
   }>;
 }
 
 const updateUserSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters").optional().or(z.literal("")),
-  displayUsername: z.string().min(2, "Display username must be at least 2 characters").optional().or(z.literal("")),
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .optional()
+    .or(z.literal("")),
+  displayUsername: z
+    .string()
+    .min(2, "Display username must be at least 2 characters")
+    .optional()
+    .or(z.literal("")),
 });
 
 /**
@@ -48,47 +62,22 @@ export async function getUserById(userId: string): Promise<UserDetail | null> {
   try {
     await requireAuth();
 
-    // Get user
-    const [user] = await db
-      .select()
-      .from(userTable)
-      .where(eq(userTable.id, userId))
-      .limit(1);
-
-    if (!user) {
+    // Get user with accounts
+    const userWithAccounts = await userRepository.findByIdWithAccounts(userId);
+    if (!userWithAccounts) {
       return null;
     }
 
-    // Get accounts
-    const accounts = await db
-      .select()
-      .from(accountTable)
-      .where(eq(accountTable.userId, userId))
-      .orderBy(desc(accountTable.createdAt));
+    // Get detailed accounts
+    const detailedAccounts = await accountRepository.findByUserId(userId);
 
-    // Get sessions
-    const sessions = await db
-      .select()
-      .from(sessionTable)
-      .where(eq(sessionTable.userId, userId))
-      .orderBy(desc(sessionTable.createdAt));
+    // Get sessions with token (for revocation)
+    const sessions = await sessionRepository.findByUserIdWithToken(userId);
 
     return {
-      ...user,
-      accounts: accounts.map((acc) => ({
-        id: acc.id,
-        providerId: acc.providerId,
-        accountId: acc.accountId,
-        createdAt: acc.createdAt,
-      })),
-      sessions: sessions.map((sess) => ({
-        id: sess.id,
-        token: sess.token,
-        expiresAt: sess.expiresAt,
-        ipAddress: sess.ipAddress,
-        userAgent: sess.userAgent,
-        createdAt: sess.createdAt,
-      })),
+      ...userWithAccounts,
+      accounts: detailedAccounts,
+      sessions,
     };
   } catch (error) {
     console.error("Failed to fetch user:", error);
@@ -132,15 +121,11 @@ export async function updateUserProfile(
     }
 
     // Update user in database
-    await db
-      .update(userTable)
-      .set({
-        name: validated.data.name,
-        username: validated.data.username || null,
-        displayUsername: validated.data.displayUsername || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(userTable.id, userId));
+    await userRepository.update(userId, {
+      name: validated.data.name,
+      username: validated.data.username || null,
+      displayUsername: validated.data.displayUsername || null,
+    });
 
     revalidatePath(`/admin/users/${userId}`);
     revalidatePath("/admin/users");
@@ -165,13 +150,9 @@ export async function toggleEmailVerification(
   try {
     await requireAuth();
 
-    await db
-      .update(userTable)
-      .set({
-        emailVerified: verified,
-        updatedAt: new Date(),
-      })
-      .where(eq(userTable.id, userId));
+    await userRepository.update(userId, {
+      emailVerified: verified,
+    });
 
     revalidatePath(`/admin/users/${userId}`);
     revalidatePath("/admin/users");
@@ -181,7 +162,10 @@ export async function toggleEmailVerification(
     console.error("Failed to update verification status:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to update verification",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to update verification",
     };
   }
 }
@@ -189,14 +173,14 @@ export async function toggleEmailVerification(
 /**
  * Unlink OAuth account
  */
-export async function unlinkAccount(accountId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+export async function unlinkAccount(
+  accountId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAuth();
 
-    // Delete the account
-    await db
-      .delete(accountTable)
-      .where(eq(accountTable.id, accountId));
+    await accountRepository.delete(accountId);
 
     revalidatePath(`/admin/users/${userId}`);
 
@@ -205,7 +189,8 @@ export async function unlinkAccount(accountId: string, userId: string): Promise<
     console.error("Failed to unlink account:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to unlink account",
+      error:
+        error instanceof Error ? error.message : "Failed to unlink account",
     };
   }
 }
@@ -240,14 +225,13 @@ export async function revokeUserSession(
 /**
  * Force logout all user sessions
  */
-export async function forceLogoutUser(userId: string): Promise<{ success: boolean; error?: string }> {
+export async function forceLogoutUser(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAuth();
 
-    // Delete all sessions for this user
-    await db
-      .delete(sessionTable)
-      .where(eq(sessionTable.userId, userId));
+    await sessionRepository.deleteByUserId(userId);
 
     revalidatePath(`/admin/users/${userId}`);
 
