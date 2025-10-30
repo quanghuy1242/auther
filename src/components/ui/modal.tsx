@@ -17,10 +17,10 @@ export interface ModalProps {
 }
 
 const sizeStyles = {
-  sm: "max-w-md",
-  md: "max-w-lg",
-  lg: "max-w-2xl",
-  xl: "max-w-4xl",
+  sm: "w-[calc(100%-2rem)] md:max-w-md",
+  md: "w-[calc(100%-2rem)] md:max-w-lg",
+  lg: "w-[calc(100%-2rem)] md:max-w-2xl",
+  xl: "w-[calc(100%-2rem)] md:max-w-4xl",
 };
 
 /**
@@ -65,7 +65,7 @@ export function Modal({
         </TransitionChild>
 
         <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4 text-center">
+          <div className="flex min-h-full items-center justify-center p-2 sm:p-4 text-center">
             <TransitionChild
               as={React.Fragment}
               enter="ease-out duration-300"
@@ -79,7 +79,7 @@ export function Modal({
                 className={cn(
                   "w-full transform overflow-hidden rounded-xl",
                   "bg-[#1a2632] border border-[#243647]",
-                  "p-6 text-left align-middle shadow-xl transition-all",
+                  "p-4 sm:p-6 text-left align-middle shadow-xl transition-all",
                   sizeStyles[size],
                   className
                 )}

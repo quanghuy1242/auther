@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Badge, Button, Input } from "@/components/ui";
+import { Badge, Button, Input, ResponsiveTable } from "@/components/ui";
 import type { GetClientsResult } from "./actions";
 
 interface ClientsClientProps {
@@ -132,101 +132,150 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
 
       {/* Table */}
       <div className="overflow-hidden rounded-lg border border-[#344d65]">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[#344d65]">
-            <thead className="bg-[#1a2632]">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Client Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Redirect URIs
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="relative px-6 py-3">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-[#1a2632] divide-y divide-[#344d65]">
-              {initialData.clients.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
-                    No OAuth clients found
-                  </td>
-                </tr>
-              ) : (
-                initialData.clients.map((client) => {
-                  const clientType = getClientType(client.userId);
-                  return (
-                    <tr key={client.id} className="hover:bg-[#243647]">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {client.name || "Unnamed Client"}
-                          </p>
-                          <p className="text-xs text-gray-400 font-mono">
-                            {client.clientId}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Badge
-                          variant={clientType === "trusted" ? "success" : "default"}
-                        >
-                          {clientType === "trusted" ? (
-                            <span className="flex items-center gap-1">
-                              <Icon name="lock" className="text-xs" />
-                              Trusted
-                            </span>
-                          ) : (
-                            "Dynamic"
+        <ResponsiveTable
+          columns={[
+            {
+              key: "name",
+              header: "Client Name",
+              render: (client) => (
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {client.name || "Unnamed Client"}
+                  </p>
+                  <p className="text-xs text-gray-400 font-mono">
+                    {client.clientId}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: "type",
+              header: "Type",
+              render: (client) => {
+                const clientType = getClientType(client.userId);
+                return (
+                  <Badge
+                    variant={clientType === "trusted" ? "success" : "default"}
+                  >
+                    {clientType === "trusted" ? (
+                      <span className="flex items-center gap-1">
+                        <Icon name="lock" className="text-xs" />
+                        Trusted
+                      </span>
+                    ) : (
+                      "Dynamic"
+                    )}
+                  </Badge>
+                );
+              },
+            },
+            {
+              key: "redirectURLs",
+              header: "Redirect URIs",
+              render: (client) => (
+                <div className="flex flex-col gap-1">
+                  {client.redirectURLs.length === 0 ? (
+                    <span className="text-gray-500">No redirect URIs</span>
+                  ) : (
+                    <>
+                      <span className="text-sm text-[#93adc8]">{client.redirectURLs[0]}</span>
+                      {client.redirectURLs.length > 1 && (
+                        <span className="text-xs text-gray-500">
+                          +{client.redirectURLs.length - 1} more
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: "createdAt",
+              header: "Created",
+              render: (client) => (
+                <span className="text-sm text-[#93adc8]">{formatDate(client.createdAt)}</span>
+              ),
+            },
+            {
+              key: "actions",
+              header: "",
+              className: "text-right",
+              render: (client) => (
+                <Link
+                  href={`/admin/clients/${client.clientId}`}
+                  className="text-[#1773cf] hover:text-[#1773cf]/80 inline-block"
+                >
+                  <Icon name="more_horiz" />
+                </Link>
+              ),
+            },
+          ]}
+          data={initialData.clients}
+          keyExtractor={(client) => client.id}
+          mobileCardRender={(client) => {
+            const clientType = getClientType(client.userId);
+            return (
+              <Link href={`/admin/clients/${client.clientId}`}>
+                <div className="bg-[#1a2632] rounded-lg p-4 space-y-3 border border-[#344d65] hover:border-[#1773cf] transition-colors active:bg-[#243647]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">
+                        {client.name || "Unnamed Client"}
+                      </p>
+                      <p className="text-xs text-gray-400 font-mono truncate mt-1">
+                        {client.clientId}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={clientType === "trusted" ? "success" : "default"}
+                      className="flex-shrink-0"
+                    >
+                      {clientType === "trusted" ? (
+                        <span className="flex items-center gap-1">
+                          <Icon name="lock" className="text-xs" />
+                          Trusted
+                        </span>
+                      ) : (
+                        "Dynamic"
+                      )}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase mb-1">Redirect URIs</p>
+                      {client.redirectURLs.length === 0 ? (
+                        <p className="text-sm text-gray-500">No redirect URIs</p>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-sm text-[#93adc8] truncate">{client.redirectURLs[0]}</p>
+                          {client.redirectURLs.length > 1 && (
+                            <p className="text-xs text-gray-500">
+                              +{client.redirectURLs.length - 1} more
+                            </p>
                           )}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[#93adc8]">
-                        <div className="flex flex-col gap-1">
-                          {client.redirectURLs.length === 0 ? (
-                            <span className="text-gray-500">No redirect URIs</span>
-                          ) : (
-                            <>
-                              <span>{client.redirectURLs[0]}</span>
-                              {client.redirectURLs.length > 1 && (
-                                <span className="text-xs text-gray-500">
-                                  +{client.redirectURLs.length - 1} more
-                                </span>
-                              )}
-                            </>
-                          )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#93adc8]">
-                        {formatDate(client.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          href={`/admin/clients/${client.clientId}`}
-                          className="text-[#1773cf] hover:text-[#1773cf]/80"
-                        >
-                          <Icon name="more_horiz" />
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-[#344d65]">
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase">Created</p>
+                        <p className="text-sm text-[#93adc8] mt-0.5">{formatDate(client.createdAt)}</p>
+                      </div>
+                      <Icon name="chevron_right" className="text-[#1773cf]" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          }}
+          emptyMessage="No OAuth clients found"
+        />
       </div>
 
       {/* Pagination */}
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <p className="text-sm text-[#93adc8]">
           Showing{" "}
           <span className="font-medium text-white">

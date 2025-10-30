@@ -93,7 +93,7 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
               leftIcon="sync"
               onClick={() => setShowRotateModal(true)}
             >
-              Rotate JWKS Now
+              Rotate JWKS
             </Button>
           </div>
         </CardHeader>

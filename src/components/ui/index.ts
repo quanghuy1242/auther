@@ -58,3 +58,5 @@ export type { CopyableFieldProps } from "./copyable-field";
 
 export { UrlListBuilder } from "./url-list-builder";
 export type { UrlListBuilderProps } from "./url-list-builder";
+
+export { ResponsiveTable } from "./responsive-table";

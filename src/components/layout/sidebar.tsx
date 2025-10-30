@@ -38,15 +38,17 @@ export function Sidebar({ children }: SidebarProps) {
 
 export interface SidebarNavItemProps {
   item: NavItem;
+  onNavigate?: () => void;
 }
 
-export function SidebarNavItem({ item }: SidebarNavItemProps) {
+export function SidebarNavItem({ item, onNavigate }: SidebarNavItemProps) {
   const pathname = usePathname();
   const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
 
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       className={`
         flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors
         ${
@@ -70,9 +72,17 @@ export function SidebarNavItem({ item }: SidebarNavItemProps) {
 export interface SidebarSectionProps {
   title?: string;
   children: React.ReactNode;
+  onNavigate?: () => void;
 }
 
-export function SidebarSection({ title, children }: SidebarSectionProps) {
+export function SidebarSection({ title, children, onNavigate }: SidebarSectionProps) {
+  // Clone children and pass onNavigate prop
+  const childrenWithProps = React.Children.map(children, (child) => {
+    if (React.isValidElement(child)) {
+      return React.cloneElement(child, { onNavigate } as Partial<SidebarNavItemProps>);
+    }
+    return child;
+  });
   return (
     <div className="mb-6">
       {title && (
@@ -82,7 +92,7 @@ export function SidebarSection({ title, children }: SidebarSectionProps) {
           </h3>
         </div>
       )}
-      <nav>{children}</nav>
+      <nav>{childrenWithProps}</nav>
     </div>
   );
 }

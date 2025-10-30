@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Badge, Button, Input } from "@/components/ui";
+import { Badge, Button, Input, ResponsiveTable } from "@/components/ui";
 import type { GetUsersResult } from "./actions";
 
 interface UsersClientProps {
@@ -94,7 +94,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
       {/* Control Bar */}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="relative flex-grow min-w-[300px]">
+          <div className="relative flex-grow min-w-full sm:min-w-[300px]">
             <Icon
               name="search"
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -107,7 +107,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
               className="pl-10 w-full"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={filterStatus === "all" ? "primary" : "secondary"}
               size="sm"
@@ -136,100 +136,131 @@ export function UsersClient({ initialData }: UsersClientProps) {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Responsive Table */}
       <div className="overflow-hidden rounded-lg border border-[#344d65]">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-[#344d65]">
-            <thead className="bg-[#1a2632]">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Full Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Date Created
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#93adc8] uppercase tracking-wider">
-                  Providers
-                </th>
-                <th className="relative px-6 py-3">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-[#111921] divide-y divide-[#344d65]">
-              {initialData.users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
-                    No users found
-                  </td>
-                </tr>
-              ) : (
-                initialData.users.map((user) => (
-                  <tr key={user.id} className="hover:bg-primary/10">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                      {user.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#93adc8]">
-                      {user.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#93adc8]">
-                      {formatDate(user.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <Badge
-                        variant={user.emailVerified ? "success" : "warning"}
+        <ResponsiveTable
+          columns={[
+            {
+              key: "email",
+              header: "Email",
+              render: (user) => (
+                <span className="text-sm font-medium text-white">{user.email}</span>
+              ),
+            },
+            {
+              key: "name",
+              header: "Full Name",
+              render: (user) => (
+                <span className="text-sm text-[#93adc8]">{user.name}</span>
+              ),
+            },
+            {
+              key: "createdAt",
+              header: "Date Created",
+              render: (user) => (
+                <span className="text-sm text-[#93adc8]">{formatDate(user.createdAt)}</span>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (user) => (
+                <Badge variant={user.emailVerified ? "success" : "warning"}>
+                  {user.emailVerified ? "Verified" : "Unverified"}
+                </Badge>
+              ),
+            },
+            {
+              key: "providers",
+              header: "Providers",
+              render: (user) => (
+                <div className="flex items-center gap-2">
+                  {user.accounts.length === 0 ? (
+                    <Icon name="mail" className="text-gray-400" />
+                  ) : (
+                    user.accounts.map((account, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-1"
+                        title={`${account.providerId} - ${account.accountId}`}
                       >
-                        {user.emailVerified ? "Verified" : "Unverified"}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex items-center gap-2">
-                        {user.accounts.length === 0 ? (
+                        {account.providerId === "credential" ? (
                           <Icon name="mail" className="text-gray-400" />
                         ) : (
-                          user.accounts.map((account, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-1"
-                              title={`${account.providerId} - ${account.accountId}`}
-                            >
-                              {account.providerId === "credential" ? (
-                                <Icon name="mail" className="text-gray-400" />
-                              ) : (
-                                <Icon
-                                  name={getProviderIcon(account.providerId)}
-                                  className="text-gray-400"
-                                />
-                              )}
-                            </div>
-                          ))
+                          <Icon
+                            name={getProviderIcon(account.providerId)}
+                            className="text-gray-400"
+                          />
                         )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Link
-                        href={`/admin/users/${user.id}`}
-                        className="text-[#1773cf] hover:text-[#1773cf]/80"
-                      >
-                        <Icon name="more_horiz" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    ))
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (user) => (
+                <Link
+                  href={`/admin/users/${user.id}`}
+                  className="text-[#1773cf] hover:text-[#1773cf]/80"
+                >
+                  <Icon name="more_horiz" />
+                </Link>
+              ),
+              className: "text-right",
+            },
+          ]}
+          data={initialData.users}
+          keyExtractor={(user) => user.id}
+          mobileCardRender={(user) => (
+            <div className="bg-[#1a2632] rounded-lg p-4 border border-[#344d65] space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">{user.name}</p>
+                  <p className="text-xs text-gray-400 mt-1">{user.email}</p>
+                </div>
+                <Badge variant={user.emailVerified ? "success" : "warning"}>
+                  {user.emailVerified ? "Verified" : "Unverified"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-[#344d65]">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Providers:</span>
+                  <div className="flex items-center gap-1">
+                    {user.accounts.length === 0 ? (
+                      <Icon name="mail" className="text-gray-400" size="sm" />
+                    ) : (
+                      user.accounts.map((account, idx) => (
+                        <Icon
+                          key={idx}
+                          name={account.providerId === "credential" ? "mail" : getProviderIcon(account.providerId)}
+                          className="text-gray-400"
+                          size="sm"
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+                <Link
+                  href={`/admin/users/${user.id}`}
+                  className="inline-flex items-center gap-1 text-[#1773cf] hover:text-[#1773cf]/80 text-sm min-h-[44px] px-3"
+                >
+                  View <Icon name="chevron_right" size="sm" />
+                </Link>
+              </div>
+              <div className="text-xs text-gray-500">
+                Created {formatDate(user.createdAt)}
+              </div>
+            </div>
+          )}
+          emptyMessage="No users found"
+        />
       </div>
 
       {/* Pagination */}
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <p className="text-sm text-[#93adc8]">
           Showing{" "}
           <span className="font-medium text-white">

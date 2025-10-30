@@ -175,17 +175,17 @@ export default async function AdminDashboard() {
           ) : (
             <div className="space-y-3">
               {recentSignIns.map((activity) => (
-                <div key={activity.id} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
+                <div key={activity.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-2 border-b border-gray-700 last:border-0 gap-3 sm:gap-0">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center flex-shrink-0">
                       <Icon name="person" size="sm" className="text-white" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">{activity.userEmail}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-white truncate">{activity.userEmail}</p>
                       <p className="text-xs text-gray-400">{activity.ipAddress || "Unknown IP"}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 sm:flex-shrink-0">
                     <span className="text-xs text-gray-400">{formatTimeAgo(activity.createdAt)}</span>
                     <Badge variant="success">Success</Badge>
                   </div>

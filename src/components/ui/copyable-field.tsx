@@ -41,15 +41,15 @@ export function CopyableField({
   };
 
   return (
-    <div className={cn("flex justify-between items-center py-4 border-b border-white/10", className)}>
-      <div className="flex flex-col gap-1 flex-1 min-w-0">
+    <div className={cn("flex justify-between items-start py-4 border-b border-white/10", className)}>
+      <div className="flex flex-col gap-1 flex-1 min-w-0 pr-2">
         <p className="text-[#93adc8] text-sm font-normal leading-normal">{label}</p>
-        <p className="text-white text-sm font-normal leading-normal break-all">{value}</p>
+        <p className="text-white text-sm font-normal leading-normal break-all overflow-wrap-anywhere">{value}</p>
       </div>
       {copyable && (
         <button
           onClick={handleCopy}
-          className="p-2 rounded-md hover:bg-white/10 text-white/70 hover:text-white transition-colors ml-3 flex-shrink-0"
+          className="p-2 rounded-md hover:bg-white/10 text-white/70 hover:text-white transition-colors flex-shrink-0 mt-0.5"
           title="Copy to clipboard"
         >
           {copied ? (

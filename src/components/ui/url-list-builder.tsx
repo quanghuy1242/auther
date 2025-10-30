@@ -103,10 +103,10 @@ export function UrlListBuilder({
           {urls.map((url, index) => (
             <div
               key={index}
-              className="flex items-center gap-2 p-3 bg-[#111921] rounded-lg border border-white/10"
+              className="flex items-start gap-2 p-3 bg-[#111921] rounded-lg border border-white/10"
             >
-              <Icon name="check_circle" className="text-green-400 flex-shrink-0" />
-              <span className="flex-1 text-white text-sm font-mono break-all">{url}</span>
+              <Icon name="check_circle" className="text-green-400 flex-shrink-0 mt-0.5" />
+              <span className="flex-1 text-white text-sm font-mono break-all overflow-wrap-anywhere min-w-0">{url}</span>
               {urls.length > minUrls && (
                 <button
                   type="button"
@@ -122,8 +122,8 @@ export function UrlListBuilder({
         </div>
 
         {/* Add new URL */}
-        <div className="flex gap-2">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1 min-w-0">
             <Input
               value={newUrl}
               onChange={(e) => {
@@ -134,6 +134,7 @@ export function UrlListBuilder({
               placeholder={placeholder}
               error={error || undefined}
               leftIcon="add"
+              className="w-full"
             />
           </div>
           <Button
@@ -141,6 +142,7 @@ export function UrlListBuilder({
             variant="secondary"
             onClick={handleAdd}
             leftIcon="add"
+            className="sm:flex-shrink-0 w-full sm:w-auto"
           >
             Add URL
           </Button>
