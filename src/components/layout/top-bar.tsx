@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/icon";
 import { Dropdown } from "@/components/ui/dropdown";
 import type { SessionUser } from "@/lib/session";
 import { getUserDisplayName, getUserInitials } from "@/lib/session-utils";
+import { signOut } from "@/app/admin/actions";
 
 export interface TopBarProps {
   children?: React.ReactNode;
@@ -96,7 +97,9 @@ export function TopBarUserMenu({ user }: { user?: SessionUser }) {
         {
           label: "Sign Out",
           icon: "logout",
-          onClick: () => router.push("/api/auth/logout"),
+          onClick: async () => {
+            await signOut();
+          },
           danger: true,
         },
       ]}

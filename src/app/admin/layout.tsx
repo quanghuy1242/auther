@@ -14,6 +14,7 @@ import {
   TopBarNotifications,
   TopBarUserMenu,
 } from "@/components/layout";
+import { LogoutButton } from "@/components/layout/logout-button";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import type { NavItem } from "@/lib/types";
 
@@ -34,7 +35,6 @@ const settingsNavItems: NavItem[] = [
 
 const footerNavItems: NavItem[] = [
   { label: "Help Center", href: "/help", icon: "help" },
-  { label: "Logout", href: "/api/auth/logout", icon: "logout" },
 ];
 
 export default async function AdminLayout({
@@ -81,6 +81,7 @@ export default async function AdminLayout({
                 {item.label}
               </Link>
             ))}
+            <LogoutButton />
           </div>
         </SidebarFooter>
       </Sidebar>

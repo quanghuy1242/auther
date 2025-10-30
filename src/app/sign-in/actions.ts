@@ -46,6 +46,12 @@ export async function emailPasswordSignIn(
         redirectUrl: result.url,
       };
     }
+
+    // Default redirect to admin if no other redirect is specified
+    return {
+      success: true,
+      redirectUrl: "/admin",
+    };
   } catch (error) {
     return {
       success: false,
@@ -55,9 +61,4 @@ export async function emailPasswordSignIn(
           : "Unable to sign in with the provided credentials.",
     };
   }
-
-  return {
-    success: true,
-    redirectUrl: undefined,
-  };
 }

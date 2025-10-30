@@ -25,3 +25,5 @@ export type { PageHeadingProps } from "./page-heading";
 
 export { Alert } from "./alert";
 export type { AlertProps } from "./alert";
+
+export { LogoutButton } from "./logout-button";
