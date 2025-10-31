@@ -63,19 +63,12 @@ export async function requireAuth(): Promise<Session> {
 }
 
 /**
- * Check if the current user has admin role
- */
-export function isAdmin(session: Session | null): boolean {
-  return session?.user?.role === "admin";
-}
-
-/**
  * Require admin role - throws error if not admin
  */
 export async function requireAdmin(): Promise<Session> {
   const session = await requireAuth();
   
-  if (!isAdmin(session)) {
+  if (session?.user?.role !== "admin") {
     throw new Error("Forbidden - admin access required");
   }
 

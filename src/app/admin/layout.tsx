@@ -1,6 +1,7 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
-import { getSession, isAdmin } from "@/lib/session";
+import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/auth-utils";
 import { AdminLayoutClient } from "./layout-client";
 import type { NavItem } from "@/lib/types";
 
