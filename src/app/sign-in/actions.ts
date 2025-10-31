@@ -34,12 +34,9 @@ export async function emailPasswordSignIn(
       },
     });
 
-    // Get the session to check user role
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    const isAdmin = session?.user?.role === "admin";
+    // Check if user is admin from the sign-in result
+    // Use type assertion since better-auth doesn't include role in default type
+    const isAdmin = (result.user as { role?: string })?.role === "admin";
     const hasRedirect = 
       (typeof authorizeQuery === "string" && authorizeQuery.length > 0) ||
       (result.redirect && result.url) ||
