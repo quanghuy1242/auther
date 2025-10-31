@@ -477,7 +477,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
       {/* Unlink Account Modal */}
       {accountToUnlink && (
         <Modal
-          isOpen={true}
+          isOpen={!!accountToUnlink}
           onClose={() => setAccountToUnlink(null)}
           title="Unlink Account"
         >
@@ -499,7 +499,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
       {/* Revoke Session Modal */}
       {sessionToRevoke && (
         <Modal
-          isOpen={true}
+          isOpen={!!sessionToRevoke}
           onClose={() => setSessionToRevoke(null)}
           title="Revoke Session"
         >
@@ -521,7 +521,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
       {/* Force Logout Modal */}
       {showForceLogoutModal && (
         <Modal
-          isOpen={true}
+          isOpen={showForceLogoutModal}
           onClose={() => setShowForceLogoutModal(false)}
           title="Force Logout All Sessions"
         >
@@ -541,9 +541,8 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
       )}
 
       {/* Set Password Modal */}
-      {showSetPasswordModal && (
-        <Modal
-          isOpen={true}
+      <Modal
+          isOpen={showSetPasswordModal}
           onClose={() => {
             setShowSetPasswordModal(false);
             setNewPassword("");
@@ -593,12 +592,9 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             </div>
           </div>
         </Modal>
-      )}
 
-      {/* Send Reset Email Modal */}
-      {showSendResetEmailModal && (
-        <Modal
-          isOpen={true}
+      <Modal
+          isOpen={showSendResetEmailModal}
           onClose={() => {
             setShowSendResetEmailModal(false);
             setResetEmailSuccess(false);
@@ -633,7 +629,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             </div>
           </div>
         </Modal>
-      )}
     </>
   );
 }
