@@ -21,6 +21,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@libsql/client": "^0.15.15",
     "@material-symbols/font-400": "^0.38.0",
+    "@react-email/components": "^0.5.7",
     "@upstash/qstash": "^2.8.4",
     "@upstash/redis": "^1.35.6",
     "better-auth": "^1.3.32",
@@ -33,6 +34,7 @@
     "react-dom": "19.2.0",
     "react-hook-form": "^7.65.0",
     "recharts": "^3.3.0",
+    "resend": "^6.3.0",
     "tailwind-merge": "^3.3.1",
     "zod": "^4.1.12"
   },

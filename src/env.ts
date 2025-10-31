@@ -53,6 +53,9 @@ const serverSchema = z.object({
     .string()
     .min(32, "PAYLOAD_INBOUND_WEBHOOK_SECRET must be at least 32 characters"),
   VERCEL_URL: z.string().optional(),
+  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
+  EMAIL_FROM: z.string().email("EMAIL_FROM must be a valid email"),
+  EMAIL_FROM_NAME: z.string().min(1, "EMAIL_FROM_NAME is required"),
 });
 
 const clientSchema = z.object({

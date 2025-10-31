@@ -21,6 +21,7 @@ import {
   createRestrictedSignupPaths, 
   validateInternalSignupAccess 
 } from "@/lib/utils/auth-middleware";
+import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 // import { createPayloadUserHooks } from "@/lib/webhooks/payload-hooks";
 
 const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
@@ -145,6 +146,17 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail(user.email, url);
+    },
+  },
+  emailVerification: {
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerificationEmail(user.email, url);
+    },
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
   },
   trustedOrigins,
   hooks: {
