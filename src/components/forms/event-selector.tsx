@@ -1,6 +1,7 @@
 "use client";
 
 import { Control, Controller } from "react-hook-form";
+import { StyledCheckbox } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 export interface EventOption {
@@ -60,10 +61,10 @@ export function EventSelector({ name, control, events, label, className }: Event
                 const isSelected = selectedEvents.includes(event.value);
 
                 return (
-                  <label
+                  <div
                     key={event.value}
                     className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                      "flex items-center gap-3 p-3 rounded-lg border transition-all",
                       "hover:border-[var(--color-primary)]/50",
                       isSelected
                         ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)]/50"
@@ -71,16 +72,12 @@ export function EventSelector({ name, control, events, label, className }: Event
                     )}
                     style={!isSelected ? { backgroundColor: '#1a2632' } : undefined}
                   >
-                    <input
-                      type="checkbox"
+                    <StyledCheckbox
                       checked={isSelected}
                       onChange={() => toggleEvent(event.value)}
-                      className="w-4 h-4 rounded border-2 border-gray-400 dark:border-gray-600 text-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:ring-offset-0 bg-transparent checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
+                      label={event.value}
                     />
-                    <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                      {event.value}
-                    </span>
-                  </label>
+                  </div>
                 );
               })}
             </div>

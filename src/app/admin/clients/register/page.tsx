@@ -3,9 +3,8 @@
 import * as React from "react";
 import { z } from "zod";
 import { PageHeading } from "@/components/layout/page-heading";
-import { Card, CardContent, Button, Icon, Badge, UrlListBuilder } from "@/components/ui";
+import { Card, CardContent, Button, Icon, Badge, UrlListBuilder, StyledCheckbox, CopyableInput } from "@/components/ui";
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
-import { useCopyToClipboard } from "@/lib/utils/clipboard";
 import { registerClient, type RegisterClientState } from "./actions";
 import { useRouter } from "next/navigation";
 
@@ -50,12 +49,10 @@ function GrantTypesSelector() {
             key={grant.value}
             className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
           >
-            <input
-              type="checkbox"
+            <StyledCheckbox
               checked={selectedGrants.includes(grant.value)}
               onChange={() => toggleGrant(grant.value)}
-              className="mt-1 w-4 h-4 rounded border-2 border-white/20 text-[#1773cf] focus:ring-[#1773cf] focus:ring-offset-0"
-              style={{ backgroundColor: '#0a0f14' }}
+              className="mt-0.5"
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
@@ -91,7 +88,6 @@ function GrantTypesSelector() {
 export default function RegisterClientPage() {
   const router = useRouter();
   const [clientData, setClientData] = React.useState<{ clientId: string; clientSecret?: string } | null>(null);
-  const { copied, handleCopy: copyToClipboard } = useCopyToClipboard<"id" | "secret">();
   const [redirectUrls, setRedirectUrls] = React.useState<string[]>([]);
   const [redirectUrlsInput, setRedirectUrlsInput] = React.useState("");
 
@@ -126,58 +122,20 @@ export default function RegisterClientPage() {
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-400 block mb-2">
-                    Client ID
-                  </label>
-                  <div className="flex gap-2">
-                    <code className="flex-1 px-4 py-3 border border-white/10 rounded-lg text-sm text-white font-mono" style={{ backgroundColor: '#0a0f14' }}>
-                      {clientData.clientId}
-                    </code>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => copyToClipboard(clientData.clientId, "id")}
-                    >
-                      {copied === "id" ? (
-                        <>
-                          <Icon name="check" /> Copied
-                        </>
-                      ) : (
-                        <>
-                          <Icon name="content_copy" /> Copy
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
+                <CopyableInput
+                  id="clientId"
+                  label="Client ID"
+                  value={clientData.clientId}
+                  labelClassName="text-sm font-medium text-gray-400"
+                />
 
                 {clientData.clientSecret && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-400 block mb-2">
-                      Client Secret
-                    </label>
-                    <div className="flex gap-2">
-                      <code className="flex-1 px-4 py-3 border border-white/10 rounded-lg text-sm text-white font-mono break-all" style={{ backgroundColor: '#0a0f14' }}>
-                        {clientData.clientSecret}
-                      </code>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => copyToClipboard(clientData.clientSecret!, "secret")}
-                      >
-                        {copied === "secret" ? (
-                          <>
-                            <Icon name="check" /> Copied
-                          </>
-                        ) : (
-                          <>
-                            <Icon name="content_copy" /> Copy
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                  <CopyableInput
+                    id="clientSecret"
+                    label="Client Secret"
+                    value={clientData.clientSecret}
+                    labelClassName="text-sm font-medium text-gray-400"
+                  />
                 )}
               </div>
 

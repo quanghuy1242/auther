@@ -97,32 +97,35 @@ export function UrlListBuilder({
         <p className="text-sm text-gray-400 mb-3">{description}</p>
       )}
 
-      <div className="space-y-4">
-        {/* Existing URLs */}
-        <div className="space-y-2">
-          {urls.map((url, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-2 p-3 bg-[#111921] rounded-lg border border-white/10"
-            >
-              <Icon name="check_circle" className="text-green-400 flex-shrink-0 mt-0.5" />
-              <span className="flex-1 text-white text-sm font-mono break-all overflow-wrap-anywhere min-w-0">{url}</span>
-              {urls.length > minUrls && (
-                <button
-                  type="button"
-                  onClick={() => handleRemove(index)}
-                  className="p-1 rounded-md hover:bg-white/10 text-white/70 hover:text-red-400 transition-colors flex-shrink-0"
-                  title="Remove URL"
-                >
-                  <Icon name="close" className="!text-lg" />
-                </button>
-              )}
+      <div className="space-y-3">
+        {/* Existing URLs - Individual input fields with delete buttons */}
+        {urls.map((url, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <Input
+                value={url}
+                onChange={(e) => {
+                  const newUrls = [...urls];
+                  newUrls[index] = e.target.value;
+                  onChange(newUrls);
+                }}
+                className="bg-[#111921] border-slate-700"
+              />
             </div>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => handleRemove(index)}
+              disabled={urls.length <= minUrls}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+              title={urls.length <= minUrls ? `At least ${minUrls} URL(s) required` : "Remove URI"}
+            >
+              <Icon name="delete" className="!text-xl" />
+            </button>
+          </div>
+        ))}
 
         {/* Add new URL */}
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <Input
               value={newUrl}
@@ -133,20 +136,21 @@ export function UrlListBuilder({
               onKeyPress={handleKeyPress}
               placeholder={placeholder}
               error={error || undefined}
-              leftIcon="add"
-              className="w-full"
+              className="bg-[#111921] border-slate-700"
             />
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleAdd}
-            leftIcon="add"
-            className="sm:flex-shrink-0 w-full sm:w-auto"
-          >
-            Add URL
-          </Button>
         </div>
+        
+        {/* Add URI Button */}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleAdd}
+          leftIcon="add"
+          className="w-fit"
+        >
+          Add URI
+        </Button>
       </div>
     </div>
   );

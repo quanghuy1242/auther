@@ -42,6 +42,7 @@ export { Select } from "./select";
 export type { SelectProps, SelectOption } from "./select";
 
 export { Checkbox } from "./checkbox";
+export { StyledCheckbox } from "./styled-checkbox";
 export type { CheckboxProps } from "./checkbox";
 
 export { Modal, ModalFooter } from "./modal";
@@ -54,6 +55,7 @@ export { Dropdown } from "./dropdown";
 export type { DropdownProps, DropdownItem } from "./dropdown";
 
 export { CopyableField } from "./copyable-field";
+export { CopyableInput } from "./copyable-input";
 export type { CopyableFieldProps } from "./copyable-field";
 
 export { UrlListBuilder } from "./url-list-builder";

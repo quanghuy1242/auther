@@ -3,17 +3,21 @@
 import * as React from "react";
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Icon, Label, Modal } from "@/components/ui";
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Icon, Label, Modal, Input, StyledCheckbox, CopyableInput } from "@/components/ui";
+import { UrlListBuilder } from "@/components/ui/url-list-builder";
 import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
-import { useCopyToClipboard } from "@/lib/utils/clipboard";
 import { 
-  updateClient, 
+  updateClient,
   rotateClientSecret, 
   toggleClientStatus,
   deleteClient,
   type ClientDetail,
-  type UpdateClientState 
+  type UpdateClientState,
 } from "./actions";
+
+// Available auth methods and grant types
+const AUTH_METHODS = ["client_secret_basic", "client_secret_post", "private_key_jwt", "none"] as const;
+const GRANT_TYPES = ["authorization_code", "refresh_token", "client_credentials"] as const;
 
 interface ClientDetailClientProps {
   client: ClientDetail;
@@ -26,7 +30,12 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
   const [showSecretModal, setShowSecretModal] = React.useState(false);
   const [newSecret, setNewSecret] = React.useState<string | null>(null);
-  const { copied, handleCopy: copyToClipboard } = useCopyToClipboard<"id" | "secret">();
+
+  // Edit mode state
+  const [editName, setEditName] = React.useState(client.name || "");
+  const [editRedirectUrls, setEditRedirectUrls] = React.useState<string[]>(client.redirectURLs);
+  const [editAuthMethod, setEditAuthMethod] = React.useState(client.metadata.tokenEndpointAuthMethod || "client_secret_basic");
+  const [editGrantTypes, setEditGrantTypes] = React.useState<string[]>(client.metadata.grantTypes || ["authorization_code"]);
 
   const updateWithClientId = updateClient.bind(null, client.clientId);
   const [updateState, updateAction] = useFormState<UpdateClientState, FormData>(
@@ -63,237 +72,313 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     }
   };
 
-  const isTrusted = client.metadata.trusted || client.userId === null;
+  const handleSave = () => {
+    const formData = new FormData();
+    formData.append("name", editName);
+    formData.append("redirectURLs", editRedirectUrls.join("\n"));
+    updateAction(formData);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditName(client.name || "");
+    setEditRedirectUrls(client.redirectURLs);
+    setEditAuthMethod(client.metadata.tokenEndpointAuthMethod || "client_secret_basic");
+    setEditGrantTypes(client.metadata.grantTypes || ["authorization_code"]);
+  };
+
+  const toggleGrantType = (grant: string) => {
+    setEditGrantTypes(prev =>
+      prev.includes(grant) ? prev.filter(g => g !== grant) : [...prev, grant]
+    );
+  };
+
   const isConfidential = client.clientSecret !== null;
+  const grantTypes = isEditing ? editGrantTypes : (client.metadata.grantTypes || ["authorization_code"]);
+  const authMethod = isEditing ? editAuthMethod : (client.metadata.tokenEndpointAuthMethod || "client_secret_basic");
 
   return (
     <>
       {/* Client Header */}
-      <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-lg bg-[#1773cf]/20 flex items-center justify-center border border-[#1773cf]/30">
-            <Icon name="apps" className="text-[#1773cf] text-3xl" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <h1 className="text-4xl font-black text-white tracking-tight">{client.name || "Unnamed Client"}</h1>
-            <div className="flex items-center gap-2">
-              {isTrusted && (
-                <Badge variant="info" dot>
-                  Trusted
-                </Badge>
-              )}
-              {client.disabled ? (
-                <Badge variant="danger" dot>Disabled</Badge>
-              ) : (
-                <Badge variant="success" dot>Active</Badge>
-              )}
-              <span className="text-sm text-gray-400">{client.type || "Unknown Type"}</span>
-            </div>
-          </div>
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-black text-white tracking-tight">{client.name || "Unnamed Client"}</h1>
+          {client.disabled ? (
+            <Badge variant="danger" className="rounded-full">Disabled</Badge>
+          ) : (
+            <Badge variant="success" className="rounded-full">Active</Badge>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
+          {!isEditing && (
+            <Button
+              variant={client.disabled ? "primary" : "secondary"}
+              size="sm"
+              onClick={handleToggleStatus}
+            >
+              {client.disabled ? "Enable Client" : "Disable Client"}
+            </Button>
+          )}
           <Button
-            variant={client.disabled ? "primary" : "secondary"}
+            variant={isEditing ? "primary" : "secondary"}
             size="sm"
-            onClick={handleToggleStatus}
+            onClick={isEditing ? handleSave : () => setIsEditing(true)}
+            disabled={isEditing && !editName.trim()}
           >
-            {client.disabled ? "Enable Client" : "Disable Client"}
+            {isEditing ? "Save Changes" : "Edit"}
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => setShowDeleteModal(true)}
-          >
-            Delete Client
-          </Button>
+          {isEditing && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCancelEdit}
+            >
+              Cancel
+            </Button>
+          )}
         </div>
       </div>
+      
+      <p className="text-sm text-[#93adc8] mb-6">
+        Client Type: {isConfidential ? "Confidential" : "Public"}
+      </p>
 
-      {/* Client Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Main Details */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Client Configuration</CardTitle>
-                <Button
-                  variant={isEditing ? "secondary" : "primary"}
-                  size="sm"
-                  onClick={() => setIsEditing(!isEditing)}
-                >
-                  {isEditing ? "Cancel" : "Edit"}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isEditing ? (
-                <form action={updateAction} className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Client Name</Label>
-                    <input
-                      id="name"
-                      name="name"
-                      type="text"
-                      defaultValue={client.name || ""}
-                      className="w-full px-4 py-3 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent mt-1"
-                      style={{ backgroundColor: '#0a0f14' }}
-                      required
-                    />
-                    {updateState.errors?.name && (
-                      <p className="text-sm text-red-500 mt-1">{updateState.errors.name}</p>
-                    )}
-                  </div>
-                  <div>
-                    <Label htmlFor="redirectURLs">Redirect URIs</Label>
-                    <textarea
-                      id="redirectURLs"
-                      name="redirectURLs"
-                      defaultValue={client.redirectURLs.join("\n")}
-                      className="w-full px-4 py-3 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:border-transparent resize-y min-h-[120px] mt-1"
-                      style={{ backgroundColor: '#0a0f14' }}
-                      required
-                    />
-                    <p className="text-sm text-gray-400 mt-1">One URL per line</p>
-                    {updateState.errors?.redirectURLs && (
-                      <p className="text-sm text-red-500 mt-1">{updateState.errors.redirectURLs}</p>
-                    )}
-                  </div>
-                  {updateState.error && (
-                    <p className="text-sm text-red-500">{updateState.error}</p>
-                  )}
-                  <Button type="submit" variant="primary">
-                    Save Changes
-                  </Button>
-                </form>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-gray-400">Client Name</Label>
-                    <p className="text-base text-white mt-1">{client.name || "—"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-gray-400">Redirect URIs</Label>
-                    <div className="mt-2 space-y-2">
-                      {client.redirectURLs.length === 0 ? (
-                        <p className="text-sm text-gray-500">No redirect URIs configured</p>
-                      ) : (
-                        client.redirectURLs.map((uri, index) => (
-                          <div key={index} className="flex items-center gap-2 text-sm">
-                            <Icon name="arrow_forward" className="text-gray-500 text-sm" />
-                            <code className="text-[#1773cf]">{uri}</code>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>OAuth Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-gray-400">Grant Types</Label>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {(client.metadata.grantTypes || ["authorization_code"]).map((grant) => (
-                      <Badge key={grant} variant="default">{grant}</Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-gray-400">Token Endpoint Auth Method</Label>
-                  <p className="text-base text-white mt-1">
-                    {client.metadata.tokenEndpointAuthMethod || "client_secret_basic"}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-gray-400">Client Type</Label>
-                  <p className="text-base text-white mt-1">
-                    {isConfidential ? "Confidential (has secret)" : "Public (no secret)"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Error messages */}
+      {updateState.error && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <p className="text-sm text-red-400">{updateState.error}</p>
         </div>
+      )}
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Credentials</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label className="text-gray-400 block mb-2">Client ID</Label>
-                <div className="flex gap-2">
-                  <code className="flex-1 px-3 py-2 border border-white/10 rounded text-sm text-white font-mono break-all" style={{ backgroundColor: '#0a0f14' }}>
-                    {client.clientId}
-                  </code>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => copyToClipboard(client.clientId, "id")}
-                  >
-                    {copied === "id" ? <Icon name="check" /> : <Icon name="content_copy" />}
-                  </Button>
+      {/* Single Column Layout */}
+      <div className="space-y-6">
+        {/* Client Metadata Section */}
+        <Card className="border-slate-800" style={{ backgroundColor: '#1A2530' }}>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold">Client Metadata</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isEditing && (
+              <div className="mb-6">
+                <Label className="text-sm font-medium text-[#93adc8] mb-2 block" htmlFor="clientName">
+                  Client Name
+                </Label>
+                <Input
+                  id="clientName"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-[#111921] border-slate-700 text-white text-sm"
+                  placeholder="Enter client name"
+                />
+                {updateState.errors?.name && (
+                  <p className="text-sm text-red-400 mt-1">{updateState.errors.name}</p>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <CopyableInput
+                id="clientId"
+                label="Client ID"
+                value={client.clientId}
+                labelClassName="text-sm font-medium text-[#93adc8]"
+              />
+              
+              {isConfidential && (
+                <CopyableInput
+                  id="clientSecret"
+                  label="Client Secret"
+                  value={client.clientSecret || "********************************"}
+                  type="password"
+                  labelClassName="text-sm font-medium text-[#93adc8]"
+                />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Configuration Section */}
+        <Card className="border-slate-800" style={{ backgroundColor: '#1A2530' }}>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold">Configuration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-3">
+                <Label className="text-sm font-medium text-[#93adc8]">Authentication Methods</Label>
+                <div className="flex flex-col gap-2.5">
+                  {AUTH_METHODS.map((method) => (
+                    <StyledCheckbox
+                      key={method}
+                      checked={authMethod === method}
+                      onChange={isEditing ? () => setEditAuthMethod(method) : undefined}
+                      label={method}
+                      readOnly={!isEditing}
+                    />
+                  ))}
                 </div>
               </div>
-
-              {isConfidential && (
-                <div>
-                  <Label className="text-gray-400 block mb-2">Client Secret</Label>
-                  <div className="flex gap-2 mb-2">
-                    <code className="flex-1 px-3 py-2 border border-white/10 rounded text-sm text-gray-500 font-mono" style={{ backgroundColor: '#0a0f14' }}>
-                      ••••••••••••••••
-                    </code>
-                  </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => setShowRotateModal(true)}
-                    className="w-full"
-                  >
-                    <Icon name="refresh" /> Rotate Secret
-                  </Button>
-                  <p className="text-xs text-gray-500 mt-2">
-                    This will invalidate all existing tokens
-                  </p>
+              
+              <div className="flex flex-col gap-3">
+                <Label className="text-sm font-medium text-[#93adc8]">Grant Types</Label>
+                <div className="flex flex-col gap-2.5">
+                  {GRANT_TYPES.map((grant) => (
+                    <StyledCheckbox
+                      key={grant}
+                      checked={grantTypes.includes(grant)}
+                      onChange={isEditing ? () => toggleGrantType(grant) : undefined}
+                      label={grant}
+                      readOnly={!isEditing}
+                    />
+                  ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Usage Statistics</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        {/* Redirect URIs Section */}
+        <Card className="border-slate-800" style={{ backgroundColor: '#1A2530' }}>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold">Redirect URIs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isEditing ? (
+              <UrlListBuilder
+                urls={editRedirectUrls}
+                onChange={setEditRedirectUrls}
+                placeholder="https://example.com/callback"
+                minUrls={1}
+                validateUrl
+              />
+            ) : (
+              <div className="flex flex-col gap-3">
+                {client.redirectURLs.length === 0 ? (
+                  <p className="text-sm text-gray-400">No redirect URIs configured</p>
+                ) : (
+                  client.redirectURLs.map((uri, index) => (
+                    <Input
+                      key={index}
+                      value={uri}
+                      readOnly
+                      className="w-full bg-[#111921] border-slate-700 text-white text-sm"
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Permissions & Scopes Section */}
+        <Card className="border-slate-800" style={{ backgroundColor: '#1A2530' }}>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold">Permissions &amp; Scopes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-700 text-[#93adc8]">
+                  <tr>
+                    <th className="p-3 font-medium">Scope</th>
+                    <th className="p-3 font-medium">Description</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white">
+                  <tr className="border-b border-slate-800">
+                    <td className="p-3 align-top font-mono">openid</td>
+                    <td className="p-3 align-top text-[#93adc8]">OpenID Connect authentication scope</td>
+                  </tr>
+                  <tr className="border-b border-slate-800">
+                    <td className="p-3 align-top font-mono">profile</td>
+                    <td className="p-3 align-top text-[#93adc8]">Read basic user profile information</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 align-top font-mono">email</td>
+                    <td className="p-3 align-top text-[#93adc8]">Access user email address</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Usage Statistics Section */}
+        <Card className="border-slate-800" style={{ backgroundColor: '#1A2530' }}>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold">Usage Statistics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label className="text-gray-400">Last Used</Label>
+                <Label className="text-[#93adc8]">Last Used</Label>
                 <p className="text-base text-white mt-1">{formatDate(client.lastUsed)}</p>
               </div>
               <div>
-                <Label className="text-gray-400">Active Tokens</Label>
+                <Label className="text-[#93adc8]">Active Tokens</Label>
                 <p className="text-base text-white mt-1">{client.activeTokenCount}</p>
               </div>
               <div>
-                <Label className="text-gray-400">Created</Label>
+                <Label className="text-[#93adc8]">Created</Label>
                 <p className="text-base text-white mt-1">{formatDateShort(client.createdAt)}</p>
               </div>
               <div>
-                <Label className="text-gray-400">Last Modified</Label>
+                <Label className="text-[#93adc8]">Last Modified</Label>
                 <p className="text-base text-white mt-1">{formatDateShort(client.updatedAt)}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Danger Zone Section */}
+        <Card className="border-red-500/30" style={{ backgroundColor: 'rgba(153, 27, 27, 0.1)' }}>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold text-red-400">Danger Zone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              {/* Rotate Secret */}
+              {isConfidential && (
+                <>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <h3 className="font-bold text-white">Rotate Secret</h3>
+                      <p className="text-sm text-[#93adc8]">
+                        Once rotated, the old secret will be immediately invalidated. Update your application with the new secret.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowRotateModal(true)}
+                      className="border border-slate-700 hover:border-slate-600 whitespace-nowrap"
+                    >
+                      Rotate Secret
+                    </Button>
+                  </div>
+                  <div className="border-t border-red-500/20"></div>
+                </>
+              )}
+              
+              {/* Delete Client */}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h3 className="font-bold text-white">Delete Client</h3>
+                  <p className="text-sm text-[#93adc8]">
+                    This action is permanent and cannot be undone. This will permanently delete the client and all associated data.
+                  </p>
+                </div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setShowDeleteModal(true)}
+                  className="bg-red-600/80 hover:bg-red-600 whitespace-nowrap"
+                >
+                  Delete Client
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Rotate Secret Modal */}
@@ -351,27 +436,12 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
               </div>
             </div>
             <div>
-              <Label className="text-gray-400 block mb-2">New Client Secret</Label>
-              <div className="flex gap-2">
-                <code className="flex-1 px-4 py-3 border border-white/10 rounded-lg text-sm text-white font-mono break-all" style={{ backgroundColor: '#0a0f14' }}>
-                  {newSecret}
-                </code>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => copyToClipboard(newSecret, "secret")}
-                >
-                  {copied === "secret" ? (
-                    <>
-                      <Icon name="check" /> Copied
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="content_copy" /> Copy
-                    </>
-                  )}
-                </Button>
-              </div>
+              <CopyableInput
+                id="newSecret"
+                label="New Client Secret"
+                value={newSecret}
+                labelClassName="text-gray-400"
+              />
             </div>
             <div className="flex gap-3 justify-end">
               <Button

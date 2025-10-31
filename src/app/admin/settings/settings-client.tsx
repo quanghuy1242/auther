@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardHeader, CardTitle, CardContent, Button, Checkbox, CopyableField, UrlListBuilder } from "@/components/ui";
+import { Card, CardHeader, CardTitle, CardContent, Button, Checkbox, CopyableInput, UrlListBuilder } from "@/components/ui";
 import { SecretStatusRow } from "@/components/admin";
 import { cardBackgroundStyle } from "@/lib/constants";
 import type { SettingsData } from "./types";
@@ -48,15 +48,23 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
             </p>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col">
-              <CopyableField label="Issuer" value={initialData.environment.issuer} />
-              <CopyableField label="Base URL" value={initialData.environment.baseUrl} />
-              <CopyableField 
-                label="Rotation Cadence" 
-                value={initialData.environment.rotationCadence} 
-                copyable={false}
-                className="border-b-0"
+            <div className="space-y-4">
+              <CopyableInput 
+                label="Issuer" 
+                value={initialData.environment.issuer}
+                labelClassName="text-sm font-medium text-[#93adc8]"
               />
+              <CopyableInput 
+                label="Base URL" 
+                value={initialData.environment.baseUrl}
+                labelClassName="text-sm font-medium text-[#93adc8]"
+              />
+              <div>
+                <label className="text-sm font-medium text-[#93adc8] block mb-1.5">Rotation Cadence</label>
+                <p className="text-white text-sm px-4 py-2.5 bg-[#111921] border border-slate-700 rounded-lg">
+                  {initialData.environment.rotationCadence}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -133,10 +141,10 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
             <div className="space-y-6">
               {/* Webhook URL */}
               <div>
-                <CopyableField 
+                <CopyableInput
                   label="Payload Webhook URL" 
-                  value={initialData.webhook.payloadWebhookUrl} 
-                  className="border-b-0"
+                  value={initialData.webhook.payloadWebhookUrl}
+                  labelClassName="text-sm font-medium text-[#93adc8]"
                 />
                 <p className="text-xs text-gray-400 mt-2">
                   Endpoint where user sync events are delivered. Configured via PAYLOAD_WEBHOOK_URL environment variable.

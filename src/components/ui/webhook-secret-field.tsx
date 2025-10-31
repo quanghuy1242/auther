@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "./button";
 import { Modal, ModalFooter } from "./modal";
+import { CopyableInput } from "./copyable-input";
 
 interface WebhookSecretFieldProps {
   secret: string;
@@ -43,35 +44,9 @@ export function WebhookSecretField({
       )}
 
       <div className="space-y-2">
-        <div 
-          className="flex items-stretch rounded-lg border border-white/10"
-          style={{ backgroundColor: '#1a2632' }}
-        >
-          <input
-            type="text"
-            readOnly
-            value={secret}
-            className="flex-1 px-4 py-3 bg-transparent font-mono text-sm focus:outline-none rounded-l-lg"
-            style={{ color: 'var(--color-text-primary)' }}
-          />
-          <button
-            type="button"
-            onClick={async () => {
-              await navigator.clipboard.writeText(secret);
-            }}
-            className="px-4 bg-transparent hover:bg-white/5 transition-colors flex items-center justify-center rounded-r-lg border-l border-white/10"
-            style={{ color: 'var(--color-text-secondary)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--color-text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--color-text-secondary)';
-            }}
-            aria-label="Copy secret"
-          >
-            <span className="material-symbols-outlined !text-xl">content_copy</span>
-          </button>
-        </div>
+        <CopyableInput
+          value={secret}
+        />
         <p className="text-xs text-[var(--color-text-tertiary)]">
           Use this secret to verify webhook signatures from our servers
         </p>
