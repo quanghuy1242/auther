@@ -43,6 +43,11 @@ export function EmailSignInForm() {
     searchParams.get("returnUrl") ??
     undefined;
 
+  const errorParam = searchParams.get("error");
+  const errorMessage = errorParam === "forbidden" 
+    ? "Access denied. You don't have permission to access the admin dashboard." 
+    : null;
+
   useEffect(() => {
     if (state.redirectUrl) {
       window.location.assign(state.redirectUrl);
@@ -73,6 +78,10 @@ export function EmailSignInForm() {
         autoComplete="current-password"
         required
       />
+      
+      {errorMessage ? (
+        <p className="text-sm text-red-400">{errorMessage}</p>
+      ) : null}
       
       {state.error ? (
         <p className="text-sm text-red-400">{state.error}</p>

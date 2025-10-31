@@ -1,6 +1,6 @@
 import * as React from "react";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/session";
+import { getSession, isAdmin } from "@/lib/session";
 import { AdminLayoutClient } from "./layout-client";
 import type { NavItem } from "@/lib/types";
 
@@ -34,6 +34,12 @@ export default async function AdminLayout({
   
   if (!session) {
     redirect("/sign-in");
+  }
+
+  // Require admin role to access admin dashboard
+  if (!isAdmin(session)) {
+    // Redirect to a forbidden page or sign-in with error
+    redirect("/sign-in?error=forbidden");
   }
 
   return (

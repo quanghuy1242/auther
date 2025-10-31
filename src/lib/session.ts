@@ -13,6 +13,7 @@ export interface SessionUser {
   updatedAt: Date;
   username: string | null;
   displayUsername: string | null;
+  role?: string;
 }
 
 export interface SessionInfo {
@@ -56,6 +57,26 @@ export async function requireAuth(): Promise<Session> {
   
   if (!session) {
     throw new Error("Unauthorized - please sign in");
+  }
+
+  return session;
+}
+
+/**
+ * Check if the current user has admin role
+ */
+export function isAdmin(session: Session | null): boolean {
+  return session?.user?.role === "admin";
+}
+
+/**
+ * Require admin role - throws error if not admin
+ */
+export async function requireAdmin(): Promise<Session> {
+  const session = await requireAuth();
+  
+  if (!isAdmin(session)) {
+    throw new Error("Forbidden - admin access required");
   }
 
   return session;

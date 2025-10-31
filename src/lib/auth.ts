@@ -5,6 +5,7 @@ import { jwt } from "better-auth/plugins/jwt";
 import { oidcProvider } from "better-auth/plugins/oidc-provider";
 import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
 import { username } from "better-auth/plugins";
+import { admin } from "better-auth/plugins"
 import { createAuthMiddleware } from "better-auth/api";
 
 import { env } from "@/env";
@@ -166,6 +167,7 @@ export const auth = betterAuth({
   //   user: createPayloadUserHooks(),
   // },
   plugins: [
+    admin(),
     username(),
     jwt({
       jwt: {

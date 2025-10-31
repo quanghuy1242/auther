@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export type EmailSignInState = {
   success: boolean;
@@ -33,6 +34,31 @@ export async function emailPasswordSignIn(
       },
     });
 
+    // Get the session to check user role
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    const isAdmin = session?.user?.role === "admin";
+    const hasRedirect = 
+      (typeof authorizeQuery === "string" && authorizeQuery.length > 0) ||
+      (result.redirect && result.url) ||
+      (typeof callbackUrl === "string" && callbackUrl.length > 0);
+
+    // Non-admin users MUST have a redirect URL (OIDC flow)
+    if (!isAdmin && !hasRedirect) {
+      // Sign out the user since they can't access the dashboard
+      await auth.api.signOut({
+        headers: await headers(),
+      });
+      
+      return {
+        success: false,
+        error: "Access denied. Regular users can only sign in through authorized applications.",
+      };
+    }
+
+    // Handle OIDC authorization flow
     if (typeof authorizeQuery === "string" && authorizeQuery.length > 0) {
       return {
         success: true,
@@ -40,6 +66,7 @@ export async function emailPasswordSignIn(
       };
     }
 
+    // Handle other redirect URLs
     if (result.redirect && result.url) {
       return {
         success: true,
@@ -47,10 +74,18 @@ export async function emailPasswordSignIn(
       };
     }
 
-    // Default redirect to admin if no other redirect is specified
+    // Admin users can access the dashboard
+    if (isAdmin) {
+      return {
+        success: true,
+        redirectUrl: "/admin",
+      };
+    }
+
+    // This shouldn't be reached, but fallback error
     return {
-      success: true,
-      redirectUrl: "/admin",
+      success: false,
+      error: "No valid redirect destination found.",
     };
   } catch (error) {
     return {
