@@ -244,3 +244,76 @@ export async function forceLogoutUser(
     };
   }
 }
+
+/**
+ * Admin force set user password
+ */
+export async function setUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuth();
+
+    if (!newPassword || newPassword.length < 8) {
+      return {
+        success: false,
+        error: "Password must be at least 8 characters long",
+      };
+    }
+
+    await auth.api.setUserPassword({
+      body: {
+        userId,
+        newPassword,
+      },
+      headers: await headers(),
+    });
+
+    revalidatePath(`/admin/users/${userId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to set user password:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to set password",
+    };
+  }
+}
+
+/**
+ * Send password reset email to user
+ */
+export async function sendPasswordResetEmail(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuth();
+
+    // Get user to retrieve email
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      return {
+        success: false,
+        error: "User not found",
+      };
+    }
+
+    await auth.api.requestPasswordReset({
+      body: {
+        email: user.email,
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password`,
+      },
+      headers: await headers(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to send password reset email:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send reset email",
+    };
+  }
+}
