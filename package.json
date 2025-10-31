@@ -9,12 +9,12 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "type:generate": "npx @better-auth/cli generate --output ./src/db/schema.ts",
+    "type:generate": "npx @better-auth/cli generate --output ./src/db/auth-schema.ts",
     "ci": "pnpm run lint && pnpm run build",
     "user:create": "tsx scripts/create-user.ts",
     "auth:test": "tsx scripts/test-auth-flow.ts",
     "clients:seed": "tsx scripts/seed-clients.ts",
-    "build:local": "dotenv -e .env.local -- pnpm build"
+    "start:local": "dotenv -e .env.local -- pnpm build && pnpm start"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",

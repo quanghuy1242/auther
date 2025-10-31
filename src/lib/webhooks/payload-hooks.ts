@@ -1,3 +1,7 @@
+// TODO: DEPRECATE - This file is part of the old single env-based webhook system.
+// Use src/lib/webhooks/better-auth-hooks.ts instead for the new multi-webhook system.
+// This file can be removed once all users migrate to the UI-based webhook management.
+
 import { randomUUID } from "node:crypto";
 
 import type { BetterAuthOptions } from "better-auth";

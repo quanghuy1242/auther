@@ -18,6 +18,7 @@ import { SessionRepository } from "./session-repository";
 import { AccountRepository } from "./account-repository";
 import { OAuthClientRepository } from "./oauth-client-repository";
 import { JwksRepository } from "./jwks-repository";
+import { WebhookRepository } from "./webhook-repository";
 
 // Export repository instances as singletons
 export const userRepository = new UserRepository();
@@ -25,6 +26,7 @@ export const sessionRepository = new SessionRepository();
 export const accountRepository = new AccountRepository();
 export const oauthClientRepository = new OAuthClientRepository();
 export const jwksRepository = new JwksRepository();
+export const webhookRepository = new WebhookRepository();
 
 // Export types
 export type { UserEntity, UserWithAccounts, UserStats } from "./user-repository";
@@ -32,4 +34,5 @@ export type { SessionEntity, SessionWithToken, SessionStats } from "./session-re
 export type { AccountEntity } from "./account-repository";
 export type { OAuthClientEntity, ClientStats } from "./oauth-client-repository";
 export type { JwksKeyEntity, JwksKeyWithStatus } from "./jwks-repository";
+export type { GetWebhooksFilter, GetDeliveriesFilter } from "./webhook-repository";
 export type { PaginatedResult } from "./base-repository";

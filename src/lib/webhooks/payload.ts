@@ -1,3 +1,11 @@
+// TODO: DEPRECATE - This file implements the old single env-based webhook system.
+// It should be removed once all users migrate to the new multi-webhook UI system
+// implemented in src/lib/webhooks/delivery-service.ts and src/app/admin/webhooks/
+// Related files to deprecate:
+// - src/lib/webhooks/payload-hooks.ts
+// - src/app/api/internal/queues/payload/route.ts
+// - PAYLOAD_WEBHOOK_URL and related env vars
+
 import { Client } from "@upstash/qstash";
 
 import { env } from "@/env";

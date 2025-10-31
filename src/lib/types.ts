@@ -242,3 +242,107 @@ export function isBadgeVariant(value: string): value is BadgeVariant {
 export function isSize(value: string): value is Size {
   return ["xs", "sm", "md", "lg", "xl"].includes(value);
 }
+
+// ============================================================================
+// Webhook Types
+// ============================================================================
+
+export type WebhookRetryPolicy = "none" | "standard" | "aggressive";
+export type WebhookDeliveryFormat = "json" | "form-encoded";
+export type WebhookRequestMethod = "POST" | "PUT";
+export type WebhookDeliveryStatus = "pending" | "success" | "failed" | "retrying" | "dead";
+
+/**
+ * Webhook endpoint entity (matches database schema)
+ */
+export interface WebhookEndpointEntity {
+  id: string;
+  userId: string;
+  displayName: string;
+  url: string;
+  encryptedSecret: string;
+  isActive: boolean;
+  retryPolicy: WebhookRetryPolicy;
+  deliveryFormat: WebhookDeliveryFormat;
+  requestMethod: WebhookRequestMethod;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Webhook endpoint with subscriptions (for UI display)
+ */
+export interface WebhookEndpointWithSubscriptions extends WebhookEndpointEntity {
+  subscriptions: WebhookSubscriptionEntity[];
+  lastDelivery?: {
+    status: WebhookDeliveryStatus;
+    timestamp: Date;
+    responseCode?: number;
+  } | null;
+}
+
+/**
+ * Webhook subscription entity (maps endpoint to event types)
+ */
+export interface WebhookSubscriptionEntity {
+  id: string;
+  endpointId: string;
+  eventType: string;
+  createdAt: Date;
+}
+
+/**
+ * Webhook event entity (audit log of events that occurred)
+ */
+export interface WebhookEventEntity {
+  id: string;
+  userId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+}
+
+/**
+ * Webhook delivery entity (tracks delivery attempts)
+ */
+export interface WebhookDeliveryEntity {
+  id: string;
+  eventId: string;
+  endpointId: string;
+  status: WebhookDeliveryStatus;
+  attemptCount: number;
+  responseCode?: number | null;
+  responseBody?: string | null;
+  durationMs?: number | null;
+  lastAttemptAt?: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Delivery statistics for metrics display
+ */
+export interface WebhookDeliveryStats {
+  successRate: number;
+  trend: number; // percentage change vs previous period
+  dailyData: {
+    day: string;
+    successCount: number;
+    failedCount: number;
+    successRate: number;
+  }[];
+  totalDeliveries: number;
+  successfulDeliveries: number;
+  failedDeliveries: number;
+}
+
+/**
+ * Paginated result for webhook queries
+ */
+export interface WebhookPaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+

@@ -14,28 +14,20 @@ import {
 } from "@/components/forms";
 import { PageHeading } from "@/components/layout";
 import { z } from "zod";
-import { WEBHOOK_EVENT_TYPES } from "@/lib/mock-data/webhooks";
+import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
 import { Icon } from "@/components/ui";
+import { createWebhook } from "../actions";
 
 // Form schema
 const createWebhookSchema = z.object({
-  displayName: z.string().optional(),
+  displayName: z.string().min(1, "Display name is required"),
   url: z.string().url("Please enter a valid URL"),
   isActive: z.boolean().default(true),
   events: z.array(z.string()).min(1, "Please select at least one event"),
-  retryPolicy: z.enum(["exponential", "linear", "none"]).default("exponential"),
+  retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
   requestMethod: z.enum(["POST", "PUT"]).default("POST"),
-  customPayloadTemplate: z.string().optional(),
-  emailNotifications: z.boolean().default(false),
-  slackNotifications: z.boolean().default(false),
 });
-
-interface FormState {
-  success: boolean;
-  data?: unknown;
-  errors?: Record<string, string>;
-}
 
 // Form content component
 function WebhookFormContent() {
@@ -43,9 +35,9 @@ function WebhookFormContent() {
 
   // Dropdown options
   const retryPolicyOptions = [
-    { value: "exponential", label: "Exponential Backoff" },
-    { value: "linear", label: "Linear Retry" },
     { value: "none", label: "No Retries" },
+    { value: "standard", label: "Standard (3 retries)" },
+    { value: "aggressive", label: "Aggressive (5 retries)" },
   ];
 
   const deliveryFormatOptions = [
@@ -147,82 +139,6 @@ function WebhookFormContent() {
               />
             </div>
           </div>
-
-          {/* Custom Payload Template */}
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-              Custom Payload Template
-            </label>
-            <p className="text-sm text-[var(--color-text-secondary)] mb-3">
-              Define your own payload structure using placeholders like <code className="px-1.5 py-0.5 rounded bg-[var(--color-content)] text-xs">{`{{order.id}}`}</code> or <code className="px-1.5 py-0.5 rounded bg-[var(--color-content)] text-xs">{`{{user.email}}`}</code>
-            </p>
-            <FormField
-              name="customPayloadTemplate"
-              multiline
-              rows={6}
-              placeholder={`{
-  "event_type": "{{event.type}}",
-  "order_id": "{{order.id}}",
-  "customer_email": "{{order.customer.email}}"
-}`}
-              className="font-mono text-sm"
-            />
-          </div>
-
-          {/* Error Notifications */}
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-3">
-              Error Notifications
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div 
-                className="p-4 rounded-lg border border-white/10"
-                style={{ backgroundColor: '#1a2632' }}
-              >
-                <ControlledCheckbox
-                  name="emailNotifications"
-                  label="Email Notifications"
-                  description="Receive email alerts for failed deliveries"
-                />
-              </div>
-              <div 
-                className="p-4 rounded-lg border border-white/10"
-                style={{ backgroundColor: '#1a2632' }}
-              >
-                <ControlledCheckbox
-                  name="slackNotifications"
-                  label="Slack Notifications"
-                  description="Send alerts to your Slack workspace"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Send Sample Payload (Future Feature) */}
-          <div 
-            className="p-4 rounded-lg border border-white/10"
-            style={{ backgroundColor: '#1a2632' }}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                  Test Webhook
-                </p>
-                <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-                  Send a sample payload to verify your endpoint is working correctly
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => alert("Test webhook feature coming soon!")}
-                disabled
-              >
-                Send Test
-              </Button>
-            </div>
-          </div>
         </div>
       </details>
     </div>
@@ -236,31 +152,15 @@ export default function CreateWebhookPage() {
     null
   );
 
-  const handleSubmit = async (
-    // Required for server action signature
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _prevState: FormState,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _formData: FormData
-  ): Promise<FormState> => {
-    // Mock delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Mock success - generate a mock webhook
-    const mockWebhook = {
-      id: `wh_${Math.random().toString(36).substring(7)}`,
-      secret: `whsec_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-    };
-
-    return {
-      success: true,
-      data: mockWebhook,
-    };
+  const handleSubmit = async (prevState: unknown, formData: FormData) => {
+    return await createWebhook(prevState as Parameters<typeof createWebhook>[0], formData);
   };
 
   const handleSuccess = (data: unknown) => {
-    const result = data as { id: string; secret: string };
-    setCreatedWebhook(result);
+    const result = data as { id: string; secret?: string };
+    if (result.id && result.secret) {
+      setCreatedWebhook({ id: result.id, secret: result.secret });
+    }
   };
 
   const handleDone = () => {

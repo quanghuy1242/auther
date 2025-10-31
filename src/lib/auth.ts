@@ -23,7 +23,7 @@ import {
   validateInternalSignupAccess 
 } from "@/lib/utils/auth-middleware";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
-// import { createPayloadUserHooks } from "@/lib/webhooks/payload-hooks";
+import { createBetterAuthWebhookHooks } from "@/lib/webhooks/better-auth-hooks";
 
 const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
 
@@ -163,9 +163,7 @@ export const auth = betterAuth({
   hooks: {
     before: beforeHook,
   },
-  // databaseHooks: {
-  //   user: createPayloadUserHooks(),
-  // },
+  databaseHooks: createBetterAuthWebhookHooks(),
   plugins: [
     admin(),
     username(),

@@ -14,17 +14,17 @@ import {
   type DropdownItem,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
+import { formatRelativeTime } from "@/lib/utils/time";
 import Link from "next/link";
 import {
-  type WebhookEndpoint,
-  type DeliveryStats,
-  WEBHOOK_EVENT_TYPES,
-  formatRelativeTime,
-} from "@/lib/mock-data/webhooks";
+  type WebhookEndpointWithSubscriptions,
+  type WebhookDeliveryStats,
+} from "./actions";
+import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
 
 interface WebhooksClientProps {
-  initialWebhooks: WebhookEndpoint[];
-  deliveryStats: DeliveryStats;
+  initialWebhooks: WebhookEndpointWithSubscriptions[];
+  deliveryStats: WebhookDeliveryStats;
   pagination: {
     page: number;
     pageSize: number;
@@ -150,7 +150,7 @@ export function WebhooksClient({
       key: "displayName",
       header: "Name",
       className: "w-[180px]",
-      render: (webhook: WebhookEndpoint) => (
+      render: (webhook: WebhookEndpointWithSubscriptions) => (
         <Link
           href={`/admin/webhooks/${webhook.id}`}
           className="font-medium text-[var(--color-text-primary)] hover:text-[var(--color-primary)] transition-colors line-clamp-1"
@@ -165,7 +165,7 @@ export function WebhooksClient({
       key: "url",
       header: "URL",
       className: "max-w-[250px]",
-      render: (webhook: WebhookEndpoint) => (
+      render: (webhook: WebhookEndpointWithSubscriptions) => (
         <span className="text-sm text-[var(--color-text-secondary)] font-mono truncate block">
           {webhook.url}
         </span>
@@ -175,26 +175,29 @@ export function WebhooksClient({
       key: "events",
       header: "Events",
       className: "w-[180px]",
-      render: (webhook: WebhookEndpoint) => (
-        <div className="flex flex-wrap gap-1">
-          {webhook.events.slice(0, 2).map((event) => (
-            <Badge key={event} variant="default" className="text-xs">
-              {event}
-            </Badge>
-          ))}
-          {webhook.events.length > 2 && (
-            <Badge variant="default" className="text-xs">
-              +{webhook.events.length - 2} more
-            </Badge>
-          )}
-        </div>
-      ),
+      render: (webhook: WebhookEndpointWithSubscriptions) => {
+        const eventTypes = webhook.subscriptions.map(s => s.eventType);
+        return (
+          <div className="flex flex-wrap gap-1">
+            {eventTypes.slice(0, 2).map((event) => (
+              <Badge key={event} variant="default" className="text-xs">
+                {event}
+              </Badge>
+            ))}
+            {eventTypes.length > 2 && (
+              <Badge variant="default" className="text-xs">
+                +{eventTypes.length - 2} more
+              </Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "isActive",
       header: "Status",
       className: "w-[100px]",
-      render: (webhook: WebhookEndpoint) => (
+      render: (webhook: WebhookEndpointWithSubscriptions) => (
         <Badge variant={webhook.isActive ? "success" : "default"} dot>
           {webhook.isActive ? "Active" : "Inactive"}
         </Badge>
@@ -204,7 +207,7 @@ export function WebhooksClient({
       key: "lastDelivery",
       header: "Last Delivery",
       className: "w-[140px]",
-      render: (webhook: WebhookEndpoint) =>
+      render: (webhook: WebhookEndpointWithSubscriptions) =>
         webhook.lastDelivery ? (
           <div className="flex items-center gap-2">
             <Icon
@@ -226,7 +229,7 @@ export function WebhooksClient({
       key: "createdAt",
       header: "Created",
       className: "w-[110px]",
-      render: (webhook: WebhookEndpoint) => (
+      render: (webhook: WebhookEndpointWithSubscriptions) => (
         <span className="text-sm text-[var(--color-text-secondary)] whitespace-nowrap">
           {webhook.createdAt.toLocaleDateString()}
         </span>
@@ -236,7 +239,7 @@ export function WebhooksClient({
       key: "actions",
       header: "Actions",
       className: "w-[60px]",
-      render: (webhook: WebhookEndpoint) => <WebhookActionsDropdown webhookId={webhook.id} />,
+      render: (webhook: WebhookEndpointWithSubscriptions) => <WebhookActionsDropdown webhookId={webhook.id} />,
     },
   ];
 
@@ -315,11 +318,11 @@ export function WebhooksClient({
 
       {/* Webhooks Table */}
       <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-[#344d65]">
-        <ResponsiveTable<WebhookEndpoint>
+        <ResponsiveTable<WebhookEndpointWithSubscriptions>
           columns={columns}
           data={initialWebhooks}
           keyExtractor={(webhook) => webhook.id}
-          mobileCardRender={(webhook: WebhookEndpoint) => (
+          mobileCardRender={(webhook: WebhookEndpointWithSubscriptions) => (
             <Link href={`/admin/webhooks/${webhook.id}`}>
               <div className="rounded-lg p-4 space-y-3 border border-[#344d65] hover:border-[#1773cf] transition-colors sm:border-0" style={{ backgroundColor: '#1a2632' }}>
                 <div className="flex items-start justify-between gap-3">
@@ -344,14 +347,14 @@ export function WebhooksClient({
                   <div>
                     <p className="text-xs text-gray-400 uppercase mb-1">Events</p>
                     <div className="flex flex-wrap gap-1">
-                      {webhook.events.slice(0, 3).map((event: string) => (
-                        <Badge key={event} variant="default" className="text-xs">
-                          {event}
+                      {webhook.subscriptions.slice(0, 3).map((sub) => (
+                        <Badge key={sub.id} variant="default" className="text-xs">
+                          {sub.eventType}
                         </Badge>
                       ))}
-                      {webhook.events.length > 3 && (
+                      {webhook.subscriptions.length > 3 && (
                         <Badge variant="default" className="text-xs">
-                          +{webhook.events.length - 3} more
+                          +{webhook.subscriptions.length - 3} more
                         </Badge>
                       )}
                     </div>

@@ -20,6 +20,25 @@ export const WEBHOOK_ORIGIN_BETTER_AUTH = "better-auth" as const;
 export const WEBHOOK_ORIGIN_PAYLOAD = "payload" as const;
 
 // ============================================================================
+// WEBHOOK EVENT TYPES
+// ============================================================================
+
+export const WEBHOOK_EVENT_TYPES = [
+  { value: "user.created", label: "User Created", description: "Triggered when a new user registers" },
+  { value: "user.updated", label: "User Updated", description: "Triggered when user profile is updated" },
+  { value: "user.deleted", label: "User Deleted", description: "Triggered when a user account is deleted" },
+  { value: "user.verified", label: "User Verified", description: "Triggered when user verifies their email" },
+  { value: "session.created", label: "Session Created", description: "Triggered when user signs in" },
+  { value: "session.deleted", label: "Session Deleted", description: "Triggered when user signs out" },
+  { value: "account.linked", label: "Account Linked", description: "Triggered when OAuth account is linked" },
+  { value: "account.unlinked", label: "Account Unlinked", description: "Triggered when OAuth account is unlinked" },
+  { value: "verification.sent", label: "Verification Sent", description: "Triggered when verification email is sent" },
+  { value: "verification.completed", label: "Verification Completed", description: "Triggered when email is verified" },
+] as const;
+
+export type WebhookEventType = typeof WEBHOOK_EVENT_TYPES[number]["value"];
+
+// ============================================================================
 // HTTP HEADERS
 // ============================================================================
 

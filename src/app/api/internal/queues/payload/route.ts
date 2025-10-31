@@ -1,3 +1,7 @@
+// TODO: DEPRECATE - This route handles the old single env-based webhook system.
+// The new multi-webhook system uses src/app/api/internal/queues/webhook-delivery/route.ts
+// This file can be removed once all users migrate to the UI-based webhook management.
+
 import { Receiver } from "@upstash/qstash";
 import { Redis } from "@upstash/redis";
 

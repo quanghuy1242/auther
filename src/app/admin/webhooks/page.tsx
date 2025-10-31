@@ -2,11 +2,7 @@ import { PageHeading } from "@/components/layout";
 import { Button } from "@/components/ui";
 import Link from "next/link";
 import { WebhooksClient } from "./webhooks-client";
-import {
-  MOCK_WEBHOOKS,
-  MOCK_DELIVERY_STATS,
-  filterWebhooks,
-} from "@/lib/mock-data/webhooks";
+import { getWebhooks, getDeliveryStats } from "./actions";
 
 interface PageProps {
   searchParams: Promise<{
@@ -20,32 +16,30 @@ interface PageProps {
 export default async function WebhooksPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const page = parseInt(params.page || "1", 10);
+  const pageSize = 10;
   const search = params.search || "";
   const status = params.status || "all";
   const eventType = params.eventType || "all";
 
-  // Filter webhooks based on search params
-  const filteredWebhooks = filterWebhooks(MOCK_WEBHOOKS, {
+  // Fetch webhooks from server
+  const webhooksResult = await getWebhooks({
+    page,
+    pageSize,
     search,
     status: status as "all" | "active" | "inactive",
     eventType: eventType === "all" ? undefined : eventType,
   });
 
-  // Pagination
-  const pageSize = 10;
-  const totalItems = filteredWebhooks.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
-  const startIndex = (page - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedWebhooks = filteredWebhooks.slice(startIndex, endIndex);
+  // Fetch delivery stats
+  const deliveryStats = await getDeliveryStats();
 
   const paginationInfo = {
-    page,
-    pageSize,
-    totalItems,
-    totalPages,
-    hasNextPage: page < totalPages,
-    hasPreviousPage: page > 1,
+    page: webhooksResult.page,
+    pageSize: webhooksResult.pageSize,
+    totalItems: webhooksResult.total,
+    totalPages: webhooksResult.totalPages,
+    hasNextPage: webhooksResult.page < webhooksResult.totalPages,
+    hasPreviousPage: webhooksResult.page > 1,
   };
 
   return (
@@ -63,8 +57,8 @@ export default async function WebhooksPage({ searchParams }: PageProps) {
       />
 
       <WebhooksClient
-        initialWebhooks={paginatedWebhooks}
-        deliveryStats={MOCK_DELIVERY_STATS}
+        initialWebhooks={webhooksResult.webhooks}
+        deliveryStats={deliveryStats}
         pagination={paginationInfo}
         initialFilters={{
           search,
