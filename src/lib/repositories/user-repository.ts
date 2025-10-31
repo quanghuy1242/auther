@@ -16,6 +16,7 @@ export interface UserEntity {
   image: string | null;
   username: string | null;
   displayUsername: string | null;
+  role?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

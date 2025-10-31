@@ -38,7 +38,8 @@ export default async function AdminLayout({
   }
 
   // Require admin role to access admin dashboard
-  if (!isAdmin(session)) {
+  const hasAdminAccess = await isAdmin(session);
+  if (!hasAdminAccess) {
     // Redirect to a forbidden page or sign-in with error
     redirect("/sign-in?error=forbidden");
   }

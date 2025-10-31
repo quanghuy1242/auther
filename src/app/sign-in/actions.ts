@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { UserRepository } from "@/lib/repositories/user-repository";
 
 export type EmailSignInState = {
   success: boolean;
@@ -34,9 +35,12 @@ export async function emailPasswordSignIn(
       },
     });
 
-    // Check if user is admin from the sign-in result
-    // Use type assertion since better-auth doesn't include role in default type
-    const isAdmin = (result.user as { role?: string })?.role === "admin";
+    // Check if user has admin role by querying the database
+    // I have no idea why better-auth doesn't include role in the user object
+    const userRepo = new UserRepository();
+    const user = await userRepo.findById(result.user.id);
+    const isAdmin = user?.role === "admin";
+    
     const hasRedirect = 
       (typeof authorizeQuery === "string" && authorizeQuery.length > 0) ||
       (result.redirect && result.url) ||
@@ -44,10 +48,13 @@ export async function emailPasswordSignIn(
 
     // Non-admin users MUST have a redirect URL (OIDC flow)
     if (!isAdmin && !hasRedirect) {
-      // Sign out the user since they can't access the dashboard
-      await auth.api.signOut({
-        headers: await headers(),
-      });
+      try {
+        await auth.api.signOut({
+          headers: await headers(),
+        });
+      } catch (error) {
+        console.error("Failed to sign out user:", error);
+      }
       
       return {
         success: false,
