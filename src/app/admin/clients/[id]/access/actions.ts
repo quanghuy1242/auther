@@ -1,9 +1,8 @@
 "use server";
 
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { z } from "zod";
-import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/session";
 import {
   userClientAccessRepository,
@@ -66,8 +65,9 @@ export async function assignUserToClient(
       expiresAt,
     });
 
-    revalidatePath(`/admin/clients/${validated.clientId}`);
-    revalidatePath(`/admin/clients/${validated.clientId}/access`);
+    revalidateTag(`client-users-${validated.clientId}`, "max");
+    revalidateTag(`client-metadata-${validated.clientId}`, "max");
+    revalidateTag(`client-${validated.clientId}`, "max");
 
     return { success: true };
   } catch (error) {
@@ -110,8 +110,9 @@ export async function removeUserFromClient(
       };
     }
 
-    revalidatePath(`/admin/clients/${clientId}`);
-    revalidatePath(`/admin/clients/${clientId}/access`);
+    revalidateTag(`client-users-${clientId}`, "max");
+    revalidateTag(`client-metadata-${clientId}`, "max");
+    revalidateTag(`client-${clientId}`, "max");
 
     return { success: true };
   } catch (error) {
@@ -174,8 +175,9 @@ export async function updateUserAccess(
       };
     }
 
-    revalidatePath(`/admin/clients/${clientId}`);
-    revalidatePath(`/admin/clients/${clientId}/access`);
+    revalidateTag(`client-users-${clientId}`, "max");
+    revalidateTag(`client-metadata-${clientId}`, "max");
+    revalidateTag(`client-${clientId}`, "max");
 
     return { success: true };
   } catch (error) {
@@ -295,8 +297,9 @@ export async function updateClientAccessPolicy(
       }
     }
 
-    revalidatePath(`/admin/clients/${validated.clientId}`);
-    revalidatePath(`/admin/clients/${validated.clientId}/access`);
+    revalidateTag(`client-users-${validated.clientId}`, "max");
+    revalidateTag(`client-metadata-${validated.clientId}`, "max");
+    revalidateTag(`client-${validated.clientId}`, "max");
 
     return { success: true };
   } catch (error) {
@@ -392,7 +395,7 @@ export async function createUserGroup(
       description: validated.description,
     });
 
-    revalidatePath("/admin/groups");
+    revalidateTag("groups", "max");
 
     return { success: true, groupId: group.id };
   } catch (error) {
@@ -425,8 +428,7 @@ export async function addUserToGroup(
 
     await userGroupRepository.addMember(groupId, userId);
 
-    revalidatePath("/admin/groups");
-    revalidatePath(`/admin/groups/${groupId}`);
+    revalidateTag("groups", "max");
 
     return { success: true };
   } catch (error) {
@@ -450,8 +452,7 @@ export async function removeUserFromGroup(
 
     await userGroupRepository.removeMember(groupId, userId);
 
-    revalidatePath("/admin/groups");
-    revalidatePath(`/admin/groups/${groupId}`);
+    revalidateTag("groups", "max");
 
     return { success: true };
   } catch (error) {

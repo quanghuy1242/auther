@@ -17,6 +17,7 @@ import {
   Select,
   PermissionTagInput,
   ContentSkeleton,
+  ResponsiveTable,
 } from "@/components/ui";
 import { formatDate } from "@/lib/utils/date-formatter";
 import type { ClientDetail } from "../actions";
@@ -447,7 +448,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
             </div>
             <Button size="sm" onClick={() => setShowCreateModal(true)}>
               <Icon name="add" className="mr-2" />
-              Create API Key
+              Create
             </Button>
           </div>
         </CardHeader>
@@ -457,67 +458,150 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
               No API keys created yet. Create one to enable machine-to-machine access.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b border-slate-700">
-                  <tr className="text-left text-[#93adc8]">
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Permissions</th>
-                    <th className="pb-3 font-medium">Expires</th>
-                    <th className="pb-3 font-medium">Created</th>
-                    <th className="pb-3 font-medium text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700/50">
-                  {apiKeys.map((key) => (
-                    <tr key={key.id} className="text-white">
-                      <td className="py-3">
+            <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-border-dark">
+              <ResponsiveTable
+                columns={[
+                  {
+                    key: "name",
+                    header: "Name",
+                    render: (key) => (
+                      <div>
                         <div className="font-medium">{key.name}</div>
                         <div className="text-sm text-[#93adc8] font-mono">
                           {key.id.substring(0, 20)}...
                         </div>
-                      </td>
-                      <td className="py-3">
-                        <Badge variant={key.enabled ? "success" : "default"}>
-                          {key.enabled ? "Active" : "Disabled"}
-                        </Badge>
-                      </td>
-                      <td className="py-3">
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (key) => (
+                      <Badge variant={key.enabled ? "success" : "default"}>
+                        {key.enabled ? "Active" : "Disabled"}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    key: "permissions",
+                    header: "Permissions",
+                    render: (key) => (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openPermissionsModal(key)}
+                      >
+                        {Object.keys(key.permissions).length} resources
+                      </Button>
+                    ),
+                  },
+                  {
+                    key: "expires",
+                    header: "Expires",
+                    render: (key) => (
+                      <span className="text-sm text-[#93adc8]">
+                        {key.expiresAt ? formatDate(key.expiresAt) : "Never"}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "created",
+                    header: "Created",
+                    render: (key) => (
+                      <span className="text-sm text-[#93adc8]">{formatDate(key.createdAt)}</span>
+                    ),
+                  },
+                  {
+                    key: "actions",
+                    header: "",
+                    className: "text-right",
+                    render: (key) => (
+                      <div className="flex items-center justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => openPermissionsModal(key)}
                         >
+                          <Icon name="edit" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRevokeKey(key.id, key.name)}
+                        >
+                          <Icon name="delete" />
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]}
+                data={apiKeys}
+                keyExtractor={(key) => key.id}
+                mobileCardRender={(key) => (
+                  <div className="rounded-lg p-4 space-y-3 border border-border-dark" style={{ backgroundColor: '#1a2632' }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{key.name}</p>
+                        <p className="text-xs text-gray-400 font-mono truncate mt-1">
+                          {key.id.substring(0, 20)}...
+                        </p>
+                      </div>
+                      <Badge variant={key.enabled ? "success" : "default"} className="shrink-0">
+                        {key.enabled ? "Active" : "Disabled"}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="inline-flex">
+                        <p className="text-xs text-gray-400 uppercase content-center">Permissions</p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openPermissionsModal(key)}
+                          className="w-full justify-start"
+                        >
                           {Object.keys(key.permissions).length} resources
                         </Button>
-                      </td>
-                      <td className="py-3 text-[#93adc8]">
-                        {key.expiresAt ? formatDate(key.expiresAt) : "Never"}
-                      </td>
-                      <td className="py-3 text-[#93adc8]">{formatDate(key.createdAt)}</td>
-                      <td className="py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openPermissionsModal(key)}
-                          >
-                            <Icon name="edit" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRevokeKey(key.id, key.name)}
-                          >
-                            <Icon name="delete" />
-                          </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-gray-400 uppercase mb-1">Expires</p>
+                          <p className="text-sm text-[#93adc8]">
+                            {key.expiresAt ? formatDate(key.expiresAt) : "Never"}
+                          </p>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <div>
+                          <p className="text-xs text-gray-400 uppercase mb-1">Created</p>
+                          <p className="text-sm text-[#93adc8]">{formatDate(key.createdAt)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-border-dark">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => openPermissionsModal(key)}
+                          className="flex-1"
+                        >
+                          <Icon name="edit" className="mr-2" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleRevokeKey(key.id, key.name)}
+                          className="flex-1"
+                        >
+                          <Icon name="delete" className="mr-2" />
+                          Revoke
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                emptyMessage="No API keys created yet."
+              />
             </div>
           )}
         </CardContent>
@@ -541,6 +625,135 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* JWT Exchange Instructions */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle>Exchange API Key for JWT Token</CardTitle>
+          </div>
+          <p className="text-sm text-[#93adc8] mt-2">
+            Use your API key to obtain a short-lived JWT token (15 minutes) for authenticated requests.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* cURL Example */}
+            <div>
+              <Label className="mb-2 block">Using cURL</Label>
+              <div className="relative">
+                <pre className="bg-slate-900 text-[#93adc8] p-4 rounded-lg overflow-x-auto text-sm font-mono">
+{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://auth.example.com'}/api/auth/api-key/exchange \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "apiKey": "YOUR_API_KEY_HERE"
+  }'`}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute top-2 right-2"
+                  onClick={() => {
+                    const command = `curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://auth.example.com'}/api/auth/api-key/exchange -H "Content-Type: application/json" -d '{"apiKey": "YOUR_API_KEY_HERE"}'`;
+                    navigator.clipboard.writeText(command);
+                    setSuccess("Command copied to clipboard!");
+                    setTimeout(() => setSuccess(null), 2000);
+                  }}
+                >
+                  <Icon name="content_copy" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Response Example */}
+            <div>
+              <Label className="mb-2 block">Expected Response</Label>
+              <pre className="bg-slate-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono">
+{`{
+  "token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "expiresAt": "2025-11-02T12:15:00.000Z"
+}`}
+              </pre>
+            </div>
+
+            {/* Using the JWT */}
+            <div>
+              <Label className="mb-2 block">Using the JWT Token</Label>
+              <div className="relative">
+                <pre className="bg-slate-900 text-[#93adc8] p-4 rounded-lg overflow-x-auto text-sm font-mono">
+{`curl ${typeof window !== 'undefined' ? window.location.origin : 'https://api.example.com'}/api/protected-resource \\
+  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE"`}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute top-2 right-2"
+                  onClick={() => {
+                    const command = `curl ${typeof window !== 'undefined' ? window.location.origin : 'https://api.example.com'}/api/protected-resource -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE"`;
+                    navigator.clipboard.writeText(command);
+                    setSuccess("Command copied to clipboard!");
+                    setTimeout(() => setSuccess(null), 2000);
+                  }}
+                >
+                  <Icon name="content_copy" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Important Notes */}
+            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Icon name="info" className="text-blue-400 text-xl shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-200 space-y-2">
+                  <p><strong>Important:</strong></p>
+                  <ul className="list-disc ml-5 space-y-1">
+                    <li>JWT tokens expire after <strong>15 minutes</strong></li>
+                    <li>Re-exchange your API key to get a new token when it expires</li>
+                    <li>Always use <strong>HTTPS</strong> in production</li>
+                    <li>Store API keys securely (never commit to source control)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Optional: Permission Scoping */}
+            {metadata?.allowedResources && Object.keys(metadata.allowedResources).length > 0 && (
+              <div>
+                <Label className="mb-2 block">Optional: Request with Permission Scoping</Label>
+                <pre className="bg-slate-900 text-[#93adc8] p-4 rounded-lg overflow-x-auto text-sm font-mono">
+{`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://auth.example.com'}/api/auth/api-key/exchange \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "apiKey": "YOUR_API_KEY_HERE",
+    "permissions": ${JSON.stringify(metadata.allowedResources, null, 2).replace(/\n/g, '\n    ')}
+  }'`}
+                </pre>
+                <p className="text-xs text-[#93adc8] mt-2">
+                  The request will be rejected if the API key doesn&apos;t have the specified permissions.
+                </p>
+              </div>
+            )}
+
+            {/* Documentation Link */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-700">
+              <p className="text-sm text-[#93adc8]">
+                Need more details? Check the complete documentation.
+              </p>
+              <a
+                href="https://github.com/quanghuy1242/auther/blob/main/docs/api-key-jwt-exchange.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:text-primary/80 text-sm font-medium inline-flex items-center gap-1"
+              >
+                View Docs
+                <Icon name="open_in_new" className="text-sm" />
+              </a>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Create API Key Modal */}
       <Modal
@@ -670,7 +883,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
           {newApiKey && (
             <div>
               <Label>API Key for &quot;{newApiKey.name}&quot;</Label>
-              <CopyableInput value={newApiKey.key} readOnly />
+              <CopyableInput value={newApiKey.key} />
             </div>
           )}
 

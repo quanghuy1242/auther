@@ -1,9 +1,9 @@
 "use server";
 
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { z } from "zod";
-import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { requireAuth } from "@/lib/session";
 import { auth } from "@/lib/auth";
 import {
@@ -91,21 +91,20 @@ export async function createClientApiKey(
     // 4. Create API key using Better Auth
     const expiresIn = validated.expiresInDays
       ? validated.expiresInDays * 24 * 60 * 60 // Convert days to seconds
-      : 60 * 60 * 24 * 365; // Default: 1 year
+      : null;
 
-    // Use the server-side auth instance directly (no headers needed)
+    // Create API key without metadata first (to avoid API restrictions)
     const result = await auth.api.createApiKey({
       body: {
         name: validated.name,
         permissions: validated.permissions,
         expiresIn,
+        userId: session.user.id,
         metadata: {
           oauth_client_id: validated.clientId,
           access_level: access.level,
         },
       },
-      // Must explicitly set asResponse: false to get the data directly
-      asResponse: false,
     });
 
     if (!result) {
@@ -115,8 +114,8 @@ export async function createClientApiKey(
       };
     }
 
-    revalidatePath(`/admin/clients/${validated.clientId}`);
-    revalidatePath(`/admin/clients/${validated.clientId}/api-keys`);
+    revalidateTag(`client-api-keys-${validated.clientId}`, "max");
+    revalidateTag(`client-${validated.clientId}`, "max");
 
     return {
       success: true,
@@ -143,6 +142,7 @@ export async function createClientApiKey(
 export const listClientApiKeys = cache(async (clientId: string) => {
   try {
     const session = await requireAuth();
+    const _headers = await headers();
 
     return await unstable_cache(
       async () => {
@@ -158,7 +158,7 @@ export const listClientApiKeys = cache(async (clientId: string) => {
 
         // Get all user's API keys using Better Auth (server-side)
         const allKeys = await auth.api.listApiKeys({
-          asResponse: false,
+          headers: _headers
         });
 
         if (!allKeys || !Array.isArray(allKeys)) {
@@ -200,7 +200,7 @@ export async function revokeApiKey(keyId: string): Promise<ApiKeyResult> {
     // Get all keys to find the one we want to delete
     // Better Auth doesn't expose getApiKey, so we list and filter
     const allKeys = await auth.api.listApiKeys({
-      asResponse: false,
+      headers: await headers(),
     });
 
     const key = allKeys?.find((k) => k.id === keyId);
@@ -218,14 +218,14 @@ export async function revokeApiKey(keyId: string): Promise<ApiKeyResult> {
     // Delete the key
     await auth.api.deleteApiKey({
       body: { keyId },
-      asResponse: false,
+      headers: await headers(),
     });
 
     // Revalidate client pages if we know the client
     const clientId = key.metadata?.oauth_client_id as string | undefined;
     if (clientId) {
-      revalidatePath(`/admin/clients/${clientId}`);
-      revalidatePath(`/admin/clients/${clientId}/api-keys`);
+      revalidateTag(`client-api-keys-${clientId}`, "max");
+      revalidateTag(`client-${clientId}`, "max");
     }
 
     return { success: true };
@@ -250,7 +250,7 @@ export async function updateApiKeyPermissions(
 
     // Get all keys to find the one we want to update
     const allKeys = await auth.api.listApiKeys({
-      asResponse: false,
+      headers: await headers(),
     });
 
     const key = allKeys?.find((k) => k.id === keyId);
@@ -286,12 +286,12 @@ export async function updateApiKeyPermissions(
         keyId,
         permissions,
       },
-      asResponse: false,
+      headers: await headers(),
     });
 
     if (clientId) {
-      revalidatePath(`/admin/clients/${clientId}`);
-      revalidatePath(`/admin/clients/${clientId}/api-keys`);
+      revalidateTag(`client-api-keys-${clientId}`, "max");
+      revalidateTag(`client-${clientId}`, "max");
     }
 
     return { success: true };
@@ -318,7 +318,7 @@ export async function verifyApiKey(
         key,
         permissions: requiredPermissions,
       },
-      asResponse: false,
+      headers: await headers(),
     });
 
     // Handle the response structure

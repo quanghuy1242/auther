@@ -24,7 +24,7 @@ export default async function ClientDetailLayout({ children, params }: LayoutPro
 
   return (
     <ClientProvider client={client}>
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Client Header */}
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div className="flex items-center gap-3">
