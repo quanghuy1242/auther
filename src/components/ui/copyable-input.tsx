@@ -9,6 +9,7 @@ export interface CopyableInputProps {
   label?: string;
   value: string;
   type?: "text" | "password";
+  readOnly?: boolean; // When true, disables the copy button
   className?: string;
   labelClassName?: string;
 }
@@ -30,6 +31,7 @@ export function CopyableInput({
   label,
   value,
   type = "text",
+  readOnly = false,
   className = "w-full bg-[#111921] border-slate-700 text-white text-sm pr-10",
   labelClassName = "text-sm font-medium text-gray-400",
 }: CopyableInputProps) {
@@ -50,18 +52,20 @@ export function CopyableInput({
           readOnly
           className={className}
         />
-        <button
-          type="button"
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-          onClick={() => handleCopy(value, value)}
-          title="Copy to clipboard"
-        >
-          {copied === value ? (
-            <Icon name="check" className="text-lg mt-1" />
-          ) : (
-            <Icon name="content_copy" className="text-lg mt-1" />
-          )}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+            onClick={() => handleCopy(value, value)}
+            title="Copy to clipboard"
+          >
+            {copied === value ? (
+              <Icon name="check" className="text-lg mt-1" />
+            ) : (
+              <Icon name="content_copy" className="text-lg mt-1" />
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

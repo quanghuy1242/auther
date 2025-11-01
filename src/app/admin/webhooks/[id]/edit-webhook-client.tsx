@@ -102,6 +102,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
               <WebhookSecretField
                 secret={regeneratedSecret || `whsec_••••••••••••••••${webhook.id.toString().slice(-6)}`}
                 isNewSecret={!!regeneratedSecret}
+                readOnly={!regeneratedSecret}
                 onRegenerate={handleRegenerateSecret}
               />
             </CardContent>

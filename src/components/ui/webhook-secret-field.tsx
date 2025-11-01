@@ -9,6 +9,7 @@ interface WebhookSecretFieldProps {
   secret: string;
   isNewSecret?: boolean; // Show warning for newly created secrets
   onRegenerate?: () => void;
+  readOnly?: boolean; // Disable copying for masked/hidden secrets
   className?: string;
 }
 
@@ -16,6 +17,7 @@ export function WebhookSecretField({
   secret,
   isNewSecret = false,
   onRegenerate,
+  readOnly = false,
   className = "",
 }: WebhookSecretFieldProps) {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
@@ -46,9 +48,13 @@ export function WebhookSecretField({
       <div className="space-y-2">
         <CopyableInput
           value={secret}
+          readOnly={readOnly}
         />
         <p className="text-xs text-[var(--color-text-tertiary)]">
-          Use this secret to verify webhook signatures from our servers
+          {readOnly 
+            ? "Secret is hidden for security. Regenerate to get a new secret."
+            : "Use this secret to verify webhook signatures from our servers"
+          }
         </p>
       </div>
 
