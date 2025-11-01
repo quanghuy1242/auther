@@ -33,7 +33,7 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
         description="Manage trusted and dynamically registered OAuth clients."
         action={
           <Link href="/admin/clients/register">
-            <Button variant="primary" leftIcon="add">
+            <Button variant="primary" size="sm" leftIcon="add">
               Register New Client
             </Button>
           </Link>

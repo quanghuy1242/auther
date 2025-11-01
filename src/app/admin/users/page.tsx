@@ -33,7 +33,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
         description="Manage, search, and filter all users in the system."
         action={
           <Link href="/admin/users/create">
-            <Button variant="primary" leftIcon="person_add">
+            <Button variant="primary" size="sm" leftIcon="person_add">
               Add User
             </Button>
           </Link>

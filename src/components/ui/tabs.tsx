@@ -8,6 +8,7 @@ export interface TabItem {
   label: string;
   content: React.ReactNode;
   disabled?: boolean;
+  icon?: string; // Material Symbols icon name
 }
 
 export interface TabsProps {
@@ -20,51 +21,62 @@ export interface TabsProps {
 /**
  * Tabs component using Headless UI Tab
  * Provides accessible tab navigation with keyboard support
+ * Styled to match the admin clients tab design
  * 
  * @example
  * <Tabs
  *   tabs={[
- *     { label: 'Profile', content: <ProfileTab /> },
- *     { label: 'Sessions', content: <SessionsTab /> },
- *     { label: 'Activity', content: <ActivityTab /> },
+ *     { label: 'Profile', content: <ProfileTab />, icon: 'person' },
+ *     { label: 'Sessions', content: <SessionsTab />, icon: 'schedule' },
+ *     { label: 'Activity', content: <ActivityTab />, icon: 'monitoring' },
  *   ]}
  * />
  */
 export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps) {
   return (
     <TabGroup defaultIndex={defaultIndex} onChange={onChange}>
-      <TabList
-        className={cn(
-          "flex border-b border-gray-700",
-          className
-        )}
-      >
-        {tabs.map((tab, index) => (
-          <HeadlessTab
-            key={index}
-            disabled={tab.disabled}
-            className={({ selected }) =>
-              cn(
-                "px-4 py-3 text-sm font-medium transition-colors",
-                "focus:outline-none focus:ring-2 focus:ring-[#1773cf] focus:ring-offset-2 focus:ring-offset-gray-900",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                selected
-                  ? "text-white border-b-2 border-[#1773cf] -mb-[1px]"
-                  : "text-gray-400 hover:text-gray-200 hover:border-b-2 hover:border-gray-600 -mb-[1px]"
-              )
-            }
-          >
-            {tab.label}
-          </HeadlessTab>
-        ))}
-      </TabList>
-      <TabPanels className="mt-4">
+      <div className={cn("border-b border-slate-800 mb-6 overflow-auto", className)}>
+        <TabList className="flex gap-1">
+          {tabs.map((tab, index) => (
+            <HeadlessTab
+              key={index}
+              disabled={tab.disabled}
+              className={({ selected }) =>
+                cn(
+                  "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative rounded-t-lg",
+                  "hover:text-white hover:bg-slate-800/50",
+                  "focus:outline-none",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                  selected
+                    ? "text-white bg-slate-800/70"
+                    : "text-[#93adc8]"
+                )
+              }
+            >
+              {({ selected }) => (
+                <>
+                  {tab.icon && (
+                    <span className="material-symbols-outlined text-lg">
+                      {tab.icon}
+                    </span>
+                  )}
+                  {tab.label}
+                  {selected && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />
+                  )}
+                </>
+              )}
+            </HeadlessTab>
+          ))}
+        </TabList>
+      </div>
+      <TabPanels>
         {tabs.map((tab, index) => (
           <TabPanel
             key={index}
             className={cn(
               "focus:outline-none",
-              "focus-visible:ring-2 focus-visible:ring-[#1773cf] focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
             )}
           >
             {tab.content}

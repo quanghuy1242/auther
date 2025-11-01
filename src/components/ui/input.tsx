@@ -16,15 +16,15 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 
 const variantStyles: Record<InputVariant, string> = {
   default: cn(
-    "border-gray-700 bg-gray-900",
+    "border-gray-700 bg-input",
     "focus:border-white focus:ring-2 focus:ring-white/40"
   ),
   error: cn(
-    "border-red-500 bg-gray-900",
+    "border-red-500 bg-input",
     "focus:border-red-400 focus:ring-2 focus:ring-red-400/40"
   ),
   success: cn(
-    "border-green-500 bg-gray-900",
+    "border-green-500 bg-input",
     "focus:border-green-400 focus:ring-2 focus:ring-green-400/40"
   ),
 };
@@ -63,7 +63,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const actualVariant = error ? "error" : variant;
 
     return (
-      <div className={cn("space-y-1", containerClassName)}>
+      <div className={cn("space-y-1 flex-1", containerClassName)}>
         {label && (
           <Label htmlFor={inputId} required={required}>
             {label}

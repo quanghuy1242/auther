@@ -55,7 +55,7 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
               className="w-16 h-16 rounded-full object-cover"
             />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-[#1773cf] flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
               <span className="text-white text-2xl font-bold">{getUserInitials(user)}</span>
             </div>
           )}
@@ -143,7 +143,7 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
                           {profileState.success && (
                             <p className="text-sm text-green-500">Profile updated successfully!</p>
                           )}
-                          <Button type="submit" variant="primary">
+                          <Button type="submit" variant="primary" size="sm">
                             Save Changes
                           </Button>
                         </form>
@@ -307,11 +307,12 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
         description="Are you sure you want to revoke this session? The user will be logged out from that device."
       >
         <div className="flex gap-3 justify-end mt-6">
-          <Button variant="ghost" onClick={() => setSessionToRevoke(null)}>
+          <Button variant="ghost" size="sm" onClick={() => setSessionToRevoke(null)}>
             Cancel
           </Button>
           <Button
             variant="danger"
+            size="sm"
             onClick={() => sessionToRevoke && handleRevokeSession(sessionToRevoke)}
           >
             Revoke Session
@@ -327,10 +328,10 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
         description="This will log you out from all other devices. Your current session will remain active."
       >
         <div className="flex gap-3 justify-end mt-6">
-          <Button variant="ghost" onClick={() => setShowRevokeAllModal(false)}>
+          <Button variant="ghost" size="sm" onClick={() => setShowRevokeAllModal(false)}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={handleRevokeAllSessions}>
+          <Button variant="danger" size="sm" onClick={handleRevokeAllSessions}>
             Revoke All Sessions
           </Button>
         </div>

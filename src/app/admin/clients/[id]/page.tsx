@@ -1,24 +1,10 @@
-import { notFound } from "next/navigation";
-import { getClientById } from "./actions";
+"use client";
+
 import { ClientDetailClient } from "./client-detail-client";
+import { useClient } from "./client-context";
 
-interface PageProps {
-  params: Promise<{
-    id: string;
-  }>;
-}
-
-export default async function ClientDetailPage({ params }: PageProps) {
-  const { id } = await params;
-  const client = await getClientById(id);
-
-  if (!client) {
-    notFound();
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto">
-      <ClientDetailClient client={client} />
-    </div>
-  );
+export default function ClientDetailPage() {
+  const client = useClient();
+  
+  return <ClientDetailClient client={client} />;
 }

@@ -19,6 +19,7 @@
   --color-content: light-dark(#ffffff, #18232f);
   --color-card: light-dark(#ffffff, #1a2632);
   --color-sidebar: #1a2632;
+  --color-input: #111921;
   
   --color-border: light-dark(#e5e7eb, #243647);
   --color-border-dark: #344d65;

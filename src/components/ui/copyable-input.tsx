@@ -32,7 +32,7 @@ export function CopyableInput({
   value,
   type = "text",
   readOnly = false,
-  className = "w-full bg-[#111921] border-slate-700 text-white text-sm pr-10",
+  className = "w-full bg-input border-slate-700 text-white text-sm pr-10",
   labelClassName = "text-sm font-medium text-gray-400",
 }: CopyableInputProps) {
   const { copied, handleCopy } = useCopyToClipboard<string>();

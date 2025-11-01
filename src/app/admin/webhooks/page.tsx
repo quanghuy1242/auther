@@ -49,7 +49,7 @@ export default async function WebhooksPage({ searchParams }: PageProps) {
         description="Manage webhook endpoints and monitor delivery performance"
         action={
           <Link href="/admin/webhooks/create">
-            <Button variant="primary" leftIcon="add">
+            <Button variant="primary" size="sm" leftIcon="add">
               Add Webhook
             </Button>
           </Link>

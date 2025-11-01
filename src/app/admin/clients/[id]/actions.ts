@@ -1,5 +1,7 @@
 "use server";
 
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { oauthApplication, oauthAccessToken } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
@@ -43,91 +45,101 @@ export type UpdateClientState = {
 
 /**
  * Get OAuth client by ID with usage statistics
+ * Cached with React cache() to deduplicate requests during the same render
+ * And unstable_cache for persistent caching across requests
  */
-export async function getClientById(clientId: string): Promise<ClientDetail | null> {
+export const getClientById = cache(async (clientId: string): Promise<ClientDetail | null> => {
   try {
     await requireAuth();
 
-    // Get client
-    const [client] = await db
-      .select()
-      .from(oauthApplication)
-      .where(eq(oauthApplication.clientId, clientId))
-      .limit(1);
+    return await unstable_cache(
+      async () => {
+        // Get client
+        const [client] = await db
+          .select()
+          .from(oauthApplication)
+          .where(eq(oauthApplication.clientId, clientId))
+          .limit(1);
 
-    if (!client) {
-      return null;
-    }
-
-    // Get usage statistics
-    const tokens = await db
-      .select({
-        createdAt: oauthAccessToken.createdAt,
-      })
-      .from(oauthAccessToken)
-      .where(eq(oauthAccessToken.clientId, clientId))
-      .orderBy(desc(oauthAccessToken.createdAt))
-      .limit(1);
-
-    // Parse metadata and redirectURLs
-    let metadata = {};
-    try {
-      metadata = client.metadata ? JSON.parse(client.metadata) : {};
-    } catch (error) {
-      console.error("Failed to parse metadata:", client.metadata, error);
-      metadata = {};
-    }
-
-    let redirectURLs: string[] = [];
-    try {
-      if (client.redirectURLs) {
-        // Try to parse as JSON first
-        try {
-          const parsed = JSON.parse(client.redirectURLs);
-          redirectURLs = Array.isArray(parsed) ? parsed : [parsed].filter(Boolean);
-        } catch {
-          // If JSON parsing fails, treat as plain text (split by newlines or commas)
-          redirectURLs = client.redirectURLs
-            .split(/[\n,]/)
-            .map((url: string) => url.trim())
-            .filter((url: string) => url.length > 0);
+        if (!client) {
+          return null;
         }
-        console.log("Parsed redirectURLs:", redirectURLs, "from:", client.redirectURLs);
+
+        // Get usage statistics
+        const tokens = await db
+          .select({
+            createdAt: oauthAccessToken.createdAt,
+          })
+          .from(oauthAccessToken)
+          .where(eq(oauthAccessToken.clientId, clientId))
+          .orderBy(desc(oauthAccessToken.createdAt))
+          .limit(1);
+
+        // Parse metadata and redirectURLs
+        let metadata = {};
+        try {
+          metadata = client.metadata ? JSON.parse(client.metadata) : {};
+        } catch (error) {
+          console.error("Failed to parse metadata:", client.metadata, error);
+          metadata = {};
+        }
+
+        let redirectURLs: string[] = [];
+        try {
+          if (client.redirectURLs) {
+            // Try to parse as JSON first
+            try {
+              const parsed = JSON.parse(client.redirectURLs);
+              redirectURLs = Array.isArray(parsed) ? parsed : [parsed].filter(Boolean);
+            } catch {
+              // If JSON parsing fails, treat as plain text (split by newlines or commas)
+              redirectURLs = client.redirectURLs
+                .split(/[\n,]/)
+                .map((url: string) => url.trim())
+                .filter((url: string) => url.length > 0);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to parse redirectURLs:", client.redirectURLs, error);
+          redirectURLs = [];
+        }
+
+        // Count active tokens
+        const [tokenCount] = await db
+          .select({
+            count: oauthAccessToken.id,
+          })
+          .from(oauthAccessToken)
+          .where(eq(oauthAccessToken.clientId, clientId));
+
+        return {
+          id: client.id,
+          clientId: client.clientId || "",
+          clientSecret: client.clientSecret,
+          name: client.name,
+          icon: client.icon,
+          redirectURLs,
+          type: client.type,
+          disabled: client.disabled || false,
+          userId: client.userId,
+          createdAt: client.createdAt || new Date(),
+          updatedAt: client.updatedAt || new Date(),
+          metadata,
+          lastUsed: tokens[0]?.createdAt || null,
+          activeTokenCount: tokenCount ? 1 : 0,
+        };
+      },
+      [`client-${clientId}`],
+      {
+        revalidate: 60, // Cache for 60 seconds
+        tags: [`client-${clientId}`, 'clients'],
       }
-    } catch (error) {
-      console.error("Failed to parse redirectURLs:", client.redirectURLs, error);
-      redirectURLs = [];
-    }
-
-    // Count active tokens
-    const [tokenCount] = await db
-      .select({
-        count: oauthAccessToken.id,
-      })
-      .from(oauthAccessToken)
-      .where(eq(oauthAccessToken.clientId, clientId));
-
-    return {
-      id: client.id,
-      clientId: client.clientId || "",
-      clientSecret: client.clientSecret,
-      name: client.name,
-      icon: client.icon,
-      redirectURLs,
-      type: client.type,
-      disabled: client.disabled || false,
-      userId: client.userId,
-      createdAt: client.createdAt || new Date(),
-      updatedAt: client.updatedAt || new Date(),
-      metadata,
-      lastUsed: tokens[0]?.createdAt || null,
-      activeTokenCount: tokenCount ? 1 : 0,
-    };
+    )();
   } catch (error) {
     console.error("Get client by ID error:", error);
     return null;
   }
-}
+});
 
 /**
  * Update OAuth client details
@@ -195,6 +207,8 @@ export async function updateClient(
       .where(eq(oauthApplication.clientId, clientId));
 
     revalidatePath(`/admin/clients/${clientId}`);
+    revalidatePath(`/admin/clients/${clientId}/access`);
+    revalidatePath(`/admin/clients/${clientId}/api-keys`);
     revalidatePath("/admin/clients");
 
     return { success: true };
@@ -247,6 +261,8 @@ export async function rotateClientSecret(clientId: string): Promise<{ success: b
       .where(eq(oauthAccessToken.clientId, clientId));
 
     revalidatePath(`/admin/clients/${clientId}`);
+    revalidatePath(`/admin/clients/${clientId}/access`);
+    revalidatePath(`/admin/clients/${clientId}/api-keys`);
     revalidatePath("/admin/clients");
 
     return { success: true, secret: newSecret };
@@ -275,6 +291,8 @@ export async function toggleClientStatus(clientId: string, disabled: boolean): P
       .where(eq(oauthApplication.clientId, clientId));
 
     revalidatePath(`/admin/clients/${clientId}`);
+    revalidatePath(`/admin/clients/${clientId}/access`);
+    revalidatePath(`/admin/clients/${clientId}/api-keys`);
     revalidatePath("/admin/clients");
 
     return { success: true };

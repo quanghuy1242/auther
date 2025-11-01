@@ -144,6 +144,7 @@ export function SessionsClient({
               />
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={handleCleanupExpired}
                 leftIcon="delete_sweep"
                 disabled={isCleaningUp}
@@ -159,7 +160,7 @@ export function SessionsClient({
         </div>
       </div>
 
-      <div className="rounded-lg border-0 sm:border sm:border-[#344d65]" style={{ backgroundColor: '#1a2632' }}>
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark" style={{ backgroundColor: '#1a2632' }}>
         <div className="p-0">
           <div className="overflow-x-auto">
             <Table>
@@ -293,11 +294,12 @@ export function SessionsClient({
               </div>
             </div>
             <div className="flex gap-3 justify-end">
-              <Button variant="secondary" onClick={() => setRevokeModalSession(null)}>
+              <Button variant="secondary" size="sm" onClick={() => setRevokeModalSession(null)}>
                 Cancel
               </Button>
               <Button
                 variant="danger"
+                size="sm"
                 onClick={handleRevoke}
                 isLoading={isRevoking}
                 disabled={isRevoking}

@@ -32,7 +32,7 @@ export function Icon({
   return (
     <span
       className={cn(
-        "material-symbols-outlined",
+        "material-symbols-outlined scale-85",
         sizeMap[size],
         filled && "fill",
         className

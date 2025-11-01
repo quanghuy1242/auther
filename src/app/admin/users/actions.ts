@@ -69,3 +69,38 @@ export async function getUserStats(): Promise<UserStats> {
     };
   }
 }
+
+export interface UserPickerItem {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+}
+
+/**
+ * Get all users for picker components (simplified, no pagination)
+ * Useful for dropdowns, search selectors, etc.
+ */
+export async function getAllUsers(searchQuery?: string): Promise<UserPickerItem[]> {
+  try {
+    await requireAuth();
+
+    // Use the existing getUsers function with high page size
+    const result = await getUsers({
+      page: 1,
+      pageSize: 100, // Reasonable limit for picker
+      search: searchQuery,
+    });
+
+    // Transform to simpler picker format
+    return result.users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch users for picker:", error);
+    return [];
+  }
+}

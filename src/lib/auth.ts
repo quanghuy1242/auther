@@ -4,8 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins/jwt";
 import { oidcProvider } from "better-auth/plugins/oidc-provider";
 import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
-import { username } from "better-auth/plugins";
-import { admin } from "better-auth/plugins"
+import { username, admin, apiKey } from "better-auth/plugins";
 import { createAuthMiddleware } from "better-auth/api";
 
 import { env } from "@/env";
@@ -22,6 +21,7 @@ import {
   createRestrictedSignupPaths, 
   validateInternalSignupAccess 
 } from "@/lib/utils/auth-middleware";
+import { checkOAuthClientAccess } from "@/lib/utils/oauth-authorization";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 import { createBetterAuthWebhookHooks } from "@/lib/webhooks/better-auth-hooks";
 
@@ -133,6 +133,34 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
       dynamicRedirectConfig,
       previewOriginMatchers
     );
+
+    // Check user access to OAuth client (access control)
+    const clientId = requestUrl.searchParams.get("client_id");
+    const userId = ctx.context.session?.user?.id;
+
+    if (clientId && userId) {
+      const accessCheck = await checkOAuthClientAccess(userId, clientId);
+      
+      if (!accessCheck.allowed) {
+        // Return an OAuth error response
+        const errorUrl = new URL(requestUrl.searchParams.get("redirect_uri") || "/");
+        errorUrl.searchParams.set("error", "access_denied");
+        errorUrl.searchParams.set("error_description", accessCheck.reason || "Access denied");
+        
+        const state = requestUrl.searchParams.get("state");
+        if (state) {
+          errorUrl.searchParams.set("state", state);
+        }
+
+        // Throw a redirect response to the error URL
+        throw new Response(null, {
+          status: 302,
+          headers: {
+            Location: errorUrl.toString(),
+          },
+        });
+      }
+    }
   }
 });
 
@@ -167,6 +195,13 @@ export const auth = betterAuth({
   plugins: [
     admin(),
     username(),
+    apiKey({
+      enableMetadata: true,
+      apiKeyHeaders: ["x-api-key"],
+      rateLimit: {
+        enabled: false, // Per-key rate limiting disabled by default
+      },
+    }),
     jwt({
       jwt: {
         issuer: env.JWT_ISSUER,

@@ -69,14 +69,14 @@ export class OAuthClientRepository {
   }
 
   /**
-   * Find client by ID
+   * Find client by internal ID
    */
-  async findById(clientId: string): Promise<OAuthClientEntity | null> {
+  async findById(id: string): Promise<OAuthClientEntity | null> {
     try {
       const [client] = await db
         .select()
         .from(oauthApplication)
-        .where(eq(oauthApplication.id, clientId))
+        .where(eq(oauthApplication.id, id))
         .limit(1);
 
       if (!client) return null;
@@ -95,6 +95,37 @@ export class OAuthClientRepository {
       };
     } catch (error) {
       console.error("OAuthClientRepository.findById error:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Find client by OAuth client ID (the public client identifier)
+   */
+  async findByClientId(clientId: string): Promise<OAuthClientEntity | null> {
+    try {
+      const [client] = await db
+        .select()
+        .from(oauthApplication)
+        .where(eq(oauthApplication.clientId, clientId))
+        .limit(1);
+
+      if (!client) return null;
+
+      return {
+        id: client.id,
+        name: client.name,
+        clientId: client.clientId,
+        type: client.type,
+        redirectURLs: this.parseRedirectURLs(client.redirectURLs),
+        disabled: client.disabled || false,
+        metadata: this.parseMetadata(client.metadata),
+        createdAt: client.createdAt ? new Date(client.createdAt) : null,
+        updatedAt: client.updatedAt ? new Date(client.updatedAt) : null,
+        userId: client.userId,
+      };
+    } catch (error) {
+      console.error("OAuthClientRepository.findByClientId error:", error);
       return null;
     }
   }

@@ -3,7 +3,19 @@
 import * as React from "react";
 import { useFormState } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Icon, Label, Modal, Input, StyledCheckbox, CopyableInput } from "@/components/ui";
+import { 
+  Card, 
+  CardHeader, 
+  CardTitle, 
+  CardContent, 
+  Button, 
+  Icon, 
+  Label, 
+  Modal, 
+  Input, 
+  StyledCheckbox, 
+  CopyableInput,
+} from "@/components/ui";
 import { UrlListBuilder } from "@/components/ui/url-list-builder";
 import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
 import { 
@@ -99,56 +111,42 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
 
   return (
     <>
-      {/* Client Header */}
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-black text-white tracking-tight">{client.name || "Unnamed Client"}</h1>
-          {client.disabled ? (
-            <Badge variant="danger" className="rounded-full">Disabled</Badge>
-          ) : (
-            <Badge variant="success" className="rounded-full">Active</Badge>
-          )}
-        </div>
-        <div className="flex gap-3">
-          {!isEditing && (
-            <Button
-              variant={client.disabled ? "primary" : "secondary"}
-              size="sm"
-              onClick={handleToggleStatus}
-            >
-              {client.disabled ? "Enable Client" : "Disable Client"}
-            </Button>
-          )}
-          <Button
-            variant={isEditing ? "primary" : "secondary"}
-            size="sm"
-            onClick={isEditing ? handleSave : () => setIsEditing(true)}
-            disabled={isEditing && !editName.trim()}
-          >
-            {isEditing ? "Save Changes" : "Edit"}
-          </Button>
-          {isEditing && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleCancelEdit}
-            >
-              Cancel
-            </Button>
-          )}
-        </div>
-      </div>
-      
-      <p className="text-sm text-[#93adc8] mb-6">
-        Client Type: {isConfidential ? "Confidential" : "Public"}
-      </p>
-
       {/* Error messages */}
       {updateState.error && (
         <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
           <p className="text-sm text-red-400">{updateState.error}</p>
         </div>
       )}
+
+      {/* Action buttons */}
+      <div className="flex gap-3 mb-6">
+        {!isEditing && (
+          <Button
+            variant={client.disabled ? "primary" : "secondary"}
+            size="sm"
+            onClick={handleToggleStatus}
+          >
+            {client.disabled ? "Enable Client" : "Disable Client"}
+          </Button>
+        )}
+        <Button
+          variant={isEditing ? "primary" : "secondary"}
+          size="sm"
+          onClick={isEditing ? handleSave : () => setIsEditing(true)}
+          disabled={isEditing && !editName.trim()}
+        >
+          {isEditing ? "Save Changes" : "Edit"}
+        </Button>
+        {isEditing && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleCancelEdit}
+          >
+            Cancel
+          </Button>
+        )}
+      </div>
 
       {/* Single Column Layout */}
       <div className="space-y-6">
@@ -167,7 +165,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                   id="clientName"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-[#111921] border-slate-700 text-white text-sm"
+                  className="w-full bg-input border-slate-700 text-white text-sm"
                   placeholder="Enter client name"
                 />
                 {updateState.errors?.name && (
@@ -260,7 +258,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                       key={index}
                       value={uri}
                       readOnly
-                      className="w-full bg-[#111921] border-slate-700 text-white text-sm"
+                      className="w-full bg-input border-slate-700 text-white text-sm"
                     />
                   ))
                 )}
@@ -382,15 +380,14 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
       </div>
 
       {/* Rotate Secret Modal */}
-      {showRotateModal && (
-        <Modal
-          isOpen={true}
+      <Modal
+          isOpen={showRotateModal}
           onClose={() => setShowRotateModal(false)}
           title="Rotate Client Secret"
         >
           <div className="space-y-4">
             <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <Icon name="warning" className="text-yellow-500 text-2xl flex-shrink-0" />
+              <Icon name="warning" className="text-yellow-500 text-2xl shrink-0" />
               <div className="text-sm text-yellow-200">
                 <strong className="block mb-1">This action cannot be undone</strong>
                 Rotating the secret will:
@@ -405,21 +402,19 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
               Are you sure you want to rotate the client secret for <strong>{client.name}</strong>?
             </p>
             <div className="flex gap-3 justify-end">
-              <Button variant="secondary" onClick={() => setShowRotateModal(false)}>
+              <Button variant="secondary" size="sm" onClick={() => setShowRotateModal(false)}>
                 Cancel
               </Button>
-              <Button variant="danger" onClick={handleRotateSecret}>
+              <Button variant="danger" size="sm" onClick={handleRotateSecret}>
                 Rotate Secret
               </Button>
             </div>
           </div>
         </Modal>
-      )}
 
       {/* New Secret Modal */}
-      {showSecretModal && newSecret && (
-        <Modal
-          isOpen={true}
+      <Modal
+          isOpen={!!(showSecretModal && newSecret)}
           onClose={() => {
             setShowSecretModal(false);
             setNewSecret(null);
@@ -429,7 +424,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
         >
           <div className="space-y-4">
             <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <Icon name="warning" className="text-yellow-500 text-2xl flex-shrink-0" />
+              <Icon name="warning" className="text-yellow-500 text-2xl shrink-0" />
               <div className="text-sm text-yellow-200">
                 <strong className="block mb-1">Save this secret now</strong>
                 This is the only time you&apos;ll see the new secret. Make sure to copy and store it securely.
@@ -439,7 +434,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
               <CopyableInput
                 id="newSecret"
                 label="New Client Secret"
-                value={newSecret}
+                value={newSecret || ""}
                 labelClassName="text-gray-400"
               />
             </div>
@@ -457,18 +452,16 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
             </div>
           </div>
         </Modal>
-      )}
 
       {/* Delete Client Modal */}
-      {showDeleteModal && (
-        <Modal
-          isOpen={true}
+      <Modal
+          isOpen={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}
           title="Delete OAuth Client"
         >
           <div className="space-y-4">
             <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <Icon name="error" className="text-red-500 text-2xl flex-shrink-0" />
+              <Icon name="error" className="text-red-500 text-2xl shrink-0" />
               <div className="text-sm text-red-200">
                 <strong className="block mb-1">This action cannot be undone</strong>
                 Deleting this client will:
@@ -483,16 +476,15 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
               Are you sure you want to delete <strong>{client.name}</strong>?
             </p>
             <div className="flex gap-3 justify-end">
-              <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+              <Button variant="secondary" size="sm" onClick={() => setShowDeleteModal(false)}>
                 Cancel
               </Button>
-              <Button variant="danger" onClick={handleDelete}>
+              <Button variant="danger" size="sm" onClick={handleDelete}>
                 Delete Client
               </Button>
             </div>
           </div>
         </Modal>
-      )}
     </>
   );
 }

@@ -1,6 +1,128 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
-import { user } from "./auth-schema";
+import { user, oauthApplication } from "./auth-schema";
+
+// ========================================
+// Access Control Tables
+// ========================================
+
+// User-to-Client Access Control
+export const userClientAccess = sqliteTable(
+  "user_client_access",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthApplication.clientId, { onDelete: "cascade" }),
+    accessLevel: text("access_level").notNull(), // 'use' | 'admin'
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    expiresAt: integer("expires_at", { mode: "timestamp" }), // Optional expiration
+  },
+  (table) => [
+    index("user_client_access_user_id_idx").on(table.userId),
+    index("user_client_access_client_id_idx").on(table.clientId),
+    index("user_client_access_unique_idx").on(table.userId, table.clientId),
+  ]
+);
+
+// User Group
+export const userGroup = sqliteTable("user_group", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+// Group Membership
+export const groupMembership = sqliteTable(
+  "group_membership",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => userGroup.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("group_membership_user_id_idx").on(table.userId),
+    index("group_membership_group_id_idx").on(table.groupId),
+    index("group_membership_unique_idx").on(table.userId, table.groupId),
+  ]
+);
+
+// Group-to-Client Access Control
+export const groupClientAccess = sqliteTable(
+  "group_client_access",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => userGroup.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthApplication.clientId, { onDelete: "cascade" }),
+    accessLevel: text("access_level").notNull(), // 'use' | 'admin'
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("group_client_access_group_id_idx").on(table.groupId),
+    index("group_client_access_client_id_idx").on(table.clientId),
+    index("group_client_access_unique_idx").on(table.groupId, table.clientId),
+  ]
+);
+
+// OAuth Client Extended Metadata
+// Store additional OAuth client configuration that extends the Better Auth schema
+export const oauthClientMetadata = sqliteTable(
+  "oauth_client_metadata",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .unique()
+      .references(() => oauthApplication.clientId, { onDelete: "cascade" }),
+    allowedResources: text("allowed_resources"), // JSON: { "projects": ["read","write"] }
+    allowsApiKeys: integer("allows_api_keys", { mode: "boolean" }).notNull().default(false),
+    defaultApiKeyPermissions: text("default_api_key_permissions"), // JSON: { "projects": ["read"] }
+    accessPolicy: text("access_policy").notNull().default("all_users"), // 'all_users' | 'restricted'
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("oauth_client_metadata_client_id_idx").on(table.clientId),
+  ]
+);
+
+// ========================================
+// Webhook Tables
+// ========================================
 
 // Webhook Endpoint - A single destination where notifications are sent
 export const webhookEndpoint = sqliteTable(
