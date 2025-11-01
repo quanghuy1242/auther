@@ -16,6 +16,7 @@ import {
   CopyableInput,
   Select,
   PermissionTagInput,
+  ContentSkeleton,
 } from "@/components/ui";
 import { formatDate } from "@/lib/utils/date-formatter";
 import type { ClientDetail } from "../actions";
@@ -297,8 +298,10 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-[#93adc8]">Loading...</div>
+      <div className="space-y-6">
+        <ContentSkeleton lines={3} showTitle />
+        <ContentSkeleton lines={5} showTitle />
+        <ContentSkeleton lines={4} showTitle />
       </div>
     );
   }
@@ -546,7 +549,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
         title="Create API Key"
       >
         <form onSubmit={handleCreateKey} className="space-y-4">
-          <div>
+          <div className="space-y-1">
             <Label htmlFor="keyName">Key Name</Label>
             <Input
               id="keyName"
@@ -587,7 +590,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between">
               <Label>Permissions</Label>
               {availablePermissionsList.length > 0 && (
                 <Button

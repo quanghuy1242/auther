@@ -15,6 +15,7 @@ import {
   Select,
   UserGroupPicker,
   PermissionRowBuilder,
+  ContentSkeleton,
   type User,
   type PermissionRow,
 } from "@/components/ui";
@@ -293,8 +294,11 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-[#93adc8]">Loading...</div>
+      <div className="space-y-6">
+        <ContentSkeleton lines={3} showTitle />
+        <ContentSkeleton lines={5} showTitle />
+        <ContentSkeleton lines={6} showTitle />
+        <ContentSkeleton lines={4} showTitle />
       </div>
     );
   }
