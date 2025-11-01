@@ -4,7 +4,6 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { requireAuth } from "@/lib/session";
 import { auth } from "@/lib/auth";
 import {
@@ -94,6 +93,7 @@ export async function createClientApiKey(
       ? validated.expiresInDays * 24 * 60 * 60 // Convert days to seconds
       : 60 * 60 * 24 * 365; // Default: 1 year
 
+    // Use the server-side auth instance directly (no headers needed)
     const result = await auth.api.createApiKey({
       body: {
         name: validated.name,
@@ -104,7 +104,8 @@ export async function createClientApiKey(
           access_level: access.level,
         },
       },
-      headers: await headers(),
+      // Must explicitly set asResponse: false to get the data directly
+      asResponse: false,
     });
 
     if (!result) {
@@ -142,11 +143,9 @@ export async function createClientApiKey(
 export const listClientApiKeys = cache(async (clientId: string) => {
   try {
     const session = await requireAuth();
-    // Get headers outside of unstable_cache
-    const headersList = await headers();
 
     return await unstable_cache(
-      async (hdrs: ReturnType<typeof headers> extends Promise<infer T> ? T : never) => {
+      async () => {
         // Check access
         const access = await userClientAccessRepository.checkAccess(
           session.user.id,
@@ -157,9 +156,9 @@ export const listClientApiKeys = cache(async (clientId: string) => {
           return [];
         }
 
-        // Get all user's API keys using Better Auth
+        // Get all user's API keys using Better Auth (server-side)
         const allKeys = await auth.api.listApiKeys({
-          headers: hdrs,
+          asResponse: false,
         });
 
         if (!allKeys || !Array.isArray(allKeys)) {
@@ -184,7 +183,7 @@ export const listClientApiKeys = cache(async (clientId: string) => {
         revalidate: 30,
         tags: [`client-api-keys-${clientId}`, `client-${clientId}`],
       }
-    )(headersList);
+    )();
   } catch (error) {
     console.error("listClientApiKeys error:", error);
     return [];
@@ -201,7 +200,7 @@ export async function revokeApiKey(keyId: string): Promise<ApiKeyResult> {
     // Get all keys to find the one we want to delete
     // Better Auth doesn't expose getApiKey, so we list and filter
     const allKeys = await auth.api.listApiKeys({
-      headers: await headers(),
+      asResponse: false,
     });
 
     const key = allKeys?.find((k) => k.id === keyId);
@@ -219,7 +218,7 @@ export async function revokeApiKey(keyId: string): Promise<ApiKeyResult> {
     // Delete the key
     await auth.api.deleteApiKey({
       body: { keyId },
-      headers: await headers(),
+      asResponse: false,
     });
 
     // Revalidate client pages if we know the client
@@ -251,7 +250,7 @@ export async function updateApiKeyPermissions(
 
     // Get all keys to find the one we want to update
     const allKeys = await auth.api.listApiKeys({
-      headers: await headers(),
+      asResponse: false,
     });
 
     const key = allKeys?.find((k) => k.id === keyId);
@@ -287,7 +286,7 @@ export async function updateApiKeyPermissions(
         keyId,
         permissions,
       },
-      headers: await headers(),
+      asResponse: false,
     });
 
     if (clientId) {
@@ -319,7 +318,7 @@ export async function verifyApiKey(
         key,
         permissions: requiredPermissions,
       },
-      headers: await headers(),
+      asResponse: false,
     });
 
     // Handle the response structure
