@@ -14,7 +14,8 @@
     "user:create": "tsx scripts/create-user.ts",
     "auth:test": "tsx scripts/test-auth-flow.ts",
     "clients:seed": "tsx scripts/seed-clients.ts",
-    "start:local": "dotenv -e .env.local -- pnpm start"
+    "local:build": "dotenv -e .env.local -- pnpm build",
+    "local:start": "dotenv -e .env.local -- pnpm start"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",

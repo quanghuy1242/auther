@@ -98,7 +98,7 @@ function WebhookFormContent() {
         <summary className="flex items-center gap-2 cursor-pointer text-[var(--color-text-primary)] hover:text-[var(--color-primary)] transition-colors font-medium select-none">
           <Icon
             name="expand_more"
-            className="!text-xl group-open:rotate-180 transition-transform"
+            className="text-xl! group-open:rotate-180 transition-transform"
           />
           Advanced Options
         </summary>

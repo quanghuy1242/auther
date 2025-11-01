@@ -55,7 +55,7 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
               className="w-16 h-16 rounded-full object-cover"
             />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-[#1773cf] flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
               <span className="text-white text-2xl font-bold">{getUserInitials(user)}</span>
             </div>
           )}

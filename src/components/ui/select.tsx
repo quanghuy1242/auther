@@ -64,7 +64,7 @@ export function Select({
             <ListboxButton
               className={cn(
                 "relative w-full rounded-md border px-3 py-2 text-left text-sm",
-                "bg-[#111921] text-white",
+                "bg-input text-white",
                 "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
                 "disabled:cursor-not-allowed disabled:opacity-50",
                 "transition-colors",

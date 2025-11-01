@@ -114,7 +114,7 @@ export default function RegisterClientPage() {
         <Card>
             <CardContent className="pt-6 space-y-6">
               <div className="flex items-center gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <Icon name="warning" className="text-yellow-500 text-2xl flex-shrink-0" />
+                <Icon name="warning" className="text-yellow-500 text-2xl shrink-0" />
                 <div className="text-sm text-yellow-200">
                   <strong className="block mb-1">Important: Save your credentials now</strong>
                   The client secret will not be shown again. Make sure to copy and store it securely.

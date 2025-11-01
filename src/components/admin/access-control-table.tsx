@@ -48,7 +48,7 @@ export function AccessControlTable({
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-800">
       <table className="w-full text-left text-sm">
-        <thead className="bg-[#111921]/60">
+        <thead className="bg-input/60">
           <tr>
             <th className="p-3 font-medium text-[#93adc8]">Name</th>
             <th className="p-3 font-medium text-[#93adc8]">Role</th>

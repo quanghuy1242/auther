@@ -106,8 +106,8 @@ export function ResetPasswordForm() {
     <Card className="w-full max-w-md shadow-2xl">
       <CardContent className="pt-10">
         <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 rounded-full bg-[#1773cf]/20 flex items-center justify-center">
-            <Icon name="lock" size="xl" className="text-[#1773cf]" filled />
+          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+            <Icon name="lock" size="xl" className="text-primary" filled />
           </div>
         </div>
         

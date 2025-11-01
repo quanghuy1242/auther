@@ -134,7 +134,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
               className="w-16 h-16 rounded-full object-cover"
             />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-[#1773cf] flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
               <span className="text-white text-2xl font-bold">{getUserInitials(user.name)}</span>
             </div>
           )}
@@ -172,7 +172,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Profile",
             content: (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="md:col-span-2">
                   <Card>
                     <CardHeader>
@@ -269,7 +269,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
                           label="User ID"
                           value={user.id}
                           labelClassName="text-gray-400"
-                          className="font-mono text-sm bg-[#111921] border-slate-700 text-white pr-10"
+                          className="font-mono text-sm bg-input border-slate-700 text-white pr-10"
                         />
                         <div>
                           <Label className="text-gray-400">Created</Label>
@@ -301,7 +301,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Linked Accounts",
             content: (
-              <div className="pt-6 space-y-6">
+              <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-xl font-bold text-white">OAuth Providers</h2>
@@ -322,7 +322,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
                         <CardContent>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                              <Icon name="key" className="text-[#1773cf] text-2xl" />
+                              <Icon name="key" className="text-primary text-2xl" />
                               <div>
                                 <h3 className="text-base font-semibold text-white">
                                   {getProviderName(account.providerId)}
@@ -356,7 +356,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Sessions",
             content: (
-              <div className="pt-6 space-y-6">
+              <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-xl font-bold text-white">Active Sessions</h2>
@@ -412,7 +412,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Security",
             content: (
-              <div className="pt-6 space-y-6">
+              <div className="space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Password Management</CardTitle>
@@ -460,7 +460,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Activity",
             content: (
-              <div className="pt-6">
+              <div>
                 <Card>
                   <CardContent>
                     <p className="text-center py-12 text-gray-400">

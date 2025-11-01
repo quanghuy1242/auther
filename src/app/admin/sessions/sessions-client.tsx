@@ -160,7 +160,7 @@ export function SessionsClient({
         </div>
       </div>
 
-      <div className="rounded-lg border-0 sm:border sm:border-[#344d65]" style={{ backgroundColor: '#1a2632' }}>
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark" style={{ backgroundColor: '#1a2632' }}>
         <div className="p-0">
           <div className="overflow-x-auto">
             <Table>

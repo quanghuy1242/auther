@@ -70,7 +70,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             "placeholder:text-gray-500",
             "focus:outline-none transition-colors",
             "disabled:cursor-not-allowed disabled:opacity-50",
-            "resize-y min-h-[80px]",
+            "resize-y min-h-20",
             variantStyles[actualVariant],
             className
           )}

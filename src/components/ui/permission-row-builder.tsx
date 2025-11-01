@@ -78,13 +78,13 @@ export function PermissionRowBuilder({
               value={permission.resource}
               onChange={(e) => handleUpdate(index, "resource", e.target.value)}
               placeholder={resourcePlaceholder}
-              className="flex-1 bg-[#111921] border-slate-700 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono"
+              className="flex-1 bg-input border-slate-700 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono"
             />
             <Input
               value={permission.actions}
               onChange={(e) => handleUpdate(index, "actions", e.target.value)}
               placeholder={actionsPlaceholder}
-              className="flex-1 bg-[#111921] border-slate-700 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono"
+              className="flex-1 bg-input border-slate-700 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono"
             />
             <button
               type="button"

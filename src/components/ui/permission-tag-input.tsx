@@ -90,7 +90,7 @@ export function PermissionTagInput({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           className={cn(
-            "flex items-center justify-between w-full rounded-lg border border-slate-700 bg-[#111921] px-3 py-2 text-white transition-colors",
+            "flex items-center justify-between w-full rounded-lg border border-slate-700 bg-input px-3 py-2 text-white transition-colors",
             "focus-within:border-primary focus-within:ring-1 focus-within:ring-primary",
             disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-slate-600"
           )}

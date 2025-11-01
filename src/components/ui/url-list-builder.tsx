@@ -109,17 +109,17 @@ export function UrlListBuilder({
                   newUrls[index] = e.target.value;
                   onChange(newUrls);
                 }}
-                className="bg-[#111921] border-slate-700"
+                className="bg-input border-slate-700"
               />
             </div>
             <button
               type="button"
               onClick={() => handleRemove(index)}
               disabled={urls.length <= minUrls}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
               title={urls.length <= minUrls ? `At least ${minUrls} URL(s) required` : "Remove URI"}
             >
-              <Icon name="delete" className="!text-xl" />
+              <Icon name="delete" className="text-xl!" />
             </button>
           </div>
         ))}
@@ -136,7 +136,7 @@ export function UrlListBuilder({
               onKeyPress={handleKeyPress}
               placeholder={placeholder}
               error={error || undefined}
-              className="bg-[#111921] border-slate-700"
+              className="bg-input border-slate-700"
             />
           </div>
         </div>

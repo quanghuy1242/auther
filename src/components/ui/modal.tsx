@@ -78,7 +78,7 @@ export function Modal({
               <DialogPanel
                 className={cn(
                   "w-full transform overflow-hidden rounded-xl",
-                  "bg-[#1a2632] border border-[#243647]",
+                  "bg-sidebar border border-[#243647]",
                   "p-4 sm:p-6 text-left align-middle shadow-xl transition-all",
                   sizeStyles[size],
                   className

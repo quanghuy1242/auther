@@ -61,7 +61,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
               />
               <div>
                 <label className="text-sm font-medium text-[#93adc8] block mb-1.5">Rotation Cadence</label>
-                <p className="text-white text-sm px-4 py-2.5 bg-[#111921] border border-slate-700 rounded-lg">
+                <p className="text-white text-sm px-4 py-2.5 bg-input border border-slate-700 rounded-lg">
                   {initialData.environment.rotationCadence}
                 </p>
               </div>
