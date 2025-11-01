@@ -16,11 +16,11 @@ export interface SidebarProps {
  */
 export function Sidebar({ children }: SidebarProps) {
   return (
-    <aside className="w-64 h-screen bg-[#1a2632] border-r border-[#243647] flex flex-col">
+    <aside className="w-64 h-screen bg-sidebar border-r border-[#243647] flex flex-col">
       {/* Logo Section */}
       <div className="h-16 px-6 py-3 border-b border-[#243647]">
         <div className="flex items-center gap-3">
-          <Icon name="lock" size="lg" className="text-[#1773cf]" filled />
+          <Icon name="lock" size="lg" className="text-primary" filled />
           <div>
             <h1 className="text-lg font-bold text-white">Better Auth</h1>
             <p className="text-xs text-gray-400">Admin Panel</p>
@@ -48,12 +48,13 @@ export function SidebarNavItem({ item, onNavigate }: SidebarNavItemProps) {
   return (
     <Link
       href={item.href}
+      prefetch={true}
       onClick={onNavigate}
       className={`
         flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors
         ${
           isActive
-            ? "bg-[#243647] text-white border-r-2 border-[#1773cf]"
+            ? "bg-[#243647] text-white border-r-2 border-primary"
             : "text-gray-400 hover:text-white hover:bg-[#243647]/50"
         }
       `}
@@ -61,7 +62,7 @@ export function SidebarNavItem({ item, onNavigate }: SidebarNavItemProps) {
       {item.icon && <Icon name={item.icon} size="sm" />}
       <span className="flex-1">{item.label}</span>
       {item.badge && (
-        <span className="px-2 py-0.5 text-xs font-semibold bg-[#1773cf] text-white rounded-full">
+        <span className="px-2 py-0.5 text-xs font-semibold bg-primary text-white rounded-full">
           {item.badge}
         </span>
       )}
