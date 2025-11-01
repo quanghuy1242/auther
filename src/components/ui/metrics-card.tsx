@@ -32,7 +32,7 @@ export function MetricsCard({
 
   return (
     <Card className={className}>
-      <CardContent className="pt-6">
+      <CardContent>
         <div className="space-y-4">
           {/* Header with metric value */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
