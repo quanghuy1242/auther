@@ -71,6 +71,7 @@ function CreateUserForm() {
         <Button
           type="button"
           variant="ghost"
+          size="sm"
           onClick={() => window.history.back()}
         >
           Cancel

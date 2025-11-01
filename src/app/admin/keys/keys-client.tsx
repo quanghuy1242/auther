@@ -61,6 +61,7 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
               variant="primary"
               leftIcon="sync"
               onClick={() => setShowRotateModal(true)}
+              size="sm"
             >
               Rotate JWKS
             </Button>
@@ -176,6 +177,7 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
           <div className="flex gap-3 justify-end">
             <Button
               variant="ghost"
+              size="sm"
               onClick={() => setShowRotateModal(false)}
               disabled={isRotating}
             >
@@ -183,6 +185,7 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
             </Button>
             <Button
               variant="primary"
+              size="sm"
               onClick={handleRotateKeys}
               isLoading={isRotating}
               leftIcon={!isRotating ? "sync" : undefined}

@@ -230,7 +230,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
                           {profileState.success && (
                             <p className="text-sm text-green-500">Profile updated successfully!</p>
                           )}
-                          <Button type="submit" variant="primary">
+                          <Button type="submit" variant="primary" size="sm">
                             Save Changes
                           </Button>
                         </form>
@@ -486,10 +486,10 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             sign in using this provider.
           </p>
           <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setAccountToUnlink(null)}>
+            <Button variant="secondary" size="sm" onClick={() => setAccountToUnlink(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={() => handleUnlinkAccount(accountToUnlink)}>
+            <Button variant="danger" size="sm" onClick={() => handleUnlinkAccount(accountToUnlink)}>
               Unlink Account
             </Button>
           </div>
@@ -508,10 +508,10 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             this device.
           </p>
           <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setSessionToRevoke(null)}>
+            <Button variant="secondary" size="sm" onClick={() => setSessionToRevoke(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={() => handleRevokeSession(sessionToRevoke)}>
+            <Button variant="danger" size="sm" onClick={() => handleRevokeSession(sessionToRevoke)}>
               Revoke Session
             </Button>
           </div>
@@ -530,10 +530,10 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             active sessions and the user will need to sign in again.
           </p>
           <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setShowForceLogoutModal(false)}>
+            <Button variant="secondary" size="sm" onClick={() => setShowForceLogoutModal(false)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleForceLogout}>
+            <Button variant="danger" size="sm" onClick={handleForceLogout}>
               Force Logout All
             </Button>
           </div>
@@ -577,6 +577,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             <div className="flex gap-3 justify-end">
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={() => {
                   setShowSetPasswordModal(false);
                   setNewPassword("");
@@ -586,7 +587,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
               >
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleSetPassword}>
+              <Button variant="primary" size="sm" onClick={handleSetPassword}>
                 Set Password
               </Button>
             </div>
@@ -616,6 +617,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             <div className="flex gap-3 justify-end">
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={() => {
                   setShowSendResetEmailModal(false);
                   setResetEmailSuccess(false);
@@ -623,7 +625,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
               >
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleSendResetEmail}>
+              <Button variant="primary" size="sm" onClick={handleSendResetEmail}>
                 Send Reset Link
               </Button>
             </div>

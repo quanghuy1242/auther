@@ -142,6 +142,7 @@ export default function RegisterClientPage() {
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="primary"
+                  size="sm"
                   onClick={() => router.push("/admin/clients")}
                   className="w-full"
                 >
@@ -231,10 +232,11 @@ export default function RegisterClientPage() {
                   type="button"
                   variant="ghost"
                   onClick={() => router.back()}
+                  size="sm"
                 >
                   Cancel
                 </Button>
-                <SubmitButton variant="primary" leftIcon="add">
+                <SubmitButton variant="primary" leftIcon="add" size="sm">
                   Register Client
                 </SubmitButton>
               </div>

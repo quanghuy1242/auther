@@ -168,6 +168,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         <div className="mt-10 flex justify-end gap-3 border-t border-white/10 pt-6">
           <Button
             variant="secondary"
+            size="sm"
             onClick={handleReset}
             disabled={!isDirty}
           >
@@ -175,6 +176,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
           </Button>
           <Button
             variant="primary"
+            size="sm"
             onClick={handleSave}
             disabled={!isDirty}
           >

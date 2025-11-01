@@ -153,6 +153,7 @@ export function ResetPasswordForm() {
           <Button 
             type="submit" 
             variant="primary" 
+            size="sm"
             className="w-full"
             disabled={isLoading || !!tokenError}
           >

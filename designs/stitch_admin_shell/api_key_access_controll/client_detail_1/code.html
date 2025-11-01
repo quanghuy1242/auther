@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Admin Portal - Client Details</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#1773cf",
+            "background-light": "#f6f7f8",
+            "background-dark": "#111921",
+          },
+          fontFamily: {
+            "display": ["Inter", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark">
+<div class="relative flex h-auto min-h-screen w-full flex-col">
+<div class="flex h-full min-w-0 flex-1">
+<div class="flex h-full min-h-screen w-64 flex-col bg-[#111a22] p-4 border-r border-slate-800">
+<div class="flex flex-col gap-4">
+<div class="flex items-center gap-3">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Abstract purple and blue gradient" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDEi_npRNCpRj1_SHNggAmAjO7OZqS7uBgeUEQ46Gs-qOYVmHluwN7zD0Dd--jTdGi_ByLiFUe_HKQUtzLdvaBMZZ7loVpBfTZZyfoDrjgLyNAR-6Bfp78qmMD1XP8UBawmRFhfsI8q5f_TyFcIDt_VWrSjuvejyIWhYpS4Qpg9Kzdla4pba3ui7jFkOE8UQ3BEPEWhf_q6_Js6HHkl0h9O8a-k6na30ZZ3sof6nqrGbsjuNgP3uJi-XZARzqoetBvqO_OgYLw7bww");'></div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-medium leading-normal">Admin Portal</h1>
+<p class="text-[#93adc8] text-sm font-normal leading-normal">OAuth Management</p>
+</div>
+</div>
+<div class="flex flex-col gap-2 mt-4">
+<div class="flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#243647] rounded-lg cursor-pointer">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<p class="text-sm font-medium leading-normal">Dashboard</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#243647]">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1">apps</span>
+<p class="text-white text-sm font-medium leading-normal">Applications</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#243647] rounded-lg cursor-pointer">
+<span class="material-symbols-outlined text-lg">group</span>
+<p class="text-sm font-medium leading-normal">Users</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#243647] rounded-lg cursor-pointer">
+<span class="material-symbols-outlined text-lg">badge</span>
+<p class="text-sm font-medium leading-normal">Roles</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#243647] rounded-lg cursor-pointer">
+<span class="material-symbols-outlined text-lg">settings</span>
+<p class="text-sm font-medium leading-normal">Settings</p>
+</div>
+</div>
+</div>
+</div>
+<main class="flex flex-1 flex-col p-6 lg:p-10">
+<div class="mx-auto flex w-full max-w-5xl flex-col gap-6">
+<div class="flex flex-wrap gap-2">
+<a class="text-[#93adc8] text-sm font-medium leading-normal hover:text-primary" href="#">Admin</a>
+<span class="text-[#93adc8] text-sm font-medium leading-normal">/</span>
+<a class="text-[#93adc8] text-sm font-medium leading-normal hover:text-primary" href="#">Applications</a>
+<span class="text-[#93adc8] text-sm font-medium leading-normal">/</span>
+<span class="text-white text-sm font-medium leading-normal">My Awesome App</span>
+</div>
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex min-w-72 flex-col gap-2">
+<div class="flex items-center gap-3">
+<p class="text-white text-3xl font-black leading-tight tracking-[-0.033em]">My Awesome App</p>
+<span class="bg-green-500/20 text-green-400 text-xs font-medium px-2.5 py-1 rounded-full">Active</span>
+</div>
+<p class="text-sm text-[#93adc8]">Client Type: Confidential</p>
+</div>
+<div class="flex flex-1 gap-3 flex-wrap justify-end">
+<button class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#243647] text-white text-sm font-bold leading-normal tracking-[0.015em] opacity-50 cursor-not-allowed">
+<span class="truncate">Save Changes</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-[#1A2530]/50 p-6">
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Client Metadata</h2>
+<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium text-[#93adc8]" for="clientId">Client ID</label>
+<div class="relative">
+<input class="w-full rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" id="clientId" readonly="" type="text" value="f7b3c1e8-a2d9-4b7c-8e6f-1a2b3c4d5e6f"/>
+</div>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium text-[#93adc8]" for="clientSecret">Client Secret</label>
+<div class="relative flex items-center">
+<input class="w-full rounded-lg border-slate-700 bg-[#111921] pl-3 pr-10 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" id="clientSecret" readonly="" type="password" value="********************************"/>
+<button class="absolute right-2.5 text-gray-400 hover:text-white" data-alt="Copy to clipboard">
+<span class="material-symbols-outlined text-lg">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-[#1A2530]/50 p-6">
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Configuration</h2>
+<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+<div class="flex flex-col gap-3">
+<label class="text-sm font-medium text-[#93adc8]">Authentication Methods</label>
+<div class="flex flex-col gap-2.5">
+<label class="flex items-center gap-3 cursor-pointer text-sm text-white">
+<input checked="" class="rounded border-slate-600 bg-[#243647] text-primary focus:ring-primary focus:ring-offset-background-dark" type="checkbox"/>
+<span>client_secret_post</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer text-sm text-white">
+<input class="rounded border-slate-600 bg-[#243647] text-primary focus:ring-primary focus:ring-offset-background-dark" type="checkbox"/>
+<span>private_key_jwt</span>
+</label>
+</div>
+</div>
+<div class="flex flex-col gap-3">
+<label class="text-sm font-medium text-[#93adc8]">Grant Types</label>
+<div class="flex flex-col gap-2.5">
+<label class="flex items-center gap-3 cursor-pointer text-sm text-white">
+<input checked="" class="rounded border-slate-600 bg-[#243647] text-primary focus:ring-primary focus:ring-offset-background-dark" type="checkbox"/>
+<span>authorization_code</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer text-sm text-white">
+<input checked="" class="rounded border-slate-600 bg-[#243647] text-primary focus:ring-primary focus:ring-offset-background-dark" type="checkbox"/>
+<span>refresh_token</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer text-sm text-white">
+<input class="rounded border-slate-600 bg-[#243647] text-primary focus:ring-primary focus:ring-offset-background-dark" type="checkbox"/>
+<span>client_credentials</span>
+</label>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-[#1A2530]/50 p-6">
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Redirect URIs</h2>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2">
+<input class="flex-1 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" type="text" value="https://app.example.com/oauth/callback"/>
+<button class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500" data-alt="Remove URI">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<input class="flex-1 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" type="text" value="https://staging.app.example.com/oauth/callback"/>
+<button class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500" data-alt="Remove URI">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</div>
+<button class="flex w-fit cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-[#243647] text-white text-sm font-bold leading-normal tracking-[0.015em] mt-2">
+<span class="material-symbols-outlined text-lg">add</span>
+<span class="truncate">Add URI</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-[#1A2530]/50 p-6">
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Access Control</h2>
+<p class="text-sm text-[#93adc8]">Control which users can authorize this application.</p>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium text-[#93adc8]" for="accessPolicy">Default Access Policy</label>
+<select class="w-full md:w-1/2 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" id="accessPolicy">
+<option value="all">Allow all users to authorize</option>
+<option value="restricted">Restrict access to specific users and groups</option>
+</select>
+</div>
+<div class="mt-4 flex flex-col gap-4 hidden"> 
+<div class="flex flex-wrap gap-3 items-center">
+<h3 class="text-white font-medium text-base flex-1">Assigned Users &amp; Groups</h3>
+<button class="flex w-fit cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-[#243647] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+<span class="material-symbols-outlined text-lg">person_add</span>
+<span class="truncate">Add User</span>
+</button>
+<button class="flex w-fit cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-[#243647] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+<span class="material-symbols-outlined text-lg">group_add</span>
+<span class="truncate">Add Group</span>
+</button>
+</div>
+<div class="overflow-x-auto rounded-lg border border-slate-800">
+<table class="w-full text-left text-sm">
+<thead class="bg-[#111921]/60">
+<tr>
+<th class="p-3 font-medium text-[#93adc8]">Name</th>
+<th class="p-3 font-medium text-[#93adc8]">Role</th>
+<th class="p-3 font-medium text-[#93adc8]">Access Level</th>
+<th class="p-3 font-medium text-[#93adc8]">Actions</th>
+</tr>
+</thead>
+<tbody class="text-white divide-y divide-slate-800">
+<tr>
+<td class="p-3 flex items-center gap-3">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDNgwS2HumirLrWJm1WgZJhTU74zZQuil3cco656n1tZXL47Tj28rQ-26YKeMEbE1vy7I9INUbk9uVfLTAP7pVxoxIJrD9YaCwweQXR7OlzfIYcAjROJqgIqAlguD15ndPzpyU2uKr8kO_k259PBziyy8WKziSPVUrODD_6S8vgpm1HqhU2JnVXEDyt4CoWDPXnkc768MTIZdY9NYNq3VtO0UA9v22VhfrAFHPeTtt-eVcriyyjX8MqoxEVbboXUC1WCoJNwjOIpno");'></div>
+<div class="flex flex-col">
+<span class="font-medium">Alice Johnson</span>
+<span class="text-xs text-[#93adc8]">alice@example.com</span>
+</div>
+</td>
+<td class="p-3 text-[#93adc8]">User</td>
+<td class="p-3 text-[#93adc8]">Read-only</td>
+<td class="p-3">
+<div class="flex items-center gap-2">
+<button class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-white" data-alt="Edit Access">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500" data-alt="Remove Access">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr>
+<td class="p-3 flex items-center gap-3">
+<div class="flex items-center justify-center rounded-full size-8 bg-slate-700 text-slate-400">
+<span class="material-symbols-outlined text-lg">group</span>
+</div>
+<div class="flex flex-col">
+<span class="font-medium">Engineering Team</span>
+<span class="text-xs text-[#93adc8]">24 members</span>
+</div>
+</td>
+<td class="p-3 text-[#93adc8]">Group</td>
+<td class="p-3 text-[#93adc8]">Admin</td>
+<td class="p-3">
+<div class="flex items-center gap-2">
+<button class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-white" data-alt="Edit Access">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500" data-alt="Remove Access">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-[#1A2530]/50 p-6">
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Permissions &amp; Scopes</h2>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm">
+<thead class="border-b border-slate-700 text-[#93adc8]">
+<tr>
+<th class="p-3 font-medium">Scope</th>
+<th class="p-3 font-medium">Description</th>
+</tr>
+</thead>
+<tbody class="text-white">
+<tr class="border-b border-slate-800">
+<td class="p-3 align-top font-mono">user.profile.read</td>
+<td class="p-3 align-top text-[#93adc8]">Read basic user profile information like name and email.</td>
+</tr>
+<tr class="border-b border-slate-800">
+<td class="p-3 align-top font-mono">user.profile.write</td>
+<td class="p-3 align-top text-[#93adc8]">Modify user profile information.</td>
+</tr>
+<tr>
+<td class="p-3 align-top font-mono">files.read</td>
+<td class="p-3 align-top text-[#93adc8]">Access and read files on behalf of the user.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="mt-6 flex flex-col gap-4">
+<h3 class="text-white text-base font-bold leading-tight tracking-[-0.015em]">Custom Resource Permissions</h3>
+<p class="text-sm text-[#93adc8]">Define fine-grained permissions for API resources. These will be used for both OAuth scopes and API key permissions.</p>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2">
+<input class="flex-1 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono" placeholder="Resource (e.g., projects)" type="text" value="projects"/>
+<input class="flex-1 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono" placeholder="Actions (e.g., read, write)" type="text" value="read, write"/>
+<button class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500" data-alt="Remove Permission">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<input class="flex-1 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono" placeholder="Resource (e.g., projects)" type="text" value="logs"/>
+<input class="flex-1 rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono" placeholder="Actions (e.g., read, write)" type="text" value="read"/>
+<button class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500" data-alt="Remove Permission">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</div>
+<button class="flex w-fit cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-[#243647] text-white text-sm font-bold leading-normal tracking-[0.015em] mt-2">
+<span class="material-symbols-outlined text-lg">add</span>
+<span class="truncate">Add Permission</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-800 bg-[#1A2530]/50">
+<details class="group">
+<summary class="flex items-center justify-between p-6 cursor-pointer">
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">API Key Management</h2>
+<span class="text-gray-400 group-open:rotate-180 transition-transform">
+<span class="material-symbols-outlined">expand_more</span>
+</span>
+</summary>
+<div class="px-6 pb-6 flex flex-col gap-6">
+<label class="flex items-center gap-3 cursor-pointer text-sm text-white">
+<input class="rounded border-slate-600 bg-[#243647] text-primary focus:ring-primary focus:ring-offset-background-dark" type="checkbox"/>
+<span>Enable API Keys for this Client</span>
+</label>
+<div class="border-t border-slate-800 pt-6 flex flex-col gap-6">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium text-[#93adc8]" for="apiKeyPermissions">Default API key permissions</label>
+<input class="w-full rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" id="apiKeyPermissions" placeholder="e.g., projects:read" type="text"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium text-[#93adc8]" for="apiKeyExpiration">Expiration policy</label>
+<select class="w-full rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" id="apiKeyExpiration">
+<option>30 Days</option>
+<option>90 Days</option>
+<option>1 Year</option>
+<option>Never expires</option>
+</select>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium text-[#93adc8]" for="apiKeyRateLimit">Rate limit (requests/min)</label>
+<input class="w-full rounded-lg border-slate-700 bg-[#111921] px-3 py-2 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm" id="apiKeyRateLimit" placeholder="e.g., 1000" type="number"/>
+</div>
+</div>
+<div>
+<h3 class="text-white font-medium text-base mb-3">Issued API Keys</h3>
+<div class="overflow-x-auto rounded-lg border border-slate-800">
+<table class="w-full text-left text-sm">
+<thead class="bg-[#111921]/60">
+<tr>
+<th class="p-3 font-medium text-[#93adc8]">Key ID</th>
+<th class="p-3 font-medium text-[#93adc8]">Owner</th>
+<th class="p-3 font-medium text-[#93adc8]">Created</th>
+<th class="p-3 font-medium text-[#93adc8]">Expires</th>
+<th class="p-3 font-medium text-[#93adc8]">Permissions</th>
+<th class="p-3 font-medium text-[#93adc8]">Status</th>
+<th class="p-3 font-medium text-[#93adc8]">Actions</th>
+</tr>
+</thead>
+<tbody class="text-white divide-y divide-slate-800">
+<tr>
+<td class="p-3 font-mono text-[#93adc8]">key_...a1b2</td>
+<td class="p-3 text-[#93adc8]">API Service</td>
+<td class="p-3 text-[#93adc8]">2024-03-15</td>
+<td class="p-3 text-[#93adc8]">2025-03-15</td>
+<td class="p-3 font-mono text-[#93adc8]">projects:read,write</td>
+<td class="p-3">
+<span class="bg-green-500/20 text-green-400 text-xs font-medium px-2 py-0.5 rounded-full">Active</span>
+</td>
+<td class="p-3">
+<button class="text-red-400 hover:text-red-500 text-sm font-medium">Revoke</button>
+</td>
+</tr>
+<tr>
+<td class="p-3 font-mono text-[#93adc8]">key_...c3d4</td>
+<td class="p-3 text-[#93adc8]">Nightly Build</td>
+<td class="p-3 text-[#93adc8]">2024-01-10</td>
+<td class="p-3 text-[#93adc8]">Never</td>
+<td class="p-3 font-mono text-[#93adc8]">*</td>
+<td class="p-3">
+<span class="bg-slate-500/20 text-slate-400 text-xs font-medium px-2 py-0.5 rounded-full">Revoked</span>
+</td>
+<td class="p-3">
+<span class="text-slate-500">-</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</details>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-red-500/30 bg-red-900/10 p-6">
+<h2 class="text-red-400 text-lg font-bold leading-tight tracking-[-0.015em]">Danger Zone</h2>
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+<div>
+<h3 class="font-bold text-white">Rotate Secret</h3>
+<p class="text-sm text-[#93adc8]">Once rotated, the old secret will be immediately invalidated. Update your application with the new secret.</p>
+</div>
+<button class="flex min-w-[84px] cursor-pointer items-center justify-center whitespace-nowrap overflow-hidden rounded-lg h-10 px-4 bg-[#243647] text-white text-sm font-bold leading-normal tracking-[0.015em] border border-slate-700 hover:border-slate-600">
+<span class="truncate">Rotate Secret</span>
+</button>
+</div>
+<div class="border-t border-red-500/20"></div>
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+<div>
+<h3 class="font-bold text-white">Delete Client</h3>
+<p class="text-sm text-[#93adc8]">This action is permanent and cannot be undone. This will permanently delete the client and all associated data.</p>
+</div>
+<button class="flex min-w-[84px] cursor-pointer items-center justify-center whitespace-nowrap overflow-hidden rounded-lg h-10 px-4 bg-red-600/80 hover:bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em]">
+<span class="truncate">Delete Client</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+</body></html>

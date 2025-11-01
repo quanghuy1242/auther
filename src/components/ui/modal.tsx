@@ -102,7 +102,7 @@ export function Modal({
                     <button
                       type="button"
                       className={cn(
-                        "rounded-lg p-1 text-gray-400",
+                        "rounded-lg p-1 text-gray-400 flex",
                         "hover:bg-white/5 hover:text-white",
                         "focus:outline-none focus:ring-2 focus:ring-white/50",
                         "transition-colors"

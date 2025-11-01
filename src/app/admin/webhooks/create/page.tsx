@@ -189,10 +189,10 @@ export default function CreateWebhookPage() {
             <WebhookSecretField secret={createdWebhook.secret} isNewSecret />
 
             <div className="flex flex-col sm:flex-row gap-3 justify-end pt-4">
-              <Button variant="secondary" onClick={() => router.push(`/admin/webhooks/${createdWebhook.id}`)}>
+              <Button variant="secondary" size="sm" onClick={() => router.push(`/admin/webhooks/${createdWebhook.id}`)}>
                 Edit Webhook
               </Button>
-              <Button variant="primary" onClick={handleDone}>
+              <Button variant="primary" size="sm" onClick={handleDone}>
                 Done
               </Button>
             </div>
@@ -220,7 +220,7 @@ export default function CreateWebhookPage() {
 
             {/* Form Actions */}
             <div className="flex flex-col sm:flex-row gap-3 justify-end pt-6 mt-6 border-t border-gray-700">
-              <Button type="button" variant="ghost" onClick={() => router.back()}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
                 Cancel
               </Button>
               <SubmitButton>Create Webhook</SubmitButton>

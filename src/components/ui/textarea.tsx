@@ -13,15 +13,15 @@ export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextArea
 
 const variantStyles: Record<InputVariant, string> = {
   default: cn(
-    "border-gray-700 bg-gray-900",
+    "border-gray-700 bg-input",
     "focus:border-white focus:ring-2 focus:ring-white/40"
   ),
   error: cn(
-    "border-red-500 bg-gray-900",
+    "border-red-500 bg-input",
     "focus:border-red-400 focus:ring-2 focus:ring-red-400/40"
   ),
   success: cn(
-    "border-green-500 bg-gray-900",
+    "border-green-500 bg-input",
     "focus:border-green-400 focus:ring-2 focus:ring-green-400/40"
   ),
 };

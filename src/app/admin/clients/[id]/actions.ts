@@ -92,7 +92,6 @@ export async function getClientById(clientId: string): Promise<ClientDetail | nu
             .map((url: string) => url.trim())
             .filter((url: string) => url.length > 0);
         }
-        console.log("Parsed redirectURLs:", redirectURLs, "from:", client.redirectURLs);
       }
     } catch (error) {
       console.error("Failed to parse redirectURLs:", client.redirectURLs, error);

@@ -144,6 +144,7 @@ export function SessionsClient({
               />
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={handleCleanupExpired}
                 leftIcon="delete_sweep"
                 disabled={isCleaningUp}
@@ -293,11 +294,12 @@ export function SessionsClient({
               </div>
             </div>
             <div className="flex gap-3 justify-end">
-              <Button variant="secondary" onClick={() => setRevokeModalSession(null)}>
+              <Button variant="secondary" size="sm" onClick={() => setRevokeModalSession(null)}>
                 Cancel
               </Button>
               <Button
                 variant="danger"
+                size="sm"
                 onClick={handleRevoke}
                 isLoading={isRevoking}
                 disabled={isRevoking}

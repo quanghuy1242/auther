@@ -148,6 +148,7 @@ export function UrlListBuilder({
           onClick={handleAdd}
           leftIcon="add"
           className="w-fit"
+          size="sm"
         >
           Add URI
         </Button>

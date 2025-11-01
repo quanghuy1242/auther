@@ -120,11 +120,11 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
 
                 {/* Form Actions */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between pt-6 mt-6 border-t border-gray-700">
-                  <Button type="button" variant="danger" onClick={handleDelete}>
+                  <Button type="button" variant="danger" size="sm" onClick={handleDelete}>
                     Delete Webhook
                   </Button>
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <Button type="button" variant="ghost" onClick={() => router.back()}>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
                       Cancel
                     </Button>
                     <SubmitButton>Save Changes</SubmitButton>

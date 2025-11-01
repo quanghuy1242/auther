@@ -56,15 +56,15 @@ export function Select({
   const selectedOption = options.find((opt) => opt.value === value);
 
   return (
-    <div className={cn("space-y-1", className)}>
+    <div className={cn("space-y-1 rounded-md", className)}>
       {label && <Label required={required}>{label}</Label>}
       <Listbox value={value} onChange={onChange} disabled={disabled} name={name}>
         {({ open }) => (
-          <div className="relative">
+          <div className="relative rounded-md">
             <ListboxButton
               className={cn(
                 "relative w-full rounded-md border px-3 py-2 text-left text-sm",
-                "bg-gray-900 text-white",
+                "bg-[#111921] text-white",
                 "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
                 "disabled:cursor-not-allowed disabled:opacity-50",
                 "transition-colors",
@@ -85,7 +85,7 @@ export function Select({
             <ListboxOptions
               className={cn(
                 "absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md",
-                "bg-gray-900 border border-gray-700",
+                "bg-sidebar border border-gray-700",
                 "py-1 text-sm shadow-lg",
                 "focus:outline-none"
               )}
@@ -99,8 +99,8 @@ export function Select({
                     cn(
                       "relative cursor-pointer select-none py-2 pl-3 pr-9",
                       "transition-colors",
-                      focus && "bg-[#1773cf] text-white",
-                      !focus && selected && "bg-[#1773cf]/20 text-white",
+                      focus && "bg-primary text-white",
+                      !focus && selected && "bg-primary/20 text-white",
                       !focus && !selected && "text-gray-200",
                       option.disabled && "cursor-not-allowed opacity-50"
                     )
