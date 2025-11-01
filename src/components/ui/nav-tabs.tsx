@@ -18,6 +18,7 @@ export interface NavTabsProps {
 /**
  * Navigation tabs component for route-based navigation
  * Uses Next.js Link for client-side navigation with active state detection
+ * Prefetches all tab routes for instant navigation
  * Styled to match the admin clients tab design
  * 
  * @example
@@ -42,6 +43,7 @@ export function NavTabs({ tabs, className }: NavTabsProps) {
             <Link
               key={tab.href}
               href={tab.href}
+              prefetch={true}
               className={cn(
                 "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative rounded-t-lg",
                 "hover:text-white hover:bg-slate-800/50",

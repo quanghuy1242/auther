@@ -1,5 +1,7 @@
 "use server";
 
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -135,47 +137,59 @@ export async function createClientApiKey(
 
 /**
  * List API keys for a client
+ * Cached to avoid redundant fetches
  */
-export async function listClientApiKeys(clientId: string) {
+export const listClientApiKeys = cache(async (clientId: string) => {
   try {
     const session = await requireAuth();
+    // Get headers outside of unstable_cache
+    const headersList = await headers();
 
-    // Check access
-    const access = await userClientAccessRepository.checkAccess(
-      session.user.id,
-      clientId
-    );
+    return await unstable_cache(
+      async (hdrs: ReturnType<typeof headers> extends Promise<infer T> ? T : never) => {
+        // Check access
+        const access = await userClientAccessRepository.checkAccess(
+          session.user.id,
+          clientId
+        );
 
-    if (!access.hasAccess) {
-      return [];
-    }
+        if (!access.hasAccess) {
+          return [];
+        }
 
-    // Get all user's API keys using Better Auth
-    const allKeys = await auth.api.listApiKeys({
-      headers: await headers(),
-    });
+        // Get all user's API keys using Better Auth
+        const allKeys = await auth.api.listApiKeys({
+          headers: hdrs,
+        });
 
-    if (!allKeys || !Array.isArray(allKeys)) {
-      return [];
-    }
+        if (!allKeys || !Array.isArray(allKeys)) {
+          return [];
+        }
 
-    // Filter keys for this specific client
-    return allKeys
-      .filter((key) => key.metadata?.oauth_client_id === clientId)
-      .map((key) => ({
-        id: key.id,
-        name: key.name ?? "Unnamed Key",
-        enabled: key.enabled ?? true,
-        permissions: (key.permissions as ResourcePermissions) ?? {},
-        expiresAt: key.expiresAt ? new Date(key.expiresAt) : null,
-        createdAt: key.createdAt ? new Date(key.createdAt) : new Date(),
-        metadata: key.metadata ?? {},
-      }));
+        // Filter keys for this specific client
+        return allKeys
+          .filter((key) => key.metadata?.oauth_client_id === clientId)
+          .map((key) => ({
+            id: key.id,
+            name: key.name ?? "Unnamed Key",
+            enabled: key.enabled ?? true,
+            permissions: (key.permissions as ResourcePermissions) ?? {},
+            expiresAt: key.expiresAt ? new Date(key.expiresAt) : null,
+            createdAt: key.createdAt ? new Date(key.createdAt) : new Date(),
+            metadata: key.metadata ?? {},
+          }));
+      },
+      [`client-api-keys-${clientId}`],
+      {
+        revalidate: 30,
+        tags: [`client-api-keys-${clientId}`, `client-${clientId}`],
+      }
+    )(headersList);
   } catch (error) {
     console.error("listClientApiKeys error:", error);
     return [];
   }
-}
+});
 
 /**
  * Revoke (delete) an API key
