@@ -2,7 +2,6 @@
  * Better Auth database hooks to emit webhook events
  */
 import type { BetterAuthOptions } from "better-auth";
-import { emitWebhookEvent } from "./delivery-service";
 
 export function createBetterAuthWebhookHooks(): BetterAuthOptions["databaseHooks"] {
   return {
@@ -10,6 +9,8 @@ export function createBetterAuthWebhookHooks(): BetterAuthOptions["databaseHooks
       create: {
         async after(user) {
           try {
+            // Lazy import to avoid circular dependency issues
+            const { emitWebhookEvent } = await import("./delivery-service");
             await emitWebhookEvent(user.id, "user.created", {
               id: user.id,
               email: user.email,
@@ -25,6 +26,8 @@ export function createBetterAuthWebhookHooks(): BetterAuthOptions["databaseHooks
       update: {
         async after(user) {
           try {
+            // Lazy import to avoid circular dependency issues
+            const { emitWebhookEvent } = await import("./delivery-service");
             await emitWebhookEvent(user.id, "user.updated", {
               id: user.id,
               email: user.email,
@@ -42,6 +45,8 @@ export function createBetterAuthWebhookHooks(): BetterAuthOptions["databaseHooks
     session: {
       create: {
         async after(session) {
+          // Lazy import to avoid circular dependency issues
+          const { emitWebhookEvent } = await import("./delivery-service");
           await emitWebhookEvent(session.userId, "session.created", {
             id: session.id,
             userId: session.userId,
@@ -57,6 +62,8 @@ export function createBetterAuthWebhookHooks(): BetterAuthOptions["databaseHooks
       create: {
         async after(account) {
           // This is when account is linked
+          // Lazy import to avoid circular dependency issues
+          const { emitWebhookEvent } = await import("./delivery-service");
           await emitWebhookEvent(account.userId, "account.linked", {
             id: account.id,
             userId: account.userId,
