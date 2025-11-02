@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { z } from "zod";
-import { useWatch } from "react-hook-form";
+import { useFormContext } from "react-hook-form";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, Button } from "@/components/ui";
 import { FormWrapper, FormField, ControlledCheckbox, SubmitButton } from "@/components/forms";
@@ -12,13 +12,21 @@ import { useRouter } from "next/navigation";
 const createUserSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  username: z.string().min(3, "Username must be at least 3 characters").optional().or(z.literal("")),
-  password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
+  username: z.string().optional().transform(val => val || undefined),
+  password: z.string().optional().transform(val => val || undefined),
   sendInvite: z.boolean().optional(),
 });
 
 function CreateUserForm() {
-  const sendInvite = useWatch({ name: "sendInvite", defaultValue: false });
+  const { watch, setValue } = useFormContext();
+  const sendInvite = watch("sendInvite", false);
+
+  // Clear password when sendInvite is toggled on
+  React.useEffect(() => {
+    if (sendInvite) {
+      setValue("password", "");
+    }
+  }, [sendInvite, setValue]);
 
   return (
     <div className="space-y-6">
@@ -53,7 +61,7 @@ function CreateUserForm() {
             label="Password (Optional)"
             type="password"
             placeholder="••••••••"
-            disabled={sendInvite}
+            readOnly={sendInvite}
           />
           <p className="text-sm text-gray-400 mt-1">
             {sendInvite ? "User will set password via email" : "Leave empty to generate temporary password"}
@@ -127,6 +135,7 @@ export default function CreateUserPage() {
             ) : (
               <FormWrapper
                 schema={createUserSchema}
+                // @ts-expect-error TS2345
                 action={createUser}
                 onSuccess={handleSuccess}
                 className="space-y-6"

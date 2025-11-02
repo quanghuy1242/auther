@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { session, user } from "@/db/schema";
 import { desc, eq, gt, count, and, lt } from "drizzle-orm";
 import { PaginatedResult } from "./base-repository";
+import { WebhookAwareRepository } from "./webhook-aware-repository";
 
 export interface SessionEntity {
   id: string;
@@ -33,8 +34,20 @@ export interface GetSessionsFilter {
 /**
  * Session Repository
  * Handles all database operations related to sessions
+ * Automatically emits webhook events for session operations
  */
-export class SessionRepository {
+export class SessionRepository extends WebhookAwareRepository {
+  constructor() {
+    super({
+      entityName: "session",
+      eventMapping: {
+        created: "session.created",
+        deleted: "session.deleted",
+      },
+      getUserId: (data: unknown) => (data as SessionEntity).userId,
+    });
+  }
+
   /**
    * Find session by ID
    */
@@ -283,16 +296,22 @@ export class SessionRepository {
   }
 
   /**
-   * Delete session by ID
+   * Delete session
+   * Automatically emits session.deleted webhook event
    */
-  async delete(sessionId: string): Promise<boolean> {
-    try {
-      await db.delete(session).where(eq(session.id, sessionId));
-      return true;
-    } catch (error) {
-      console.error("SessionRepository.delete error:", error);
-      return false;
-    }
+  async delete(sessionId: string, options: { silent?: boolean } = {}): Promise<boolean> {
+    const sessionData = await this.findById(sessionId);
+    if (!sessionData) return false;
+
+    return this.deleteWithWebhook(sessionData, async () => {
+      try {
+        await db.delete(session).where(eq(session.id, sessionId));
+        return true;
+      } catch (error) {
+        console.error("SessionRepository.delete error:", error);
+        return false;
+      }
+    }, options);
   }
 
   /**

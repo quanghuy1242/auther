@@ -12,6 +12,9 @@ export async function sendVerificationEmail(
   verificationUrl: string
 ): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
+    if (process.env.SKIP_EMAIL_SENDING === 'true') {
+      return { success: true, emailId: 'test-id' };
+    }
     const resend = getResendClient();
     
     const emailHtml = await render(
@@ -54,6 +57,9 @@ export async function sendPasswordResetEmail(
   resetUrl: string
 ): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
+    if (process.env.SKIP_EMAIL_SENDING === 'true') {
+      return { success: true, emailId: 'test-id' };
+    }
     const resend = getResendClient();
     
     const emailHtml = await render(

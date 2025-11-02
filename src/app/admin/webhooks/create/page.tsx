@@ -21,9 +21,20 @@ import { createWebhook } from "../actions";
 // Form schema
 const createWebhookSchema = z.object({
   displayName: z.string().min(1, "Display name is required"),
-  url: z.string().url("Please enter a valid URL"),
+  url: z.string().url("Please enter a valid URL").refine(
+    (url) => {
+      // Allow HTTPS, localhost, Docker network URLs, and local IPs
+      return (
+        url.startsWith("https://") || 
+        url.startsWith("http://localhost") ||
+        url.startsWith("http://127.0.0.1") ||
+        /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url)
+      );
+    },
+    "URL must use HTTPS or be a valid local/Docker network URL"
+  ),
   isActive: z.boolean().default(true),
-  events: z.array(z.string()).min(1, "Please select at least one event"),
+  eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
   requestMethod: z.enum(["POST", "PUT"]).default("POST"),
@@ -58,7 +69,8 @@ function WebhookFormContent() {
           name="displayName"
           label="Display Name"
           placeholder="My Production Webhook"
-          helperText="Optional friendly name for this webhook"
+          required
+          helperText="Friendly name for this webhook"
         />
         <FormField
           name="url"
@@ -83,7 +95,7 @@ function WebhookFormContent() {
 
       {/* Event Subscriptions */}
       <EventSelector
-        name="events"
+        name="eventTypes"
         control={form.control}
         events={WEBHOOK_EVENT_TYPES.map((e) => ({
           value: e.value,
@@ -152,6 +164,17 @@ export default function CreateWebhookPage() {
     null
   );
 
+  // Define default values that match the schema defaults
+  const defaultValues = {
+    displayName: "",
+    url: "",
+    isActive: true,
+    eventTypes: [] as string[],
+    retryPolicy: "standard" as const,
+    deliveryFormat: "json" as const,
+    requestMethod: "POST" as const,
+  };
+
   const handleSubmit = async (prevState: unknown, formData: FormData) => {
     return await createWebhook(prevState as Parameters<typeof createWebhook>[0], formData);
   };
@@ -215,6 +238,7 @@ export default function CreateWebhookPage() {
             schema={createWebhookSchema}
             action={handleSubmit}
             onSuccess={handleSuccess}
+            defaultValues={defaultValues}
           >
             <WebhookFormContent />
 

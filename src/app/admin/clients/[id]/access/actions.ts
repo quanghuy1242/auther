@@ -1,7 +1,5 @@
 "use server";
 
-import { cache } from "react";
-import { revalidateTag, unstable_cache } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/lib/session";
 import {
@@ -65,10 +63,6 @@ export async function assignUserToClient(
       expiresAt,
     });
 
-    revalidateTag(`client-users-${validated.clientId}`, "max");
-    revalidateTag(`client-metadata-${validated.clientId}`, "max");
-    revalidateTag(`client-${validated.clientId}`, "max");
-
     return { success: true };
   } catch (error) {
     console.error("assignUserToClient error:", error);
@@ -109,10 +103,6 @@ export async function removeUserFromClient(
         error: "Failed to remove user access",
       };
     }
-
-    revalidateTag(`client-users-${clientId}`, "max");
-    revalidateTag(`client-metadata-${clientId}`, "max");
-    revalidateTag(`client-${clientId}`, "max");
 
     return { success: true };
   } catch (error) {
@@ -175,10 +165,6 @@ export async function updateUserAccess(
       };
     }
 
-    revalidateTag(`client-users-${clientId}`, "max");
-    revalidateTag(`client-metadata-${clientId}`, "max");
-    revalidateTag(`client-${clientId}`, "max");
-
     return { success: true };
   } catch (error) {
     console.error("updateUserAccess error:", error);
@@ -192,53 +178,43 @@ export async function updateUserAccess(
 /**
  * Get all users with access to a client
  * Returns enriched data with user details
- * Cached to avoid redundant fetches
  */
-export const getClientUsers = cache(async (clientId: string) => {
+export async function getClientUsers(clientId: string) {
   try {
     await requireAuth();
     
-    return await unstable_cache(
-      async () => {
-        const accessList = await userClientAccessRepository.findByClient(clientId);
-        
-        // Fetch user details for each access record
-        const { user } = await import("@/db/schema");
-        const { db } = await import("@/lib/db");
-        const { inArray } = await import("drizzle-orm");
-        
-        if (accessList.length === 0) return [];
-        
-        const userIds = accessList.map((a) => a.userId);
-        const users = await db.select().from(user).where(inArray(user.id, userIds));
-        
-        // Create a map for quick lookup
-        const userMap = new Map(users.map((u) => [u.id, u]));
-        
-        // Merge access data with user data
-        return accessList.map((access) => {
-          const userData = userMap.get(access.userId);
-          return {
-            userId: access.userId,
-            userName: userData?.name ?? null,
-            userEmail: userData?.email ?? "unknown@example.com",
-            accessLevel: access.accessLevel,
-            expiresAt: access.expiresAt,
-            createdAt: access.createdAt,
-          };
-        });
-      },
-      [`client-users-${clientId}`],
-      {
-        revalidate: 30,
-        tags: [`client-users-${clientId}`, `client-${clientId}`],
-      }
-    )();
+    const accessList = await userClientAccessRepository.findByClient(clientId);
+    
+    // Fetch user details for each access record
+    const { user } = await import("@/db/schema");
+    const { db } = await import("@/lib/db");
+    const { inArray } = await import("drizzle-orm");
+    
+    if (accessList.length === 0) return [];
+    
+    const userIds = accessList.map((a) => a.userId);
+    const users = await db.select().from(user).where(inArray(user.id, userIds));
+    
+    // Create a map for quick lookup
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    
+    // Merge access data with user data
+    return accessList.map((access) => {
+      const userData = userMap.get(access.userId);
+      return {
+        userId: access.userId,
+        userName: userData?.name ?? null,
+        userEmail: userData?.email ?? "unknown@example.com",
+        accessLevel: access.accessLevel,
+        expiresAt: access.expiresAt,
+        createdAt: access.createdAt,
+      };
+    });
   } catch (error) {
     console.error("getClientUsers error:", error);
     return [];
   }
-});
+}
 
 // ============================================================================
 // Client Metadata & Access Policy
@@ -297,10 +273,6 @@ export async function updateClientAccessPolicy(
       }
     }
 
-    revalidateTag(`client-users-${validated.clientId}`, "max");
-    revalidateTag(`client-metadata-${validated.clientId}`, "max");
-    revalidateTag(`client-${validated.clientId}`, "max");
-
     return { success: true };
   } catch (error) {
     console.error("updateClientAccessPolicy error:", error);
@@ -314,41 +286,31 @@ export async function updateClientAccessPolicy(
 /**
  * Get client's metadata with backward compatibility
  * For existing clients without metadata, returns safe defaults (no restriction mode)
- * Cached to avoid redundant fetches
  */
-export const getClientMetadata = cache(async (clientId: string) => {
+export async function getClientMetadata(clientId: string) {
   try {
     await requireAuth();
     
-    return await unstable_cache(
-      async () => {
-        const metadata = await oauthClientMetadataRepository.findByClientId(clientId);
-        
-        // If no metadata exists (existing clients), return defaults
-        // This ensures backward compatibility - clients work in "all_users" mode by default
-        if (!metadata) {
-          return {
-            accessPolicy: "all_users" as const,
-            allowsApiKeys: false,
-            allowedResources: null,
-            defaultApiKeyPermissions: null,
-          };
-        }
-        
-        // Return existing metadata in the format expected by UI
-        return {
-          accessPolicy: metadata.accessPolicy,
-          allowsApiKeys: metadata.allowsApiKeys,
-          allowedResources: metadata.allowedResources,
-          defaultApiKeyPermissions: metadata.defaultApiKeyPermissions,
-        };
-      },
-      [`client-metadata-${clientId}`],
-      {
-        revalidate: 60,
-        tags: [`client-metadata-${clientId}`, `client-${clientId}`],
-      }
-    )();
+    const metadata = await oauthClientMetadataRepository.findByClientId(clientId);
+    
+    // If no metadata exists (existing clients), return defaults
+    // This ensures backward compatibility - clients work in "all_users" mode by default
+    if (!metadata) {
+      return {
+        accessPolicy: "all_users" as const,
+        allowsApiKeys: false,
+        allowedResources: null,
+        defaultApiKeyPermissions: null,
+      };
+    }
+    
+    // Return existing metadata in the format expected by UI
+    return {
+      accessPolicy: metadata.accessPolicy,
+      allowsApiKeys: metadata.allowsApiKeys,
+      allowedResources: metadata.allowedResources,
+      defaultApiKeyPermissions: metadata.defaultApiKeyPermissions,
+    };
   } catch (error) {
     console.error("getClientMetadata error:", error);
     // Return safe defaults on error
@@ -359,7 +321,7 @@ export const getClientMetadata = cache(async (clientId: string) => {
       defaultApiKeyPermissions: null,
     };
   }
-});
+}
 
 // ============================================================================
 // User Group Management
@@ -395,8 +357,6 @@ export async function createUserGroup(
       description: validated.description,
     });
 
-    revalidateTag("groups", "max");
-
     return { success: true, groupId: group.id };
   } catch (error) {
     console.error("createUserGroup error:", error);
@@ -428,8 +388,6 @@ export async function addUserToGroup(
 
     await userGroupRepository.addMember(groupId, userId);
 
-    revalidateTag("groups", "max");
-
     return { success: true };
   } catch (error) {
     console.error("addUserToGroup error:", error);
@@ -452,8 +410,6 @@ export async function removeUserFromGroup(
 
     await userGroupRepository.removeMember(groupId, userId);
 
-    revalidateTag("groups", "max");
-
     return { success: true };
   } catch (error) {
     console.error("removeUserFromGroup error:", error);
@@ -466,40 +422,30 @@ export async function removeUserFromGroup(
 
 /**
  * Get all groups with member counts
- * Cached to avoid redundant fetches
  */
-export const getAllGroups = cache(async () => {
+export async function getAllGroups() {
   try {
     await requireAuth();
     
-    return await unstable_cache(
-      async () => {
-        const groups = await userGroupRepository.findAll();
-        
-        // Add member counts
-        const groupsWithCounts = await Promise.all(
-          groups.map(async (group) => {
-            const members = await userGroupRepository.getMembers(group.id);
-            return {
-              ...group,
-              memberCount: members.length,
-            };
-          })
-        );
-        
-        return groupsWithCounts;
-      },
-      ['all-groups'],
-      {
-        revalidate: 60,
-        tags: ['groups'],
-      }
-    )();
+    const groups = await userGroupRepository.findAll();
+    
+    // Add member counts
+    const groupsWithCounts = await Promise.all(
+      groups.map(async (group) => {
+        const members = await userGroupRepository.getMembers(group.id);
+        return {
+          ...group,
+          memberCount: members.length,
+        };
+      })
+    );
+    
+    return groupsWithCounts;
   } catch (error) {
     console.error("getAllGroups error:", error);
     return [];
   }
-});
+}
 
 /**
  * Get groups for a specific user

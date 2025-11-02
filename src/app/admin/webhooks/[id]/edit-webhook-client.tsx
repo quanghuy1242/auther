@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -38,9 +38,20 @@ import { WebhookFormContent } from "./webhook-form-content";
 // Form schema matching backend implementation
 const updateWebhookSchema = z.object({
   displayName: z.string().optional(),
-  url: z.string().url("Please enter a valid URL"),
+  url: z.string().url("Please enter a valid URL").refine(
+    (url) => {
+      // Allow HTTPS, localhost, Docker network URLs, and local IPs
+      return (
+        url.startsWith("https://") || 
+        url.startsWith("http://localhost") ||
+        url.startsWith("http://127.0.0.1") ||
+        /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url)
+      );
+    },
+    "URL must use HTTPS or be a valid local/Docker network URL"
+  ),
   isActive: z.boolean().default(true),
-  events: z.array(z.string()).min(1, "Please select at least one event"),
+  eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
 });
 
@@ -52,6 +63,16 @@ interface EditWebhookClientProps {
 export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClientProps) {
   const router = useRouter();
   const [regeneratedSecret, setRegeneratedSecret] = useState<string | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
+  // Prepare default values from webhook data - memoized to prevent infinite loops
+  const defaultValues = useMemo(() => ({
+    displayName: webhook.displayName || "",
+    url: webhook.url,
+    isActive: webhook.isActive,
+    eventTypes: webhook.subscriptions.map((sub) => sub.eventType),
+    retryPolicy: webhook.retryPolicy as "none" | "standard" | "aggressive",
+  }), [webhook.displayName, webhook.url, webhook.isActive, webhook.subscriptions, webhook.retryPolicy]);
 
   const handleSubmit = async (
     prevState: WebhookFormState,
@@ -67,9 +88,13 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     return await handleSubmit(prevState as WebhookFormState, formData);
   };
 
-  const handleSuccess = () => {
+  // Memoize handleSuccess to prevent infinite re-renders
+  const handleSuccess = useCallback(() => {
+    setShowSuccessMessage(true);
+    // Hide message after 3 seconds
+    setTimeout(() => setShowSuccessMessage(false), 3000);
     router.refresh();
-  };
+  }, [router]);
 
   const handleRegenerateSecret = async () => {
     const result = await regenerateSecret(webhook.id);
@@ -93,6 +118,13 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
       label: "Settings",
       content: (
         <div className="space-y-6">
+          {/* Success Message */}
+          {showSuccessMessage && (
+            <Alert variant="success" title="Changes saved successfully" onClose={() => setShowSuccessMessage(false)}>
+              Your webhook settings have been updated.
+            </Alert>
+          )}
+
           {/* Secret Section */}
           <Card>
             <CardContent>
@@ -115,6 +147,8 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
                 schema={updateWebhookSchema}
                 action={handleSubmitWrapper}
                 onSuccess={handleSuccess}
+                defaultValues={defaultValues}
+                resetOnSuccess={false}
               >
                 <WebhookFormContent />
 

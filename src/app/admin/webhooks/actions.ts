@@ -70,8 +70,16 @@ const webhookSchema = z.object({
     .string()
     .url("Must be a valid URL")
     .refine(
-      (url) => url.startsWith("https://") || url.startsWith("http://localhost"),
-      "URL must use HTTPS (or http://localhost for development)"
+      (url) => {
+        // Allow HTTPS, localhost, and Docker network URLs (e.g., http://webhook-tester:8080)
+        return (
+          url.startsWith("https://") || 
+          url.startsWith("http://localhost") ||
+          url.startsWith("http://127.0.0.1") ||
+          /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url) // Docker service names with port
+        );
+      },
+      "URL must use HTTPS or be a valid local/Docker network URL (http://localhost, http://service-name:port)"
     ),
   isActive: z.boolean().default(true),
   eventTypes: z

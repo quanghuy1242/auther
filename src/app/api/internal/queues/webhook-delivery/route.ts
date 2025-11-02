@@ -68,7 +68,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    await verifyQStashSignature(body, signature, request.url);
+    // Use the URL that QStash used to send the request (from QUEUE_TARGET_BASE_URL)
+    // Not request.url, which would be http://localhost:3000 instead of http://app:3000
+    const queueBaseUrl = env.QUEUE_TARGET_BASE_URL ?? 
+      (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined) ?? 
+      "http://localhost:3000";
+    const verifyUrl = `${queueBaseUrl}/api/internal/queues/webhook-delivery`;
+    
+    await verifyQStashSignature(body, signature, verifyUrl);
   } catch (error) {
     console.error("[webhook-delivery] Invalid QStash signature:", error);
     return new Response("invalid-signature", { status: 401 });
@@ -101,25 +108,12 @@ export async function POST(request: Request) {
   const attemptCount = (currentDelivery?.attemptCount || 0) + 1;
 
   // Deliver webhook
-  console.log("[webhook-delivery] Delivering webhook:", {
-    eventId,
-    endpointId,
-    deliveryId,
-    attemptCount,
-  });
-
   const result = await deliverWebhook(eventId, endpointId);
 
   // Record result
   await recordDeliveryResult(deliveryId, result, attemptCount);
 
   if (result.success) {
-    console.log("[webhook-delivery] Delivery successful:", {
-      eventId,
-      endpointId,
-      responseCode: result.responseCode,
-      durationMs: result.durationMs,
-    });
     return new Response("delivered", { status: 200 });
   } else {
     console.error("[webhook-delivery] Delivery failed:", {

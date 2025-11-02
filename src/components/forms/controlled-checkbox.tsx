@@ -31,14 +31,22 @@ export function ControlledCheckbox({ name, label, description, disabled, classNa
       name={name}
       control={control}
       render={({ field }) => (
-        <Checkbox
-          checked={field.value || false}
-          onChange={field.onChange}
-          label={label}
-          description={description}
-          disabled={disabled}
-          className={className}
-        />
+        <>
+          {/* Hidden input for form submission */}
+          <input
+            type="hidden"
+            name={name}
+            value={field.value ? "true" : "false"}
+          />
+          <Checkbox
+            checked={field.value || false}
+            onChange={field.onChange}
+            label={label}
+            description={description}
+            disabled={disabled}
+            className={className}
+          />
+        </>
       )}
     />
   );
