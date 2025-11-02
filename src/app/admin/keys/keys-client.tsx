@@ -6,6 +6,7 @@ import { rotateKeys, type JwksKey } from "./actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
 import { formatDate, formatAge } from "@/lib/utils/date-formatter";
 import { Alert } from "@/components/layout";
+import { toast } from "@/lib/toast";
 
 interface KeysClientProps {
   initialKeys: JwksKey[];
@@ -15,30 +16,27 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
   const keys = initialKeys;
   const [showRotateModal, setShowRotateModal] = React.useState(false);
   const [isRotating, setIsRotating] = React.useState(false);
-  const [rotationMessage, setRotationMessage] = React.useState<string | null>(null);
 
   const handleRotateKeys = async () => {
     setIsRotating(true);
-    setRotationMessage(null);
 
     try {
       const result = await rotateKeys();
       
       if (result.success) {
-        setRotationMessage(result.message || "Keys rotated successfully");
+        toast.success(result.message || "Keys rotated successfully");
+        setShowRotateModal(false);
         // Refresh the page to show new keys
-        window.location.reload();
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       } else {
-        setRotationMessage(result.message || "Failed to rotate keys");
+        toast.error(result.message || "Failed to rotate keys");
       }
     } catch {
-      setRotationMessage("An error occurred while rotating keys");
+      toast.error("An error occurred while rotating keys");
     } finally {
       setIsRotating(false);
-      setTimeout(() => {
-        setShowRotateModal(false);
-        setRotationMessage(null);
-      }, 2000);
     }
   };
 
@@ -162,18 +160,6 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
         description="This will generate a new signing key and prune old keys beyond the retention window. Active tokens will continue to work during the transition."
       >
         <div className="space-y-4">
-          {rotationMessage && (
-            <div
-              className={`p-3 rounded-lg ${
-                rotationMessage.includes("success")
-                  ? "bg-green-500/10 text-green-400"
-                  : "bg-red-500/10 text-red-400"
-              }`}
-            >
-              <p className="text-sm">{rotationMessage}</p>
-            </div>
-          )}
-
           <div className="flex gap-3 justify-end">
             <Button
               variant="ghost"

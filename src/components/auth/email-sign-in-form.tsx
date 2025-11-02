@@ -7,6 +7,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { emailPasswordSignIn } from "@/app/sign-in/actions";
 import type { EmailSignInState } from "@/app/sign-in/actions";
 import { Input, Button } from "@/components/ui";
+import { toast } from "@/lib/toast";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -51,8 +52,18 @@ export function EmailSignInForm() {
   useEffect(() => {
     if (state.redirectUrl) {
       window.location.assign(state.redirectUrl);
+    } else if (state.error) {
+      toast.error(state.error);
+    } else if (state.success) {
+      toast.success("You are signed in");
     }
-  }, [state.redirectUrl]);
+  }, [state.redirectUrl, state.error, state.success]);
+
+  useEffect(() => {
+    if (errorMessage) {
+      toast.error(errorMessage);
+    }
+  }, [errorMessage]);
 
   return (
     <form action={action} className="space-y-4">
@@ -78,19 +89,6 @@ export function EmailSignInForm() {
         autoComplete="current-password"
         required
       />
-      
-      {errorMessage ? (
-        <p className="text-sm text-red-400">{errorMessage}</p>
-      ) : null}
-      
-      {state.error ? (
-        <p className="text-sm text-red-400">{state.error}</p>
-      ) : null}
-      {state.error ? null : state.redirectUrl ? (
-        <p className="text-sm text-emerald-400">Redirecting…</p>
-      ) : state.success ? (
-        <p className="text-sm text-emerald-400">You are signed in.</p>
-      ) : null}
       
       <SubmitButton />
     </form>
