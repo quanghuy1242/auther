@@ -1,0 +1,241 @@
+services:
+  # LibSQL Database (Turso replacement for local development)
+  libsql:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    platform: linux/amd64
+    container_name: auther-dev-libsql
+    ports:
+      - "8080:8080"
+      - "5001:5001"
+    environment:
+      - SQLD_NODE=primary
+    volumes:
+      - libsql-data:/var/lib/sqld
+    networks:
+      - auther-dev-network
+
+  # Redis (Upstash Redis replacement)
+  redis:
+    image: redis:7-alpine
+    container_name: auther-dev-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning --requirepass dev-redis-password
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "dev-redis-password", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - auther-dev-network
+
+  # QStash Local Development Server (Upstash QStash replacement)
+  qstash:
+    image: public.ecr.aws/upstash/qstash:latest
+    container_name: auther-dev-qstash
+    ports:
+      - "8081:8080"
+    command: qstash dev
+    environment:
+      - QSTASH_DEV_PORT=8080
+      - QSTASH_DEV_QUOTA=payg
+    networks:
+      - auther-dev-network
+
+  # MailHog (Resend replacement for email testing)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: auther-dev-mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    networks:
+      - auther-dev-network
+
+  # Webhook.site Local Alternative - Request Bin for webhook testing
+  webhook-tester:
+    image: tarampampam/webhook-tester:latest
+    container_name: auther-dev-webhook-tester
+    ports:
+      - "8082:8080"  # Web UI to view webhook requests
+    environment:
+      - LISTEN_ADDR=0.0.0.0
+      - LISTEN_PORT=8080
+      - CREATE_SESSION=http://localhost:8082/
+      - IGNORE_FAVICON=true
+      - MAX_REQUEST_BODY_SIZE=65536
+    networks:
+      - auther-dev-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Database Migration (runs once to create tables)
+  db-migrate:
+    image: node:20-alpine
+    container_name: auther-dev-db-migrate
+    working_dir: /app
+    environment:
+      - NODE_ENV=development
+      - BETTER_AUTH_SECRET=dev-secret-must-be-at-least-32-characters-long
+      - BETTER_AUTH_DATABASE_URL=http://libsql:8080
+      - BETTER_AUTH_DATABASE_AUTH_TOKEN=
+    volumes:
+      - ./drizzle.config.ts:/app/drizzle.config.ts:ro
+      - ./src:/app/src:ro
+      - ./drizzle:/app/drizzle:ro
+      - ./node_modules:/app/node_modules:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    command: sh -c "echo '📦 Pushing database schema...' && node_modules/.bin/drizzle-kit push && echo '✅ Database schema ready'"
+    depends_on:
+      libsql:
+        condition: service_started
+    networks:
+      - auther-dev-network
+    restart: "no"
+
+  # Next.js Application (running in development mode with hot-reload)
+  app:
+    image: node:20-alpine
+    container_name: auther-dev-app
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - BETTER_AUTH_SECRET=dev-secret-must-be-at-least-32-characters-long
+      - BETTER_AUTH_DATABASE_URL=http://libsql:8080
+      - BETTER_AUTH_DATABASE_AUTH_TOKEN=
+      - JWT_ISSUER=http://localhost:3000
+      - JWT_AUDIENCE=payload-admin,test-client,payload-spa
+      - PAYLOAD_CLIENT_ID=test-payload-confidential-client
+      - PAYLOAD_CLIENT_SECRET=test-payload-confidential-secret
+      - PAYLOAD_REDIRECT_URI=http://localhost:3001/oauth/callback
+      - PAYLOAD_SPA_CLIENT_ID=test-payload-spa-client
+      - PAYLOAD_SPA_REDIRECT_URIS=http://localhost:3002/auth/callback
+      - PAYLOAD_SPA_LOGOUT_URIS=http://localhost:3002/app
+      - PAYLOAD_PREVIEW_ORIGIN_PATTERNS=
+      - PRODUCTION_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - CRON_SECRET=dev-internal-rotate-secret
+      - QSTASH_TOKEN=eyJVc2VySUQiOiJkZWZhdWx0VXNlciIsIlBhc3N3b3JkIjoiZGVmYXVsdFBhc3N3b3JkIn0=
+      - QSTASH_URL=http://qstash:8080
+      - QSTASH_CURRENT_SIGNING_KEY=sig_7kYjw48mhY7kAjqNGcy6cr29RJ6r
+      - QSTASH_NEXT_SIGNING_KEY=sig_5ZB6DVzB1wjE8S6rZ7eenA8Pdnhs
+      - QUEUE_TARGET_BASE_URL=http://app:3000
+      - UPSTASH_REDIS_REST_URL=http://redis:6379
+      - UPSTASH_REDIS_REST_TOKEN=dev-redis-password
+      - PAYLOAD_WEBHOOK_URL=http://localhost:3001/api/webhooks/better-auth
+      - PAYLOAD_OUTBOUND_WEBHOOK_SECRET=dev-payload-outbound-webhook-secret-32chars
+      - PAYLOAD_INBOUND_WEBHOOK_SECRET=dev-payload-inbound-webhook-secret-32chars
+      - RESEND_API_KEY=dev-resend-key
+      - EMAIL_FROM=noreply@dev.local
+      - EMAIL_FROM_NAME=Auther Dev
+      - SKIP_EMAIL_SENDING=true
+      # Enable Turbopack for faster dev builds (Next.js 13+)
+      - TURBOPACK=1
+    volumes:
+      # Mount source code for hot-reloading (src/ contains app/ directory)
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./package.json:/app/package.json:ro
+      - ./next.config.ts:/app/next.config.ts:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./tailwind.config.js:/app/tailwind.config.js:ro
+      - ./postcss.config.mjs:/app/postcss.config.mjs:ro
+      - ./scripts:/app/scripts:ro
+      - ./drizzle.config.ts:/app/drizzle.config.ts:ro
+      - ./drizzle:/app/drizzle:ro
+      # Mount node_modules as read-only
+      - ./node_modules:/app/node_modules:ro
+      # Use a named volume for .next to improve performance and avoid permission issues
+      - next-dev-cache:/app/.next
+    command: sh -c "apk add --no-cache netcat-openbsd > /dev/null 2>&1 && echo '🚀 Starting Next.js development server with hot-reload...' && node_modules/.bin/next dev -p 3000"
+    depends_on:
+      libsql:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      qstash:
+        condition: service_started
+      mailhog:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s  # Dev mode takes longer to start
+    networks:
+      - auther-dev-network
+
+  # Database Seeder (creates admin user automatically)
+  db-seed:
+    image: node:20-alpine
+    container_name: auther-dev-db-seed
+    working_dir: /app
+    environment:
+      - NODE_ENV=development
+      - BETTER_AUTH_SECRET=dev-secret-must-be-at-least-32-characters-long
+      - BETTER_AUTH_DATABASE_URL=http://libsql:8080
+      - BETTER_AUTH_DATABASE_AUTH_TOKEN=
+      - JWT_ISSUER=http://localhost:3000
+      - JWT_AUDIENCE=payload-admin,test-client,payload-spa
+      - PAYLOAD_CLIENT_ID=test-payload-confidential-client
+      - PAYLOAD_CLIENT_SECRET=test-payload-confidential-secret
+      - PAYLOAD_REDIRECT_URI=http://localhost:3001/oauth/callback
+      - PAYLOAD_SPA_CLIENT_ID=test-payload-spa-client
+      - PAYLOAD_SPA_REDIRECT_URIS=http://localhost:3002/auth/callback
+      - PAYLOAD_SPA_LOGOUT_URIS=http://localhost:3002/app
+      - PAYLOAD_PREVIEW_ORIGIN_PATTERNS=
+      - PRODUCTION_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - CRON_SECRET=dev-internal-rotate-secret
+      - QSTASH_TOKEN=eyJVc2VySUQiOiJkZWZhdWx0VXNlciIsIlBhc3N3b3JkIjoiZGVmYXVsdFBhc3N3b3JkIn0=
+      - QSTASH_URL=http://qstash:8080
+      - QSTASH_CURRENT_SIGNING_KEY=sig_7kYjw48mhY7kAjqNGcy6cr29RJ6r
+      - QSTASH_NEXT_SIGNING_KEY=sig_5ZB6DVzB1wjE8S6rZ7eenA8Pdnhs
+      - QUEUE_TARGET_BASE_URL=http://app:3000
+      - UPSTASH_REDIS_REST_URL=http://redis:6379
+      - UPSTASH_REDIS_REST_TOKEN=dev-redis-password
+      - PAYLOAD_WEBHOOK_URL=http://localhost:3001/api/webhooks/better-auth
+      - PAYLOAD_OUTBOUND_WEBHOOK_SECRET=dev-payload-outbound-webhook-secret-32chars
+      - PAYLOAD_INBOUND_WEBHOOK_SECRET=dev-payload-inbound-webhook-secret-32chars
+      - RESEND_API_KEY=dev-resend-key
+      - EMAIL_FROM=noreply@dev.local
+      - EMAIL_FROM_NAME=Auther Dev
+      - SKIP_EMAIL_SENDING=true
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./src:/app/src:ro
+      - ./node_modules:/app/node_modules:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./drizzle.config.ts:/app/drizzle.config.ts:ro
+      - ./drizzle:/app/drizzle:ro
+    command: sh -c "echo '🌱 Seeding admin user...' && sleep 5 && node_modules/.bin/tsx scripts/seed-admin-user.ts && echo '🌱 Seeding OAuth clients...' && node_modules/.bin/tsx scripts/seed-oauth-clients-for-tests.ts && echo '✅ Seeding complete'"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      app:
+        condition: service_started
+    networks:
+      - auther-dev-network
+    restart: "no"
+
+networks:
+  auther-dev-network:
+    name: auther-dev-network
+    driver: bridge
+
+volumes:
+  libsql-data:
+  redis-data:
+  next-dev-cache:  # Separate volume for .next cache in dev mode

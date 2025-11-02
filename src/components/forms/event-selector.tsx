@@ -55,6 +55,13 @@ export function EventSelector({ name, control, events, label, className }: Event
               </label>
             )}
 
+            {/* Hidden input for form submission - serialize array as JSON */}
+            <input
+              type="hidden"
+              name={name}
+              value={JSON.stringify(selectedEvents)}
+            />
+
             {/* Event Grid - 4 columns on desktop, 2 on tablet, 1 on mobile */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {events.map((event) => {

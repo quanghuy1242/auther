@@ -36,6 +36,7 @@ export function ControlledSelect({ name, ...props }: ControlledSelectProps) {
       render={({ field }) => (
         <Select
           {...props}
+          name={name}
           value={field.value}
           onChange={field.onChange}
           error={error}

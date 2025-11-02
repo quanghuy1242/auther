@@ -31,6 +31,7 @@ import {
   getAllGroups,
   createUserGroup,
 } from "./actions";
+import { toast } from "@/lib/toast";
 
 interface AccessControlClientProps {
   client: ClientDetail;
@@ -89,10 +90,6 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
   const [allowedResources, setAllowedResources] = React.useState<PermissionRow[]>([]);
   const [isSavingResources, setIsSavingResources] = React.useState(false);
 
-  // Error/success states
-  const [error, setError] = React.useState<string | null>(null);
-  const [success, setSuccess] = React.useState<string | null>(null);
-
   // Load data
   React.useEffect(() => {
     void loadData();
@@ -127,7 +124,7 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
       setUsers(usersResult);
       setGroups(groupsResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load data");
+      toast.error("Failed to load data", err instanceof Error ? err.message : undefined);
     } finally {
       setLoading(false);
     }
@@ -151,14 +148,13 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     });
 
     if (result.success) {
-      setSuccess(
-        newPolicy === "restricted"
-          ? "Switched to restricted access. API keys are now enabled."
-          : "Switched to open access. All users can now use this client."
-      );
+      const message = newPolicy === "restricted"
+        ? "Switched to restricted access. API keys are now enabled."
+        : "Switched to open access. All users can now use this client.";
+      toast.success("Access policy updated", message);
       await loadData();
     } else {
-      setError(result.error || "Failed to update policy");
+      toast.error("Failed to update policy", result.error);
     }
   };
 
@@ -166,7 +162,6 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     if (!metadata) return;
 
     setIsSavingResources(true);
-    setError(null);
 
     try {
       // Convert PermissionRow[] to ResourcePermissions JSON format
@@ -192,13 +187,13 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
       });
 
       if (result.success) {
-        setSuccess("Allowed resources updated successfully");
+        toast.success("Allowed resources updated", "Resources have been saved successfully.");
         await loadData();
       } else {
-        setError(result.error || "Failed to update resources");
+        toast.error("Failed to update resources", result.error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save resources");
+      toast.error("Failed to save resources", err instanceof Error ? err.message : undefined);
     } finally {
       setIsSavingResources(false);
     }
@@ -206,7 +201,6 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
 
   const handleAssignUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     const result = await assignUserToClient({
       userId: assignUserId,
@@ -216,14 +210,14 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     });
 
     if (result.success) {
-      setSuccess(`User assigned successfully`);
+      toast.success("User assigned", "User has been granted access to this client.");
       setShowAssignUserModal(false);
       setAssignUserId("");
       setAssignAccessLevel("use");
       setAssignExpiresInDays("");
       await loadData();
     } else {
-      setError(result.error || "Failed to assign user");
+      toast.error("Failed to assign user", result.error);
     }
   };
 
@@ -233,10 +227,10 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     const result = await removeUserFromClient(userId, client.clientId);
 
     if (result.success) {
-      setSuccess("User access removed");
+      toast.success("User access removed", "The user no longer has access to this client.");
       await loadData();
     } else {
-      setError(result.error || "Failed to remove user");
+      toast.error("Failed to remove user", result.error);
     }
   };
 
@@ -254,20 +248,19 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     );
 
     if (result.success) {
-      setSuccess("Access updated successfully");
+      toast.success("Access updated", "User access level has been updated.");
       setShowEditAccessModal(false);
       setSelectedUser(null);
       setEditAccessLevel("use");
       setEditExpiresInDays("");
       await loadData();
     } else {
-      setError(result.error || "Failed to update access");
+      toast.error("Failed to update access", result.error);
     }
   };
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     const result = await createUserGroup({
       name: groupName,
@@ -275,13 +268,13 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     });
 
     if (result.success) {
-      setSuccess(`Group "${groupName}" created`);
+      toast.success("Group created", `Group "${groupName}" has been created.`);
       setShowCreateGroupModal(false);
       setGroupName("");
       setGroupDescription("");
       await loadData();
     } else {
-      setError(result.error || "Failed to create group");
+      toast.error("Failed to create group", result.error);
     }
   };
 
@@ -305,25 +298,6 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
 
   return (
     <div className="space-y-6">
-      {/* Success/Error Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 flex items-center justify-between">
-          <span>{error}</span>
-          <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-            <Icon name="close" />
-          </Button>
-        </div>
-      )}
-
-      {success && (
-        <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg text-green-200 flex items-center justify-between">
-          <span>{success}</span>
-          <Button variant="ghost" size="sm" onClick={() => setSuccess(null)}>
-            <Icon name="close" />
-          </Button>
-        </div>
-      )}
-
       {/* Access Policy Card */}
       <Card>
         <CardHeader>

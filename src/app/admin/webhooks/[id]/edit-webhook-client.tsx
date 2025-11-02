@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -34,13 +34,25 @@ import {
 import type { WebhookEndpointWithSubscriptions, WebhookDeliveryEntity } from "@/lib/types";
 import { z } from "zod";
 import { WebhookFormContent } from "./webhook-form-content";
+import { toast } from "@/lib/toast";
 
 // Form schema matching backend implementation
 const updateWebhookSchema = z.object({
   displayName: z.string().optional(),
-  url: z.string().url("Please enter a valid URL"),
+  url: z.string().url("Please enter a valid URL").refine(
+    (url) => {
+      // Allow HTTPS, localhost, Docker network URLs, and local IPs
+      return (
+        url.startsWith("https://") || 
+        url.startsWith("http://localhost") ||
+        url.startsWith("http://127.0.0.1") ||
+        /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url)
+      );
+    },
+    "URL must use HTTPS or be a valid local/Docker network URL"
+  ),
   isActive: z.boolean().default(true),
-  events: z.array(z.string()).min(1, "Please select at least one event"),
+  eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
 });
 
@@ -52,6 +64,15 @@ interface EditWebhookClientProps {
 export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClientProps) {
   const router = useRouter();
   const [regeneratedSecret, setRegeneratedSecret] = useState<string | null>(null);
+
+  // Prepare default values from webhook data - memoized to prevent infinite loops
+  const defaultValues = useMemo(() => ({
+    displayName: webhook.displayName || "",
+    url: webhook.url,
+    isActive: webhook.isActive,
+    eventTypes: webhook.subscriptions.map((sub) => sub.eventType),
+    retryPolicy: webhook.retryPolicy as "none" | "standard" | "aggressive",
+  }), [webhook.displayName, webhook.url, webhook.isActive, webhook.subscriptions, webhook.retryPolicy]);
 
   const handleSubmit = async (
     prevState: WebhookFormState,
@@ -67,14 +88,19 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     return await handleSubmit(prevState as WebhookFormState, formData);
   };
 
-  const handleSuccess = () => {
+  // Memoize handleSuccess to prevent infinite re-renders
+  const handleSuccess = useCallback(() => {
+    toast.success("Webhook updated", "Your webhook settings have been saved successfully.");
     router.refresh();
-  };
+  }, [router]);
 
   const handleRegenerateSecret = async () => {
     const result = await regenerateSecret(webhook.id);
     if (result.success && result.secret) {
       setRegeneratedSecret(result.secret);
+      toast.success("Secret regenerated", "Your new webhook secret has been generated. Make sure to copy it now.");
+    } else {
+      toast.error("Failed to regenerate secret", result.error);
     }
   };
 
@@ -82,7 +108,10 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     if (confirm("Are you sure you want to delete this webhook? This action cannot be undone.")) {
       const result = await deleteWebhook(webhook.id);
       if (result.success) {
+        toast.success("Webhook deleted", "The webhook endpoint has been deleted.");
         router.push("/admin/webhooks");
+      } else {
+        toast.error("Failed to delete webhook", result.error);
       }
     }
   };
@@ -115,6 +144,8 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
                 schema={updateWebhookSchema}
                 action={handleSubmitWrapper}
                 onSuccess={handleSuccess}
+                defaultValues={defaultValues}
+                resetOnSuccess={false}
               >
                 <WebhookFormContent />
 

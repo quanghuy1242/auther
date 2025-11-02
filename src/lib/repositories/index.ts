@@ -45,3 +45,5 @@ export type { UserClientAccessEntity, CreateUserClientAccessData } from "./user-
 export type { OAuthClientMetadataEntity, CreateOAuthClientMetadataData } from "./oauth-client-metadata-repository";
 export type { UserGroupEntity, CreateUserGroupData } from "./user-group-repository";
 export type { PaginatedResult } from "./base-repository";
+export { WebhookAwareRepository } from "./webhook-aware-repository";
+export type { WebhookAwareConfig, WebhookEventMapping } from "./webhook-aware-repository";

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { user, account } from "@/db/schema";
 import { desc, like, or, eq, count, sql } from "drizzle-orm";
 import { BaseRepository, PaginatedResult } from "./base-repository";
+import { WebhookAwareRepository } from "./webhook-aware-repository";
 
 export interface UserAccount {
   providerId: string;
@@ -39,8 +40,24 @@ export interface GetUsersFilter {
 /**
  * User Repository
  * Handles all database operations related to users
+ * Automatically emits webhook events for user operations
  */
-export class UserRepository implements Partial<BaseRepository<UserEntity>> {
+export class UserRepository 
+  extends WebhookAwareRepository 
+  implements Partial<BaseRepository<UserEntity>> 
+{
+  constructor() {
+    super({
+      entityName: "user",
+      eventMapping: {
+        created: "user.created",
+        updated: "user.updated",
+        deleted: "user.deleted",
+      },
+      getUserId: (data: unknown) => (data as UserEntity).id,
+    });
+  }
+
   /**
    * Find user by ID
    */
@@ -214,6 +231,7 @@ export class UserRepository implements Partial<BaseRepository<UserEntity>> {
 
   /**
    * Update user
+   * Automatically emits user.updated webhook event
    */
   async update(
     userId: string,
@@ -222,21 +240,24 @@ export class UserRepository implements Partial<BaseRepository<UserEntity>> {
       username?: string | null;
       displayUsername?: string | null;
       emailVerified?: boolean;
-    }
+    },
+    options: { silent?: boolean } = {}
   ): Promise<UserEntity | null> {
-    try {
-      await db
-        .update(user)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(eq(user.id, userId));
+    return this.updateWithWebhook(async () => {
+      try {
+        await db
+          .update(user)
+          .set({
+            ...data,
+            updatedAt: new Date(),
+          })
+          .where(eq(user.id, userId));
 
-      return await this.findById(userId);
-    } catch (error) {
-      console.error("UserRepository.update error:", error);
-      return null;
-    }
+        return await this.findById(userId);
+      } catch (error) {
+        console.error("UserRepository.update error:", error);
+        return null;
+      }
+    }, options);
   }
 }

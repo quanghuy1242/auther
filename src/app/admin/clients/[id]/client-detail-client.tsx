@@ -18,6 +18,7 @@ import {
 } from "@/components/ui";
 import { UrlListBuilder } from "@/components/ui/url-list-builder";
 import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
+import { toast } from "@/lib/toast";
 import { 
   updateClient,
   rotateClientSecret, 
@@ -57,10 +58,13 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
 
   React.useEffect(() => {
     if (updateState.success) {
+      toast.success("Client updated successfully");
       setIsEditing(false);
       window.location.reload();
+    } else if (updateState.error) {
+      toast.error(updateState.error);
     }
-  }, [updateState.success]);
+  }, [updateState.success, updateState.error]);
 
   const handleRotateSecret = async () => {
     const result = await rotateClientSecret(client.clientId);
@@ -68,19 +72,30 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     if (result.success && result.secret) {
       setNewSecret(result.secret);
       setShowSecretModal(true);
+      toast.success("Client secret rotated successfully");
+    } else if (result.error) {
+      toast.error(result.error);
     }
   };
 
   const handleToggleStatus = async () => {
-    await toggleClientStatus(client.clientId, !client.disabled);
-    window.location.reload();
+    const result = await toggleClientStatus(client.clientId, !client.disabled);
+    if (result.success) {
+      toast.success(client.disabled ? "Client enabled successfully" : "Client disabled successfully");
+      window.location.reload();
+    } else if (result.error) {
+      toast.error(result.error);
+    }
   };
 
   const handleDelete = async () => {
     const result = await deleteClient(client.clientId);
     setShowDeleteModal(false);
     if (result.success) {
+      toast.success("Client deleted successfully");
       router.push("/admin/clients");
+    } else if (result.error) {
+      toast.error(result.error);
     }
   };
 
@@ -111,13 +126,6 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
 
   return (
     <>
-      {/* Error messages */}
-      {updateState.error && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-          <p className="text-sm text-red-400">{updateState.error}</p>
-        </div>
-      )}
-
       {/* Action buttons */}
       <div className="flex gap-3 mb-6">
         {!isEditing && (
@@ -167,10 +175,8 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                   onChange={(e) => setEditName(e.target.value)}
                   className="w-full bg-input border-slate-700 text-white text-sm"
                   placeholder="Enter client name"
+                  error={updateState.errors?.name}
                 />
-                {updateState.errors?.name && (
-                  <p className="text-sm text-red-400 mt-1">{updateState.errors.name}</p>
-                )}
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

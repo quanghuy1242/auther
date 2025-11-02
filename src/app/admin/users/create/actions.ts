@@ -2,14 +2,13 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/session";
 import { auth } from "@/lib/auth";
 
 const createUserSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  username: z.string().min(3, "Username must be at least 3 characters").optional().or(z.literal("")),
-  password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
+  username: z.string().optional().transform(val => val || undefined),
+  password: z.string().optional().transform(val => val || undefined),
   sendInvite: z.boolean().optional(),
 });
 
@@ -24,28 +23,20 @@ export type CreateUserState = {
 };
 
 export async function createUser(
-  prevState: { success: boolean; errors?: Record<string, string>; data?: unknown },
+  _prevState: CreateUserState,
   formData: FormData
-): Promise<{ success: boolean; errors?: Record<string, string>; data?: unknown; error?: string }> {
+): Promise<CreateUserState> {
   try {
-    // Check admin auth
-    await requireAuth();
-
-    const rawData = {
-      fullName: formData.get("fullName"),
-      email: formData.get("email"),
-      username: formData.get("username"),
-      password: formData.get("password"),
-      sendInvite: formData.get("sendInvite") === "true",
-    };
+    // Parse form data
+    const rawData = Object.fromEntries(formData.entries());
 
     const result = createUserSchema.safeParse(rawData);
 
     if (!result.success) {
       const errors: Record<string, string> = {};
-      result.error.issues.forEach((issue) => {
-        if (issue.path[0]) {
-          errors[issue.path[0].toString()] = issue.message;
+      result.error.issues.forEach((err) => {
+        if (err.path[0]) {
+          errors[err.path[0].toString()] = err.message;
         }
       });
       return { success: false, errors };

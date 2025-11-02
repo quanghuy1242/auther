@@ -37,13 +37,10 @@ export default function ComponentShowcase() {
     bio: "",
   });
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Form submitted:", { ...formData, role: selectedRole, notifications: isEnabled });
-    alert("Form submitted! Check console for data.");
-  };
-
-  return (
+    // Handle form submission
+  };  return (
     <div className="min-h-screen bg-[#111921] p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="space-y-2">

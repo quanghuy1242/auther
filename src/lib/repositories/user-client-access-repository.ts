@@ -3,6 +3,7 @@ import { userClientAccess, oauthApplication } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { generateApiKeyId } from "@/lib/utils/api-key";
 import type { AccessLevel } from "@/lib/utils/access-control";
+import { WebhookAwareRepository } from "./webhook-aware-repository";
 
 export interface UserClientAccessEntity {
   id: string;
@@ -24,8 +25,20 @@ export interface CreateUserClientAccessData {
 /**
  * User-Client Access Repository
  * Manages user access to OAuth clients
+ * Automatically emits webhook events for access grant/revoke operations
  */
-export class UserClientAccessRepository {
+export class UserClientAccessRepository extends WebhookAwareRepository {
+  constructor() {
+    super({
+      entityName: "user-client-access",
+      eventMapping: {
+        created: "access.granted",
+        deleted: "access.revoked",
+      },
+      getUserId: (data: unknown) => (data as UserClientAccessEntity).userId,
+    });
+  }
+
   /**
    * Transform database row to entity
    */
@@ -105,25 +118,31 @@ export class UserClientAccessRepository {
 
   /**
    * Create a new user-client access record
+   * Automatically emits access.granted webhook event
    */
-  async create(data: CreateUserClientAccessData): Promise<UserClientAccessEntity> {
-    const id = `uca_${generateApiKeyId()}`;
-    const now = new Date();
+  async create(
+    data: CreateUserClientAccessData,
+    options: { silent?: boolean } = {}
+  ): Promise<UserClientAccessEntity> {
+    return this.createWithWebhook(async () => {
+      const id = `uca_${generateApiKeyId()}`;
+      const now = new Date();
 
-    const [record] = await db
-      .insert(userClientAccess)
-      .values({
-        id,
-        userId: data.userId,
-        clientId: data.clientId,
-        accessLevel: data.accessLevel,
-        createdAt: now,
-        updatedAt: now,
-        expiresAt: data.expiresAt || null,
-      })
-      .returning();
+      const [record] = await db
+        .insert(userClientAccess)
+        .values({
+          id,
+          userId: data.userId,
+          clientId: data.clientId,
+          accessLevel: data.accessLevel,
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: data.expiresAt || null,
+        })
+        .returning();
 
-    return this.toEntity(record);
+      return this.toEntity(record);
+    }, options);
   }
 
   /**
@@ -162,18 +181,31 @@ export class UserClientAccessRepository {
 
   /**
    * Delete an access record
+   * Automatically emits access.revoked webhook event
    */
-  async delete(id: string): Promise<boolean> {
-    try {
-      await db
-        .delete(userClientAccess)
-        .where(eq(userClientAccess.id, id));
+  async delete(id: string, options: { silent?: boolean } = {}): Promise<boolean> {
+    // Find the access record first to pass to webhook
+    const accessData = await db
+      .select()
+      .from(userClientAccess)
+      .where(eq(userClientAccess.id, id))
+      .limit(1)
+      .then(([record]) => record ? this.toEntity(record) : null);
 
-      return true;
-    } catch (error) {
-      console.error("UserClientAccessRepository.delete error:", error);
-      return false;
-    }
+    if (!accessData) return false;
+
+    return this.deleteWithWebhook(accessData, async () => {
+      try {
+        await db
+          .delete(userClientAccess)
+          .where(eq(userClientAccess.id, id));
+
+        return true;
+      } catch (error) {
+        console.error("UserClientAccessRepository.delete error:", error);
+        return false;
+      }
+    }, options);
   }
 
   /**

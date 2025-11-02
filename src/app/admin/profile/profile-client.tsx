@@ -8,6 +8,7 @@ import { updateProfile, revokeSession, revokeAllOtherSessions, type UpdateProfil
 import type { SessionUser, SessionInfo } from "@/lib/session";
 import { getUserInitials } from "@/lib/session-utils";
 import { formatDate, formatDateShort } from "@/lib/utils/date-formatter";
+import { toast } from "@/lib/toast";
 
 interface ProfileClientProps {
   user: SessionUser;
@@ -28,17 +29,32 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
   React.useEffect(() => {
     if (profileState.success) {
       setIsEditing(false);
+      toast.success("Profile updated successfully!", "Your changes have been saved.");
+    } else if (profileState.error) {
+      toast.error("Failed to update profile", profileState.error);
     }
-  }, [profileState.success]);
+  }, [profileState.success, profileState.error]);
 
   const handleRevokeSession = async (sessionToken: string) => {
-    await revokeSession(sessionToken);
+    const result = await revokeSession(sessionToken);
     setSessionToRevoke(null);
+    
+    if (result.success) {
+      toast.success("Session revoked", "The user has been logged out from that device.");
+    } else {
+      toast.error("Failed to revoke session", result.error);
+    }
   };
 
   const handleRevokeAllSessions = async () => {
-    await revokeAllOtherSessions();
+    const result = await revokeAllOtherSessions();
     setShowRevokeAllModal(false);
+    
+    if (result.success) {
+      toast.success("All sessions revoked", "You've been logged out from all other devices.");
+    } else {
+      toast.error("Failed to revoke sessions", result.error);
+    }
   };
 
   return (
@@ -137,12 +153,6 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
                               Email cannot be changed
                             </p>
                           </div>
-                          {profileState.error && (
-                            <p className="text-sm text-red-500">{profileState.error}</p>
-                          )}
-                          {profileState.success && (
-                            <p className="text-sm text-green-500">Profile updated successfully!</p>
-                          )}
                           <Button type="submit" variant="primary" size="sm">
                             Save Changes
                           </Button>

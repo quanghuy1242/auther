@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import * as React from "react";
 import { PageHeading } from "@/components/layout/page-heading";
 import { getSessions } from "../actions";
 import { SessionsClient } from "./sessions-client";
+
+export const metadata: Metadata = {
+  title: "Sessions",
+  description: "Manage active and expired user sessions across all devices",
+};
 
 export const dynamic = "force-dynamic";
 

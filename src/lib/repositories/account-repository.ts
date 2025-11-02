@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { account } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { WebhookAwareRepository } from "./webhook-aware-repository";
 
 export interface AccountEntity {
   id: string;
@@ -13,8 +14,20 @@ export interface AccountEntity {
 /**
  * Account Repository
  * Handles all database operations related to OAuth accounts
+ * Automatically emits webhook events for account operations
  */
-export class AccountRepository {
+export class AccountRepository extends WebhookAwareRepository {
+  constructor() {
+    super({
+      entityName: "account",
+      eventMapping: {
+        created: "account.linked",
+        deleted: "account.unlinked",
+      },
+      getUserId: (data: unknown) => (data as AccountEntity).userId,
+    });
+  }
+
   /**
    * Find account by ID
    */
@@ -53,14 +66,20 @@ export class AccountRepository {
 
   /**
    * Delete account by ID
+   * Automatically emits account.unlinked webhook event
    */
-  async delete(accountId: string): Promise<boolean> {
-    try {
-      await db.delete(account).where(eq(account.id, accountId));
-      return true;
-    } catch (error) {
-      console.error("AccountRepository.delete error:", error);
-      return false;
-    }
+  async delete(accountId: string, options: { silent?: boolean } = {}): Promise<boolean> {
+    const accountData = await this.findById(accountId);
+    if (!accountData) return false;
+
+    return this.deleteWithWebhook(accountData, async () => {
+      try {
+        await db.delete(account).where(eq(account.id, accountId));
+        return true;
+      } catch (error) {
+        console.error("AccountRepository.delete error:", error);
+        return false;
+      }
+    }, options);
   }
 }

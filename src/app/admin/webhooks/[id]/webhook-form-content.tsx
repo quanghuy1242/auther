@@ -29,7 +29,8 @@ export function WebhookFormContent() {
           name="displayName"
           label="Display Name"
           placeholder="My Production Webhook"
-          helperText="Optional friendly name for this webhook"
+          helperText="Friendly name for this webhook"
+          required
         />
         <FormField
           name="url"
@@ -54,7 +55,7 @@ export function WebhookFormContent() {
 
       {/* Event Subscriptions */}
       <EventSelector
-        name="events"
+        name="eventTypes"
         control={form.control}
         events={WEBHOOK_EVENT_TYPES.map((e) => ({
           value: e.value,

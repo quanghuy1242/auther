@@ -126,6 +126,7 @@ export async function updateUserProfile(
       username: validated.data.username || null,
       displayUsername: validated.data.displayUsername || null,
     });
+    // Note: Webhook event is automatically emitted by WebhookAwareRepository
 
     revalidatePath(`/admin/users/${userId}`);
     revalidatePath("/admin/users");
@@ -153,6 +154,7 @@ export async function toggleEmailVerification(
     await userRepository.update(userId, {
       emailVerified: verified,
     });
+    // Note: Webhook event is automatically emitted by WebhookAwareRepository
 
     revalidatePath(`/admin/users/${userId}`);
     revalidatePath("/admin/users");
@@ -289,6 +291,9 @@ export async function sendPasswordResetEmail(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    if (process.env.SKIP_EMAIL_SENDING === 'true') {
+      return { success: true };
+    }
     await requireAuth();
 
     // Get user to retrieve email

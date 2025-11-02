@@ -38,6 +38,7 @@ const serverSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().optional(),
   CRON_SECRET: z.string().min(1, "CRON_SECRET is required"),
   QSTASH_TOKEN: z.string().min(1, "QSTASH_TOKEN is required"),
+  QSTASH_URL: z.string().url("QSTASH_URL must be a valid URL").optional(),
   QSTASH_CURRENT_SIGNING_KEY: z
     .string()
     .min(1, "QSTASH_CURRENT_SIGNING_KEY is required"),

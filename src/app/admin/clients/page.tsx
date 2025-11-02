@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import * as React from "react";
 import Link from "next/link";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Button } from "@/components/ui";
 import { getOAuthClients } from "./actions";
 import { ClientsClient } from "./clients-client";
+
+export const metadata: Metadata = {
+  title: "OAuth Client Management",
+  description: "Manage trusted and dynamically registered OAuth clients",
+};
 
 interface ClientsPageProps {
   searchParams: Promise<{

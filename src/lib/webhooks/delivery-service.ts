@@ -20,6 +20,8 @@ import type { WebhookDeliveryStatus } from "@/lib/types";
 
 const qstash = new Client({
   token: env.QSTASH_TOKEN,
+  // Use local QStash dev server in development (Docker: http://qstash:8080)
+  baseUrl: env.QSTASH_URL ?? "http://qstash:8080",
 });
 
 // ============================================================================
@@ -105,10 +107,6 @@ export async function emitWebhookEvent(
     );
 
     if (endpoints.length === 0) {
-      console.log("No active endpoints subscribed to event:", {
-        userId,
-        eventType,
-      });
       return;
     }
 
@@ -131,20 +129,18 @@ export async function emitWebhookEvent(
         endpointId: endpoint.id,
       };
 
-      await qstash.publishJSON({
-        url: resolveWebhookDeliveryQueueUrl(),
+      const queueUrl = resolveWebhookDeliveryQueueUrl();
+
+      const result = await qstash.publishJSON({
+        url: queueUrl,
         body: job,
         retries: endpoint.retryPolicy === "none" ? 0 : 3,
       });
+
+      return result;
     });
 
     await Promise.allSettled(queuePromises);
-
-    console.log("Webhook event emitted:", {
-      eventId,
-      eventType,
-      endpointCount: endpoints.length,
-    });
   } catch (error) {
     console.error("Failed to emit webhook event:", {
       userId,
