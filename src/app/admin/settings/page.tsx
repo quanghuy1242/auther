@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import * as React from "react";
 import { requireAuth } from "@/lib/session";
 import { PageHeading } from "@/components/layout/page-heading";
@@ -6,6 +7,11 @@ import { getRotationCadenceDisplay } from "@/lib/constants";
 import { resolveQueueBaseUrl } from "@/lib/webhooks/payload";
 import { SettingsClient } from "./settings-client";
 import type { SettingsData } from "./types";
+
+export const metadata: Metadata = {
+  title: "Configuration & Secrets",
+  description: "Manage environment settings, feature flags, and internal secrets",
+};
 
 export default async function SettingsPage() {
   await requireAuth();

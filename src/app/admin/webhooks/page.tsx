@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import { PageHeading } from "@/components/layout";
 import { Button } from "@/components/ui";
 import Link from "next/link";
 import { WebhooksClient } from "./webhooks-client";
 import { getWebhooks, getDeliveryStats } from "./actions";
+
+export const metadata: Metadata = {
+  title: "Webhooks",
+  description: "Manage webhook endpoints and monitor delivery status",
+};
 
 interface PageProps {
   searchParams: Promise<{

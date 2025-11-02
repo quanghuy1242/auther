@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getClientById } from "./actions";
 import { ClientDetailTabs } from "./client-detail-tabs";
@@ -12,6 +13,22 @@ interface LayoutProps {
   params: Promise<{
     id: string;
   }>;
+}
+
+export async function generateMetadata({ params }: LayoutProps): Promise<Metadata> {
+  const { id } = await params;
+  const client = await getClientById(id);
+  
+  if (!client) {
+    return {
+      title: "Client Not Found",
+    };
+  }
+  
+  return {
+    title: `${client.name || "Unnamed Client"} - OAuth Client`,
+    description: `Manage OAuth client: ${client.clientId}`,
+  };
 }
 
 export default async function ClientDetailLayout({ children, params }: LayoutProps) {

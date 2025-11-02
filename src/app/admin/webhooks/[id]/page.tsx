@@ -1,9 +1,30 @@
+import type { Metadata } from "next";
 import { getWebhookById, getDeliveryHistory } from "../actions";
 import { EditWebhookClient } from "./edit-webhook-client";
 import { Card, CardContent, Button, Icon } from "@/components/ui";
 import Link from "next/link";
 
-export default async function EditWebhookPage({ params }: { params: Promise<{ id: string }> }) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const webhook = await getWebhookById(resolvedParams.id);
+  
+  if (!webhook) {
+    return {
+      title: "Webhook Not Found",
+    };
+  }
+  
+  return {
+    title: `${webhook.displayName} - Webhook Details`,
+    description: `Manage webhook endpoint: ${webhook.url}`,
+  };
+}
+
+export default async function EditWebhookPage({ params }: PageProps) {
   const resolvedParams = await params;
   
   // Get webhook data

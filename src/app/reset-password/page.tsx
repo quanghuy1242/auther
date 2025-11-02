@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ResetPasswordForm } from "./reset-password-form";
+
+export const metadata: Metadata = {
+  title: "Reset Password",
+  description: "Reset your account password",
+};
 
 function ResetPasswordContent() {
   return (

@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import * as React from "react";
 import { requireAuth } from "@/lib/session";
 import { getUserSessions } from "./actions";
 import { ProfileClient } from "./profile-client";
+
+export const metadata: Metadata = {
+  title: "Profile Settings",
+  description: "Manage your account profile and active sessions",
+};
 
 export default async function ProfilePage() {
   const { user, session } = await requireAuth();

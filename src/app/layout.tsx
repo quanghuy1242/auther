@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "@material-symbols/font-400/outlined.css";
 import "./globals.css";
@@ -12,6 +13,14 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+export const metadata: Metadata = {
+  title: {
+    template: "%s | Auther Admin",
+    default: "Auther Admin",
+  },
+  description: "Better Auth administration panel for managing users, OAuth clients, and security settings",
+};
 
 export default function RootLayout({
   children,
