@@ -81,3 +81,5 @@ export type { UserGroupPickerProps, User, Group } from "./user-group-picker";
 
 export { Skeleton, ContentSkeleton } from "./skeleton";
 export type { SkeletonProps, ContentSkeletonProps } from "./skeleton";
+
+export { ToastProvider } from "./toast-provider";

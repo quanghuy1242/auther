@@ -4,13 +4,13 @@ import * as React from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button, Input, Label, Card, CardContent, Icon } from "@/components/ui";
 import { resetPassword } from "./actions";
+import { toast } from "@/lib/toast";
 
 export function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [error, setError] = React.useState("");
   const [success, setSuccess] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
 
@@ -19,26 +19,25 @@ export function ResetPasswordForm() {
 
   React.useEffect(() => {
     if (tokenError === "INVALID_TOKEN") {
-      setError("Invalid or expired password reset link. Please request a new one.");
+      toast.error("Invalid reset link", "This password reset link is invalid or expired. Please request a new one.");
     }
   }, [tokenError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
     if (!token) {
-      setError("Missing password reset token");
+      toast.error("Missing reset token", "The password reset token is missing from the URL.");
       return;
     }
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
+      toast.error("Password too short", "Password must be at least 8 characters long.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      toast.error("Passwords don't match", "Please ensure both password fields match.");
       return;
     }
 
@@ -49,14 +48,15 @@ export function ResetPasswordForm() {
       
       if (result.success) {
         setSuccess(true);
+        toast.success("Password reset successful!", "Redirecting to sign in...");
         setTimeout(() => {
           router.push("/sign-in");
         }, 2000);
       } else {
-        setError(result.error || "Failed to reset password");
+        toast.error("Failed to reset password", result.error);
       }
     } catch {
-      setError("An unexpected error occurred");
+      toast.error("Unexpected error", "An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -145,10 +145,6 @@ export function ResetPasswordForm() {
               required
             />
           </div>
-
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
 
           <Button 
             type="submit" 

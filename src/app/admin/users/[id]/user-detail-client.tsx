@@ -17,6 +17,7 @@ import {
   type UserDetail,
   type UpdateUserState 
 } from "./actions";
+import { toast } from "@/lib/toast";
 
 
 interface UserDetailClientProps {
@@ -31,9 +32,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
   const [showSetPasswordModal, setShowSetPasswordModal] = React.useState(false);
   const [showSendResetEmailModal, setShowSendResetEmailModal] = React.useState(false);
   const [newPassword, setNewPassword] = React.useState("");
-  const [passwordError, setPasswordError] = React.useState("");
-  const [passwordSuccess, setPasswordSuccess] = React.useState(false);
-  const [resetEmailSuccess, setResetEmailSuccess] = React.useState(false);
 
   // Helper to get user initials
   const getUserInitials = (name: string) => {
@@ -53,61 +51,71 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
   React.useEffect(() => {
     if (profileState.success) {
       setIsEditing(false);
+      toast.success("Profile updated", "User profile has been updated successfully.");
+    } else if (profileState.error) {
+      toast.error("Failed to update profile", profileState.error);
     }
-  }, [profileState.success]);
+  }, [profileState.success, profileState.error]);
 
   const handleToggleVerification = async () => {
-    await toggleEmailVerification(user.id, !user.emailVerified);
+    const result = await toggleEmailVerification(user.id, !user.emailVerified);
+    if (result?.success) {
+      toast.success(
+        user.emailVerified ? "Email unverified" : "Email verified",
+        user.emailVerified ? "User email has been marked as unverified." : "User email has been marked as verified."
+      );
+    }
   };
 
   const handleUnlinkAccount = async (accountId: string) => {
-    await unlinkAccount(accountId, user.id);
+    const result = await unlinkAccount(accountId, user.id);
     setAccountToUnlink(null);
+    if (result?.success) {
+      toast.success("Account unlinked", "The OAuth account has been unlinked from this user.");
+    }
   };
 
   const handleRevokeSession = async (sessionToken: string) => {
-    await revokeUserSession(sessionToken, user.id);
+    const result = await revokeUserSession(sessionToken, user.id);
     setSessionToRevoke(null);
+    if (result?.success) {
+      toast.success("Session revoked", "The user session has been revoked.");
+    }
   };
 
   const handleForceLogout = async () => {
-    await forceLogoutUser(user.id);
+    const result = await forceLogoutUser(user.id);
     setShowForceLogoutModal(false);
+    if (result?.success) {
+      toast.success("User logged out", "All user sessions have been terminated.");
+    }
   };
 
   const handleSetPassword = async () => {
-    setPasswordError("");
-    setPasswordSuccess(false);
-
     if (!newPassword || newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters long");
+      toast.error("Password too short", "Password must be at least 8 characters long.");
       return;
     }
 
     const result = await setUserPassword(user.id, newPassword);
     
     if (result.success) {
-      setPasswordSuccess(true);
+      toast.success("Password set", "User password has been updated successfully.");
       setNewPassword("");
-      setTimeout(() => {
-        setShowSetPasswordModal(false);
-        setPasswordSuccess(false);
-      }, 2000);
+      setShowSetPasswordModal(false);
     } else {
-      setPasswordError(result.error || "Failed to set password");
+      toast.error("Failed to set password", result.error);
     }
   };
 
   const handleSendResetEmail = async () => {
-    setResetEmailSuccess(false);
     const result = await sendPasswordResetEmail(user.id);
     
     if (result.success) {
-      setResetEmailSuccess(true);
-      setTimeout(() => {
-        setShowSendResetEmailModal(false);
-        setResetEmailSuccess(false);
-      }, 2000);
+      toast.success("Reset email sent", "Password reset email has been sent to the user.");
+      setShowSendResetEmailModal(false);
+    } else {
+      toast.error("Failed to send email", result.error);
     }
   };
 
@@ -224,12 +232,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
                               <p className="text-sm text-red-500 mt-1">{profileState.errors.displayUsername}</p>
                             )}
                           </div>
-                          {profileState.error && (
-                            <p className="text-sm text-red-500">{profileState.error}</p>
-                          )}
-                          {profileState.success && (
-                            <p className="text-sm text-green-500">Profile updated successfully!</p>
-                          )}
                           <Button type="submit" variant="primary" size="sm">
                             Save Changes
                           </Button>
@@ -546,8 +548,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           onClose={() => {
             setShowSetPasswordModal(false);
             setNewPassword("");
-            setPasswordError("");
-            setPasswordSuccess(false);
           }}
           title="Set New Password"
         >
@@ -565,14 +565,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
                 placeholder="Enter new password (min 8 characters)"
                 className="mt-1"
               />
-              {passwordError && (
-                <p className="text-sm text-red-500 mt-2">{passwordError}</p>
-              )}
-              {passwordSuccess && (
-                <p className="text-sm text-green-500 mt-2">
-                  Password updated successfully!
-                </p>
-              )}
             </div>
             <div className="flex gap-3 justify-end">
               <Button
@@ -581,8 +573,6 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
                 onClick={() => {
                   setShowSetPasswordModal(false);
                   setNewPassword("");
-                  setPasswordError("");
-                  setPasswordSuccess(false);
                 }}
               >
                 Cancel
@@ -596,10 +586,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
 
       <Modal
           isOpen={showSendResetEmailModal}
-          onClose={() => {
-            setShowSendResetEmailModal(false);
-            setResetEmailSuccess(false);
-          }}
+          onClose={() => setShowSendResetEmailModal(false)}
           title="Send Password Reset Email"
         >
           <div className="space-y-4">
@@ -609,19 +596,11 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
             <p className="text-sm text-gray-400">
               The user will receive an email with a link to reset their password.
             </p>
-            {resetEmailSuccess && (
-              <p className="text-sm text-green-500">
-                Password reset email sent successfully!
-              </p>
-            )}
             <div className="flex gap-3 justify-end">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => {
-                  setShowSendResetEmailModal(false);
-                  setResetEmailSuccess(false);
-                }}
+                onClick={() => setShowSendResetEmailModal(false)}
               >
                 Cancel
               </Button>

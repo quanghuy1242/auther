@@ -29,6 +29,7 @@ import {
 } from "./actions";
 import { getClientMetadata } from "../access/actions";
 import type { ResourcePermissions } from "@/lib/utils/permissions";
+import { toast } from "@/lib/toast";
 
 interface ApiKeysClientProps {
   client: ClientDetail;
@@ -71,10 +72,6 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
   const [editSelectedPermissions, setEditSelectedPermissions] = React.useState<string[]>([]);
   const [defaultPermissions, setDefaultPermissions] = React.useState<string[]>([]);
   const [isSavingDefaults, setIsSavingDefaults] = React.useState(false);
-
-  // Error/success states
-  const [error, setError] = React.useState<string | null>(null);
-  const [success, setSuccess] = React.useState<string | null>(null);
 
   // Generate available permissions from allowedResources
   const availablePermissionsList = React.useMemo(() => {
@@ -129,7 +126,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
       
       setApiKeys(keysResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load data");
+      toast.error("Failed to load data", err instanceof Error ? err.message : undefined);
     } finally {
       setLoading(false);
     }
@@ -137,7 +134,6 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
 
   const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     try {
       // Convert selected permission tags to ResourcePermissions format
@@ -185,10 +181,10 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
         setSelectedApiKeyPermissions([]);
         await loadData();
       } else {
-        setError(result.error || "Failed to create API key");
+        toast.error("Failed to create API key", result.error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create API key");
+      toast.error("Failed to create API key", err instanceof Error ? err.message : undefined);
     }
   };
 
@@ -198,17 +194,16 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
     const result = await revokeApiKey(keyId);
 
     if (result.success) {
-      setSuccess("API key revoked successfully");
+      toast.success("API key revoked", "The API key has been revoked successfully.");
       await loadData();
     } else {
-      setError(result.error || "Failed to revoke API key");
+      toast.error("Failed to revoke API key", result.error);
     }
   };
 
   const handleUpdatePermissions = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedKey) return;
-    setError(null);
 
     try {
       // Convert selected permission tags to ResourcePermissions format
@@ -227,16 +222,16 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
       const result = await updateApiKeyPermissions(selectedKey.id, permissions);
 
       if (result.success) {
-        setSuccess("Permissions updated successfully");
+        toast.success("Permissions updated", "API key permissions have been updated successfully.");
         setShowPermissionsModal(false);
         setSelectedKey(null);
         setEditSelectedPermissions([]);
         await loadData();
       } else {
-        setError(result.error || "Failed to update permissions");
+        toast.error("Failed to update permissions", result.error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update permissions");
+      toast.error("Failed to update permissions", err instanceof Error ? err.message : undefined);
     }
   };
 
@@ -244,7 +239,6 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
     if (!metadata) return;
 
     setIsSavingDefaults(true);
-    setError(null);
 
     try {
       // Convert permission tags to ResourcePermissions format
@@ -271,13 +265,13 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
       });
 
       if (result.success) {
-        setSuccess("Default API key permissions updated successfully");
+        toast.success("Default permissions updated", "Default API key permissions have been saved.");
         await loadData();
       } else {
-        setError(result.error || "Failed to update default permissions");
+        toast.error("Failed to update default permissions", result.error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save default permissions");
+      toast.error("Failed to save default permissions", err instanceof Error ? err.message : undefined);
     } finally {
       setIsSavingDefaults(false);
     }
@@ -333,25 +327,6 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
 
   return (
     <div className="space-y-6">
-      {/* Success/Error Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 flex items-center justify-between">
-          <span>{error}</span>
-          <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-            <Icon name="close" />
-          </Button>
-        </div>
-      )}
-
-      {success && (
-        <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg text-green-200 flex items-center justify-between">
-          <span>{success}</span>
-          <Button variant="ghost" size="sm" onClick={() => setSuccess(null)}>
-            <Icon name="close" />
-          </Button>
-        </div>
-      )}
-
       {/* Default API Key Permissions Card */}
       <Card>
         <CardHeader>
@@ -656,8 +631,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
                   onClick={() => {
                     const command = `curl -X POST ${typeof window !== 'undefined' ? window.location.origin : 'https://auth.example.com'}/api/auth/api-key/exchange -H "Content-Type: application/json" -d '{"apiKey": "YOUR_API_KEY_HERE"}'`;
                     navigator.clipboard.writeText(command);
-                    setSuccess("Command copied to clipboard!");
-                    setTimeout(() => setSuccess(null), 2000);
+                    toast.success("Copied to clipboard!", "Command has been copied.");
                   }}
                 >
                   <Icon name="content_copy" />
@@ -693,8 +667,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
                   onClick={() => {
                     const command = `curl ${typeof window !== 'undefined' ? window.location.origin : 'https://api.example.com'}/api/protected-resource -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE"`;
                     navigator.clipboard.writeText(command);
-                    setSuccess("Command copied to clipboard!");
-                    setTimeout(() => setSuccess(null), 2000);
+                    toast.success("Copied to clipboard!", "Command has been copied.");
                   }}
                 >
                   <Icon name="content_copy" />

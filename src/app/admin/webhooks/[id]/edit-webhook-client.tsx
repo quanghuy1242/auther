@@ -34,6 +34,7 @@ import {
 import type { WebhookEndpointWithSubscriptions, WebhookDeliveryEntity } from "@/lib/types";
 import { z } from "zod";
 import { WebhookFormContent } from "./webhook-form-content";
+import { toast } from "@/lib/toast";
 
 // Form schema matching backend implementation
 const updateWebhookSchema = z.object({
@@ -63,7 +64,6 @@ interface EditWebhookClientProps {
 export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClientProps) {
   const router = useRouter();
   const [regeneratedSecret, setRegeneratedSecret] = useState<string | null>(null);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   // Prepare default values from webhook data - memoized to prevent infinite loops
   const defaultValues = useMemo(() => ({
@@ -90,9 +90,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
 
   // Memoize handleSuccess to prevent infinite re-renders
   const handleSuccess = useCallback(() => {
-    setShowSuccessMessage(true);
-    // Hide message after 3 seconds
-    setTimeout(() => setShowSuccessMessage(false), 3000);
+    toast.success("Webhook updated", "Your webhook settings have been saved successfully.");
     router.refresh();
   }, [router]);
 
@@ -100,6 +98,9 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     const result = await regenerateSecret(webhook.id);
     if (result.success && result.secret) {
       setRegeneratedSecret(result.secret);
+      toast.success("Secret regenerated", "Your new webhook secret has been generated. Make sure to copy it now.");
+    } else {
+      toast.error("Failed to regenerate secret", result.error);
     }
   };
 
@@ -107,7 +108,10 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     if (confirm("Are you sure you want to delete this webhook? This action cannot be undone.")) {
       const result = await deleteWebhook(webhook.id);
       if (result.success) {
+        toast.success("Webhook deleted", "The webhook endpoint has been deleted.");
         router.push("/admin/webhooks");
+      } else {
+        toast.error("Failed to delete webhook", result.error);
       }
     }
   };
@@ -118,13 +122,6 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
       label: "Settings",
       content: (
         <div className="space-y-6">
-          {/* Success Message */}
-          {showSuccessMessage && (
-            <Alert variant="success" title="Changes saved successfully" onClose={() => setShowSuccessMessage(false)}>
-              Your webhook settings have been updated.
-            </Alert>
-          )}
-
           {/* Secret Section */}
           <Card>
             <CardContent>
