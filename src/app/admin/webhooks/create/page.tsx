@@ -17,10 +17,11 @@ import { z } from "zod";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
 import { Icon } from "@/components/ui";
 import { createWebhook } from "../actions";
+import { booleanField } from "@/lib/utils/validation";
 
 // Form schema
 const createWebhookSchema = z.object({
-  displayName: z.string().min(1, "Display name is required"),
+  displayName: z.string().min(2, "Display name must be at least 2 characters"),
   url: z.string().url("Please enter a valid URL").refine(
     (url) => {
       // Allow HTTPS, localhost, Docker network URLs, and local IPs
@@ -33,7 +34,7 @@ const createWebhookSchema = z.object({
     },
     "URL must use HTTPS or be a valid local/Docker network URL"
   ),
-  isActive: z.boolean().default(true),
+  isActive: booleanField.default(true),
   eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),

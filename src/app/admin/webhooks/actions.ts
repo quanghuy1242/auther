@@ -19,6 +19,7 @@ import type {
   WebhookRequestMethod,
 } from "@/lib/types";
 import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from "@/lib/constants";
+import { booleanField } from "@/lib/utils/validation";
 
 // Re-export types for client components
 export type {
@@ -81,7 +82,7 @@ const webhookSchema = z.object({
       },
       "URL must use HTTPS or be a valid local/Docker network URL (http://localhost, http://service-name:port)"
     ),
-  isActive: z.boolean().default(true),
+  isActive: booleanField.default(true),
   eventTypes: z
     .array(z.string())
     .min(1, "At least one event type must be selected")
@@ -265,7 +266,7 @@ export async function createWebhook(
     const result = webhookSchema.safeParse({
       displayName: formData.get("displayName"),
       url: formData.get("url"),
-      isActive: formData.get("isActive") === "true",
+      isActive: formData.get("isActive"),
       eventTypes,
       retryPolicy: formData.get("retryPolicy") || "standard",
       deliveryFormat: formData.get("deliveryFormat") || "json",
@@ -366,7 +367,7 @@ export async function updateWebhook(
     const result = webhookSchema.safeParse({
       displayName: formData.get("displayName"),
       url: formData.get("url"),
-      isActive: formData.get("isActive") === "true",
+      isActive: formData.get("isActive"),
       eventTypes,
       retryPolicy: formData.get("retryPolicy") || "standard",
       deliveryFormat: formData.get("deliveryFormat") || "json",

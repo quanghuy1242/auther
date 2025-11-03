@@ -43,6 +43,10 @@ export type UpdateClientState = {
   success: boolean;
   error?: string;
   errors?: Record<string, string>;
+  data?: {
+    newSecret?: string;
+    secretGenerated?: boolean;
+  };
 };
 
 /**
@@ -78,12 +82,25 @@ export const getClientById = cache(async (clientId: string): Promise<ClientDetai
           .limit(1);
 
         // Parse metadata and redirectURLs
-        let metadata = {};
+        let metadata: Record<string, unknown> = {};
         try {
           metadata = client.metadata ? JSON.parse(client.metadata) : {};
         } catch (error) {
           console.error("Failed to parse metadata:", client.metadata, error);
           metadata = {};
+        }
+
+        if (metadata && typeof metadata === "object") {
+          const snakeCaseAuth = (metadata as Record<string, unknown>)["token_endpoint_auth_method"];
+          if (
+            typeof snakeCaseAuth === "string" &&
+            !(metadata as Record<string, unknown>)["tokenEndpointAuthMethod"]
+          ) {
+            metadata = {
+              ...metadata,
+              tokenEndpointAuthMethod: snakeCaseAuth,
+            };
+          }
         }
 
         let redirectURLs: string[] = [];
@@ -148,9 +165,9 @@ export const getClientById = cache(async (clientId: string): Promise<ClientDetai
  */
 export async function updateClient(
   clientId: string,
-  prevState: { success: boolean; errors?: Record<string, string>; data?: unknown },
+  prevState: UpdateClientState,
   formData: FormData
-): Promise<{ success: boolean; errors?: Record<string, string>; data?: unknown; error?: string }> {
+): Promise<UpdateClientState> {
   try {
     await requireAuth();
 
@@ -225,29 +242,65 @@ export async function updateClient(
     }
 
     // Parse existing metadata
-    let metadata = {};
+    let metadata: Record<string, unknown> = {};
     try {
       metadata = currentClient.metadata ? JSON.parse(currentClient.metadata) : {};
     } catch {
       metadata = {};
     }
 
-    // Update metadata with new values
+    const metadataRecord = metadata as Record<string, unknown>;
+    const rawAuthMethod =
+      metadataRecord["tokenEndpointAuthMethod"] ??
+      metadataRecord["token_endpoint_auth_method"];
+    const currentAuthMethod =
+      typeof rawAuthMethod === "string"
+        ? rawAuthMethod
+        : currentClient.clientSecret
+          ? "client_secret_basic"
+          : "none";
+    const nextAuthMethod = authMethod || currentAuthMethod || "client_secret_basic";
+
+    const isSecretBasedMethod = (method: string | undefined) =>
+      method ? ["client_secret_basic", "client_secret_post", "private_key_jwt"].includes(method) : false;
+
+    const shouldGenerateSecret =
+      isSecretBasedMethod(nextAuthMethod) &&
+      (!isSecretBasedMethod(currentAuthMethod) || !currentClient.clientSecret);
+
+    const shouldClearSecret =
+      nextAuthMethod === "none" && currentClient.clientSecret !== null;
+
+    const sanitizedMetadata = { ...metadataRecord };
+    delete sanitizedMetadata["token_endpoint_auth_method"];
+
     const updatedMetadata = {
-      ...metadata,
-      ...(authMethod && { tokenEndpointAuthMethod: authMethod }),
+      ...sanitizedMetadata,
+      tokenEndpointAuthMethod: nextAuthMethod,
       ...(grantTypesArray.length > 0 && { grantTypes: grantTypesArray }),
     };
 
-    // Update client
+    let generatedSecret: string | null = null;
+    if (shouldGenerateSecret) {
+      generatedSecret = randomBytes(32).toString("base64url");
+    }
+
+    const updatePayload: Partial<typeof oauthApplication.$inferInsert> = {
+      name,
+      redirectURLs: JSON.stringify(redirectUrlsArray),
+      metadata: JSON.stringify(updatedMetadata),
+      updatedAt: new Date(),
+    };
+
+    if (generatedSecret) {
+      updatePayload.clientSecret = generatedSecret;
+    } else if (shouldClearSecret) {
+      updatePayload.clientSecret = null;
+    }
+
     await db
       .update(oauthApplication)
-      .set({
-        name,
-        redirectURLs: JSON.stringify(redirectUrlsArray),
-        metadata: JSON.stringify(updatedMetadata),
-        updatedAt: new Date(),
-      })
+      .set(updatePayload)
       .where(eq(oauthApplication.clientId, clientId));
 
     revalidatePath(`/admin/clients/${clientId}`);
@@ -255,7 +308,12 @@ export async function updateClient(
     revalidatePath(`/admin/clients/${clientId}/api-keys`);
     revalidatePath("/admin/clients");
 
-    return { success: true };
+    return {
+      success: true,
+      ...(generatedSecret
+        ? { data: { newSecret: generatedSecret, secretGenerated: true } }
+        : {}),
+    };
   } catch (error) {
     console.error("Update client error:", error);
     return {

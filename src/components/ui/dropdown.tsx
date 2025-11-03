@@ -37,20 +37,24 @@ export interface DropdownProps {
  */
 export function Dropdown({ trigger, items, align = "right", className }: DropdownProps) {
   return (
-    <Menu as="div" className={cn("relative inline-block text-left", className)}>
+    <Menu
+      as="div"
+      className={cn("relative inline-block text-left", className)}
+    >
       <MenuButton as={React.Fragment}>
         {trigger}
       </MenuButton>
 
       <MenuItems
+        anchor={align === "left" ? "bottom start" : "bottom end"}
         className={cn(
-          "absolute z-50 mt-2 w-56 origin-top-right rounded-lg",
+          "z-100 mt-2 w-56 origin-top-right rounded-lg",
           "bg-[#1a2632] border border-[#243647]",
           "shadow-lg ring-1 ring-black ring-opacity-5",
           "focus:outline-none",
-          "divide-y divide-gray-700",
-          align === "left" ? "left-0" : "right-0"
+          "divide-y divide-gray-700"
         )}
+        modal={false}
       >
         <div className="py-1">
           {items.map((item, index) => {

@@ -30,6 +30,7 @@ import {
   updateUserAccess,
   getAllGroups,
   createUserGroup,
+  checkResourceDependencies,
 } from "./actions";
 import { toast } from "@/lib/toast";
 
@@ -80,6 +81,9 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
   const [showRemoveUserModal, setShowRemoveUserModal] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState<ClientUser | null>(null);
   const [userToRemove, setUserToRemove] = React.useState<{ userId: string; userName: string | null } | null>(null);
+  const [showAccessPolicyModal, setShowAccessPolicyModal] = React.useState(false);
+  const [pendingAccessPolicy, setPendingAccessPolicy] = React.useState<"restricted" | null>(null);
+  const [isUpdatingAccessPolicy, setIsUpdatingAccessPolicy] = React.useState(false);
 
   // Form states
   const [assignUserId, setAssignUserId] = React.useState("");
@@ -132,32 +136,57 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     void loadData();
   }, [loadData]);
 
-  const handleToggleAccessPolicy = async () => {
+  const updateAccessPolicy = React.useCallback(async (nextPolicy: "all_users" | "restricted") => {
+    if (!metadata) return;
+
+    setIsUpdatingAccessPolicy(true);
+    try {
+      // Access policy and API keys are tightly coupled:
+      // - Restricted mode: Enable API keys (needed for access control)
+      // - All users mode: Disable API keys (not needed, everyone has access anyway)
+      // Note: Existing API keys will continue to work, but new ones cannot be created
+      const shouldAllowApiKeys = nextPolicy === "restricted";
+  
+      const result = await updateClientAccessPolicy({
+        clientId: client.clientId,
+        accessPolicy: nextPolicy,
+        allowsApiKeys: shouldAllowApiKeys,
+      });
+
+      if (result.success) {
+        const message = nextPolicy === "restricted"
+          ? "Switched to restricted access. API keys are now enabled."
+          : "Switched to open access. All users can now use this client.";
+        toast.success("Access policy updated", message);
+        await loadData();
+      } else {
+        toast.error("Failed to update policy", result.error);
+      }
+    } finally {
+      setIsUpdatingAccessPolicy(false);
+    }
+  }, [client.clientId, loadData, metadata]);
+
+  const handleAccessPolicyClick = () => {
     if (!metadata) return;
 
     const newPolicy = metadata.accessPolicy === "all_users" ? "restricted" : "all_users";
-    
-    // Access policy and API keys are tightly coupled:
-    // - Restricted mode: Enable API keys (needed for access control)
-    // - All users mode: Disable API keys (not needed, everyone has access anyway)
-    // Note: Existing API keys will continue to work, but new ones cannot be created
-    const shouldAllowApiKeys = newPolicy === "restricted";
-    
-    const result = await updateClientAccessPolicy({
-      clientId: client.clientId,
-      accessPolicy: newPolicy,
-      allowsApiKeys: shouldAllowApiKeys,
-    });
 
-    if (result.success) {
-      const message = newPolicy === "restricted"
-        ? "Switched to restricted access. API keys are now enabled."
-        : "Switched to open access. All users can now use this client.";
-      toast.success("Access policy updated", message);
-      await loadData();
-    } else {
-      toast.error("Failed to update policy", result.error);
+    if (newPolicy === "restricted") {
+      setPendingAccessPolicy("restricted");
+      setShowAccessPolicyModal(true);
+      return;
     }
+
+    void updateAccessPolicy("all_users");
+  };
+
+  const confirmAccessPolicyChange = async () => {
+    if (!pendingAccessPolicy) return;
+
+    setShowAccessPolicyModal(false);
+    await updateAccessPolicy(pendingAccessPolicy);
+    setPendingAccessPolicy(null);
   };
 
   const handleSaveResources = async () => {
@@ -204,6 +233,39 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
         }
         
         resourcesJson[resource] = actions;
+      }
+
+      // Check if any API keys would be affected by this change
+      const dependencies = await checkResourceDependencies(
+        client.clientId,
+        resourcesJson
+      );
+
+      if (dependencies.hasConflicts) {
+        let errorMessage = "";
+        
+        if (dependencies.affectedKeys.length > 0) {
+          const keyNames = dependencies.affectedKeys.map((k) => k.keyName).join(", ");
+          const totalConflicts = dependencies.affectedKeys.reduce(
+            (sum, k) => sum + k.conflictingPermissions.length,
+            0
+          );
+          errorMessage += `${dependencies.affectedKeys.length} API key(s) (${keyNames}) are using ${totalConflicts} permission(s) you're trying to remove.`;
+        }
+        
+        if (dependencies.defaultPermissionConflicts.length > 0) {
+          if (errorMessage) errorMessage += " ";
+          errorMessage += `Default permissions include ${dependencies.defaultPermissionConflicts.length} permission(s) you're trying to remove: ${dependencies.defaultPermissionConflicts.join(", ")}.`;
+        }
+        
+        errorMessage += " Please update or clear these permissions first.";
+        
+        toast.error(
+          "Cannot remove resources in use",
+          errorMessage
+        );
+        setIsSavingResources(false);
+        return;
       }
 
       const result = await updateClientAccessPolicy({
@@ -349,7 +411,12 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
                 ? "All users can authorize with this client. No explicit access assignment needed."
                 : "Only users with explicit access can authorize with this client."}
             </p>
-            <Button variant="secondary" size="sm" onClick={handleToggleAccessPolicy}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleAccessPolicyClick}
+              disabled={isUpdatingAccessPolicy}
+            >
               Switch to {metadata?.accessPolicy === "all_users" ? "Restricted" : "Open"} Access
             </Button>
           </div>
@@ -526,6 +593,52 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Access Policy Confirmation Modal */}
+      <Modal
+        isOpen={showAccessPolicyModal}
+        onClose={() => {
+          if (!isUpdatingAccessPolicy) {
+            setShowAccessPolicyModal(false);
+            setPendingAccessPolicy(null);
+          }
+        }}
+        title="Switch to Restricted Access"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <Icon name="warning" className="text-yellow-500 text-2xl shrink-0" />
+            <div className="text-sm text-yellow-100">
+              <strong className="block mb-1">Confirm restricted access</strong>
+              Moving to restricted access means only explicitly assigned users and groups can authorize with this client. API keys will be enabled automatically.
+            </div>
+          </div>
+          <p className="text-sm text-[#cbd5f5]">
+            Make sure you have assigned the necessary users or groups before continuing. You can switch back to open access at any time.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setShowAccessPolicyModal(false);
+                setPendingAccessPolicy(null);
+              }}
+              disabled={isUpdatingAccessPolicy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={confirmAccessPolicyChange}
+              disabled={isUpdatingAccessPolicy}
+            >
+              Switch to Restricted Access
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Assign User Modal */}
       <Modal

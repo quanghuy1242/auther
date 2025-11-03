@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 
 import { EmailSignInForm } from "@/components/auth/email-sign-in-form";
 import { Card, CardContent, Icon } from "@/components/ui";
+import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/auth-utils";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -10,7 +13,17 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  // Check if user is already authenticated and is an admin
+  // This prevents redirect loops by only redirecting when we have a VALID admin session
+  const session = await getSession();
+  if (session) {
+    const hasAdminAccess = await isAdmin(session);
+    if (hasAdminAccess) {
+      redirect("/admin");
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#111921] px-4 py-16">
       <Card className="w-full max-w-md shadow-2xl">

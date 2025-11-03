@@ -1,7 +1,9 @@
 "use server";
 
 import { z } from "zod";
+import { headers } from "next/headers";
 import { requireAuth } from "@/lib/session";
+import { auth } from "@/lib/auth";
 import {
   userClientAccessRepository,
   oauthClientMetadataRepository,
@@ -319,6 +321,122 @@ export async function getClientMetadata(clientId: string) {
       allowsApiKeys: false,
       allowedResources: null,
       defaultApiKeyPermissions: null,
+    };
+  }
+}
+
+/**
+ * Check if resources/actions are in use by API keys or default permissions
+ * Returns the API keys that would be affected by removing these resources
+ */
+export async function checkResourceDependencies(
+  clientId: string,
+  proposedResources: Record<string, string[]>
+): Promise<{
+  hasConflicts: boolean;
+  affectedKeys: Array<{
+    keyId: string;
+    keyName: string;
+    conflictingPermissions: string[];
+  }>;
+  defaultPermissionConflicts: string[];
+}> {
+  try {
+    await requireAuth();
+    const _headers = await headers();
+
+    // Get client metadata to check default permissions
+    const metadata = await oauthClientMetadataRepository.findByClientId(clientId);
+    const defaultPermissionConflicts: string[] = [];
+
+    // Check default permissions
+    if (metadata?.defaultApiKeyPermissions) {
+      for (const [resource, actions] of Object.entries(metadata.defaultApiKeyPermissions)) {
+        const proposedActions = proposedResources[resource];
+
+        if (!proposedActions) {
+          // Resource is being removed entirely
+          for (const action of actions) {
+            defaultPermissionConflicts.push(`${resource}:${action}`);
+          }
+        } else {
+          // Check if any actions are being removed
+          for (const action of actions) {
+            if (!proposedActions.includes(action)) {
+              defaultPermissionConflicts.push(`${resource}:${action}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Get all API keys for this client
+    const allKeys = await auth.api.listApiKeys({
+      headers: _headers,
+    });
+
+    if (!allKeys || !Array.isArray(allKeys)) {
+      return {
+        hasConflicts: defaultPermissionConflicts.length > 0,
+        affectedKeys: [],
+        defaultPermissionConflicts,
+      };
+    }
+
+    // Filter keys for this specific client
+    const clientKeys = allKeys.filter(
+      (key) => key.metadata?.oauth_client_id === clientId
+    );
+
+    const affectedKeys: Array<{
+      keyId: string;
+      keyName: string;
+      conflictingPermissions: string[];
+    }> = [];
+
+    // Check each key's permissions against proposed resources
+    for (const key of clientKeys) {
+      const keyPermissions = (key.permissions || {}) as Record<string, string[]>;
+      const conflictingPermissions: string[] = [];
+
+      for (const [resource, actions] of Object.entries(keyPermissions)) {
+        const proposedActions = proposedResources[resource];
+
+        if (!proposedActions) {
+          // Resource is being removed entirely
+          for (const action of actions) {
+            conflictingPermissions.push(`${resource}:${action}`);
+          }
+        } else {
+          // Check if any actions are being removed
+          for (const action of actions) {
+            if (!proposedActions.includes(action)) {
+              conflictingPermissions.push(`${resource}:${action}`);
+            }
+          }
+        }
+      }
+
+      if (conflictingPermissions.length > 0) {
+        affectedKeys.push({
+          keyId: key.id,
+          keyName: key.name ?? "Unnamed Key",
+          conflictingPermissions,
+        });
+      }
+    }
+
+    return {
+      hasConflicts: affectedKeys.length > 0 || defaultPermissionConflicts.length > 0,
+      affectedKeys,
+      defaultPermissionConflicts,
+    };
+  } catch (error) {
+    console.error("checkResourceDependencies error:", error);
+    return {
+      hasConflicts: false,
+      affectedKeys: [],
+      defaultPermissionConflicts: [],
     };
   }
 }

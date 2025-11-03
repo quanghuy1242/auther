@@ -224,7 +224,7 @@ export async function updateApiKeyPermissions(
   permissions: ResourcePermissions
 ): Promise<ApiKeyResult> {
   try {
-    await requireAuth();
+    const session = await requireAuth();
 
     // Get all keys to find the one we want to update
     const allKeys = await auth.api.listApiKeys({
@@ -263,8 +263,8 @@ export async function updateApiKeyPermissions(
       body: {
         keyId,
         permissions,
+        userId: session.user.id,
       },
-      headers: await headers(),
     });
 
     return { success: true };

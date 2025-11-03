@@ -54,7 +54,7 @@ export interface ContentSkeletonProps {
 export function ContentSkeleton({
   lines = 3,
   showTitle = true,
-  maxWidth = "max-w-6xl",
+  maxWidth = "max-w-7xl",
   className,
 }: ContentSkeletonProps) {
   return (

@@ -4,13 +4,14 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/session";
+import { booleanField } from "@/lib/utils/validation";
 
 const createUserSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   username: z.string().optional().transform(val => val || undefined),
   password: z.string().optional().transform(val => val || undefined),
-  sendInvite: z.boolean().optional(),
+  sendInvite: booleanField.optional().default(false),
 });
 
 export type CreateUserState = {
@@ -20,6 +21,7 @@ export type CreateUserState = {
   data?: {
     userId: string;
     email: string;
+    sendInvite: boolean;
   };
 };
 
@@ -44,7 +46,7 @@ export async function createUser(
       return { success: false, errors };
     }
 
-    const { fullName, email, username, password, sendInvite } = result.data;
+    const { fullName, email, username, password, sendInvite = false } = result.data;
 
     // If sendInvite is true, create user without password (will need to set password via magic link)
     // Otherwise, use provided password or generate a temporary one
@@ -86,6 +88,7 @@ export async function createUser(
       data: {
         userId: response.user.id,
         email: response.user.email,
+        sendInvite,
       },
     };
   } catch (error) {

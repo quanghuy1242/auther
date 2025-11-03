@@ -6,7 +6,7 @@
     "dev": "dotenv -e .env.local -- next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "type:generate": "npx @better-auth/cli generate --output ./src/db/auth-schema.ts",

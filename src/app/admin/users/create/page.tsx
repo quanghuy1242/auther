@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { z } from "zod";
+import { booleanField } from "@/lib/utils/validation";
 import { useFormContext } from "react-hook-form";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, Button } from "@/components/ui";
@@ -14,7 +15,7 @@ const createUserSchema = z.object({
   email: z.string().email("Invalid email address"),
   username: z.string().optional().transform(val => val || undefined),
   password: z.string().optional().transform(val => val || undefined),
-  sendInvite: z.boolean().optional(),
+  sendInvite: booleanField.optional().default(false),
 });
 
 function CreateUserForm({ onCancel }: { onCancel: () => void }) {
@@ -98,12 +99,9 @@ export default function CreateUserPage() {
   const [sendInvite, setSendInvite] = React.useState(false);
 
   const handleSuccess = (data: unknown) => {
+    const result = data as { userId: string; email: string; sendInvite: boolean } | undefined;
     setShowSuccess(true);
-    const result = data as { userId: string; email: string } | undefined;
-    // Check if sendInvite was true from the data
-    if (result) {
-      setSendInvite(true);
-    }
+    setSendInvite(Boolean(result?.sendInvite));
     setTimeout(() => {
       router.push("/admin/users");
     }, 2000);

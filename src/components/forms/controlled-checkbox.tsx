@@ -30,24 +30,37 @@ export function ControlledCheckbox({ name, label, description, disabled, classNa
     <Controller
       name={name}
       control={control}
-      render={({ field }) => (
-        <>
-          {/* Hidden input for form submission */}
-          <input
-            type="hidden"
-            name={name}
-            value={field.value ? "true" : "false"}
-          />
-          <Checkbox
-            checked={field.value || false}
-            onChange={field.onChange}
-            label={label}
-            description={description}
-            disabled={disabled}
-            className={className}
-          />
-        </>
-      )}
+      render={({ field }) => {
+        const rawValue = field.value;
+        const checked =
+          typeof rawValue === "boolean"
+            ? rawValue
+            : typeof rawValue === "string"
+              ? ["true", "1", "on", "yes"].includes(rawValue.toLowerCase())
+              : false;
+
+        return (
+          <>
+            {/* Hidden input for form submission */}
+            <input
+              type="hidden"
+              name={name}
+              ref={field.ref}
+              value={checked ? "true" : "false"}
+            />
+            <Checkbox
+              checked={checked}
+              onChange={(value) => {
+                field.onChange(value);
+              }}
+              label={label}
+              description={description}
+              disabled={disabled}
+              className={className}
+            />
+          </>
+        );
+      }}
     />
   );
 }

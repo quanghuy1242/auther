@@ -13,6 +13,7 @@ interface FormState {
   success: boolean;
   errors?: Record<string, string>;
   data?: unknown;
+  error?: string;
 }
 
 export interface FormWrapperProps<TSchema> {
@@ -53,6 +54,8 @@ export function FormWrapper<TSchema extends Record<string, any>>({
     resolver: zodResolver(schema),
     // @ts-expect-error - DefaultValues type mismatch
     defaultValues,
+    mode: "onBlur", // Validate on blur for better UX - shows errors after user leaves field
+    reValidateMode: "onChange", // Re-validate on change after first submission
   });
 
   // Use ref to avoid re-triggering effect when onSuccess changes
@@ -123,6 +126,18 @@ export function FormWrapper<TSchema extends Record<string, any>>({
         onSubmit={handleSubmit}
         className={className}
       >
+        {/* Display server-level error messages */}
+        {!state.success && state.error && (
+          <div
+            className={cn(
+              "mb-6 p-4 rounded-lg border",
+              "bg-red-500/10 border-red-500/20 text-sm text-red-300"
+            )}
+            role="alert"
+          >
+            {state.error}
+          </div>
+        )}
         {/* Display form-level errors */}
         {Object.keys(methods.formState.errors).length > 0 && (
           <div 

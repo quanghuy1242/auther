@@ -31,6 +31,20 @@ import {
 // Available auth methods and grant types
 const AUTH_METHODS = ["client_secret_basic", "client_secret_post", "private_key_jwt", "none"] as const;
 const GRANT_TYPES = ["authorization_code", "refresh_token", "client_credentials"] as const;
+type AuthMethod = typeof AUTH_METHODS[number];
+
+function resolveAuthMethod(client: ClientDetail): AuthMethod {
+  const metadata = client.metadata as Record<string, unknown> | undefined;
+  const rawCandidate =
+    (metadata?.["tokenEndpointAuthMethod"] as string | undefined) ??
+    (metadata?.["token_endpoint_auth_method"] as string | undefined);
+
+  if (typeof rawCandidate === "string" && AUTH_METHODS.includes(rawCandidate as AuthMethod)) {
+    return rawCandidate as AuthMethod;
+  }
+
+  return client.clientSecret ? "client_secret_basic" : "none";
+}
 
 interface ClientDetailClientProps {
   client: ClientDetail;
@@ -43,11 +57,13 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
   const [showSecretModal, setShowSecretModal] = React.useState(false);
   const [newSecret, setNewSecret] = React.useState<string | null>(null);
+  const [showDisableModal, setShowDisableModal] = React.useState(false);
+  const [isTogglingStatus, setIsTogglingStatus] = React.useState(false);
 
   // Edit mode state
   const [editName, setEditName] = React.useState(client.name || "");
   const [editRedirectUrls, setEditRedirectUrls] = React.useState<string[]>(client.redirectURLs);
-  const [editAuthMethod, setEditAuthMethod] = React.useState(client.metadata.tokenEndpointAuthMethod || "client_secret_basic");
+  const [editAuthMethod, setEditAuthMethod] = React.useState<AuthMethod>(resolveAuthMethod(client));
   const [editGrantTypes, setEditGrantTypes] = React.useState<string[]>(client.metadata.grantTypes || ["authorization_code"]);
 
   const updateWithClientId = updateClient.bind(null, client.clientId);
@@ -58,13 +74,20 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
 
   React.useEffect(() => {
     if (updateState.success) {
-      toast.success("Client updated successfully");
+      const generatedSecret = updateState.data?.newSecret;
+      if (generatedSecret) {
+        setNewSecret(generatedSecret);
+        setShowSecretModal(true);
+        toast.success("Client secret generated");
+      } else {
+        toast.success("Client updated successfully");
+      }
       setIsEditing(false);
       router.refresh();
     } else if (updateState.error) {
       toast.error(updateState.error);
     }
-  }, [updateState.success, updateState.error, router]);
+  }, [updateState.success, updateState.error, updateState.data, router]);
 
   const handleRotateSecret = async () => {
     const result = await rotateClientSecret(client.clientId);
@@ -78,13 +101,31 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     }
   };
 
-  const handleToggleStatus = async () => {
-    const result = await toggleClientStatus(client.clientId, !client.disabled);
-    if (result.success) {
-      toast.success(client.disabled ? "Client enabled successfully" : "Client disabled successfully");
-      router.refresh();
-    } else if (result.error) {
-      toast.error(result.error);
+  const toggleStatus = React.useCallback(
+    async (targetDisabled: boolean) => {
+      setIsTogglingStatus(true);
+      try {
+        const result = await toggleClientStatus(client.clientId, targetDisabled);
+        if (result.success) {
+          toast.success(
+            targetDisabled ? "Client disabled successfully" : "Client enabled successfully"
+          );
+          router.refresh();
+        } else if (result.error) {
+          toast.error(result.error);
+        }
+      } finally {
+        setIsTogglingStatus(false);
+      }
+    },
+    [client.clientId, router]
+  );
+
+  const handleStatusButtonClick = () => {
+    if (client.disabled) {
+      void toggleStatus(false);
+    } else {
+      setShowDisableModal(true);
     }
   };
 
@@ -112,7 +153,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     setIsEditing(false);
     setEditName(client.name || "");
     setEditRedirectUrls(client.redirectURLs);
-    setEditAuthMethod(client.metadata.tokenEndpointAuthMethod || "client_secret_basic");
+    setEditAuthMethod(resolveAuthMethod(client));
     setEditGrantTypes(client.metadata.grantTypes || ["authorization_code"]);
   };
 
@@ -124,7 +165,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
 
   const isConfidential = client.clientSecret !== null;
   const grantTypes = isEditing ? editGrantTypes : (client.metadata.grantTypes || ["authorization_code"]);
-  const authMethod = isEditing ? editAuthMethod : (client.metadata.tokenEndpointAuthMethod || "client_secret_basic");
+  const authMethod = isEditing ? editAuthMethod : resolveAuthMethod(client);
 
   return (
     <>
@@ -134,7 +175,8 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
           <Button
             variant={client.disabled ? "primary" : "secondary"}
             size="sm"
-            onClick={handleToggleStatus}
+            onClick={handleStatusButtonClick}
+            disabled={isTogglingStatus}
           >
             {client.disabled ? "Enable Client" : "Disable Client"}
           </Button>
@@ -391,6 +433,51 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Disable Client Confirmation */}
+      <Modal
+        isOpen={showDisableModal}
+        onClose={() => {
+          if (!isTogglingStatus) {
+            setShowDisableModal(false);
+          }
+        }}
+        title="Disable OAuth Client"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <Icon name="warning" className="text-red-500 text-2xl shrink-0" />
+            <div className="text-sm text-red-200">
+              <strong className="block mb-1">Are you sure you want to disable this client?</strong>
+              Disabling the client will immediately block all new OAuth flows. Existing tokens may continue to work until they expire.
+            </div>
+          </div>
+          <p className="text-gray-300 text-sm">
+            You can re-enable the client at any time from this page. Consider rotating the secret if you believe it was compromised.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowDisableModal(false)}
+              disabled={isTogglingStatus}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                setShowDisableModal(false);
+                void toggleStatus(true);
+              }}
+              disabled={isTogglingStatus}
+            >
+              Disable Client
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Rotate Secret Modal */}
       <Modal

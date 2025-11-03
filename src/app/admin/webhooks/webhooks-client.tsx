@@ -258,7 +258,8 @@ export function WebhooksClient({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">{/* Note: Removed loading overlay to match users list behavior and prevent flickering */}
+
       {/* Metrics Card */}
       <MetricsCard
         title="Delivery Success Rate"
@@ -321,17 +322,8 @@ export function WebhooksClient({
         </div>
       </div>
 
-      {/* Loading overlay */}
-      {isPending && (
-        <div className="absolute inset-0 bg-[var(--color-background)]/50 z-10 flex items-center justify-center">
-          <div className="animate-spin">
-            <Icon name="refresh" className="text-[var(--color-primary)]" />
-          </div>
-        </div>
-      )}
-
       {/* Webhooks Table */}
-      <div className="rounded-lg border-0 sm:border sm:border-[#344d65]">
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark">
         <ResponsiveTable<WebhookEndpointWithSubscriptions>
           columns={columns}
           data={initialWebhooks}
