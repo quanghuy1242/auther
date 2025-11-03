@@ -61,8 +61,10 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
   const [showCreateModal, setShowCreateModal] = React.useState(false);
   const [showKeyModal, setShowKeyModal] = React.useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = React.useState(false);
+  const [showRevokeModal, setShowRevokeModal] = React.useState(false);
   const [newApiKey, setNewApiKey] = React.useState<{ key: string; name: string } | null>(null);
   const [selectedKey, setSelectedKey] = React.useState<ApiKeyListItem | null>(null);
+  const [keyToRevoke, setKeyToRevoke] = React.useState<{ id: string; name: string } | null>(null);
 
   // Form states
   const [keyName, setKeyName] = React.useState("");
@@ -92,13 +94,8 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
     return permissions;
   }, [metadata?.allowedResources]);
 
-  // Load data
-  React.useEffect(() => {
-    void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadData = async () => {
+  // Load data function wrapped in useCallback
+  const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
       const [metadataResult, keysResult] = await Promise.all([
@@ -130,7 +127,12 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [client.clientId]);
+
+  // Load data on mount
+  React.useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,12 +191,19 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
   };
 
   const handleRevokeKey = async (keyId: string, keyName: string) => {
-    if (!confirm(`Revoke API key "${keyName}"? This action cannot be undone.`)) return;
+    setKeyToRevoke({ id: keyId, name: keyName });
+    setShowRevokeModal(true);
+  };
 
-    const result = await revokeApiKey(keyId);
+  const confirmRevokeKey = async () => {
+    if (!keyToRevoke) return;
+
+    const result = await revokeApiKey(keyToRevoke.id);
 
     if (result.success) {
       toast.success("API key revoked", "The API key has been revoked successfully.");
+      setShowRevokeModal(false);
+      setKeyToRevoke(null);
       await loadData();
     } else {
       toast.error("Failed to revoke API key", result.error);
@@ -391,7 +400,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
                     Reset
                   </Button>
 
-                  {defaultPermissions.length > 0 && (
+                  {availablePermissionsList.length > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -817,6 +826,16 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
                 No resource constraints defined. Define allowed resources in Access Control settings.
               </p>
             )}
+            
+            {/* Warning for empty permissions */}
+            {selectedApiKeyPermissions.length === 0 && (
+              <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mt-2">
+                <Icon name="warning" className="text-yellow-500 text-lg shrink-0 mt-0.5" />
+                <p className="text-sm text-yellow-200">
+                  This API key will have no permissions. Consider selecting at least one permission for it to be useful.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 justify-end">
@@ -945,6 +964,53 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Revoke API Key Confirmation Modal */}
+      <Modal
+        isOpen={showRevokeModal}
+        onClose={() => {
+          setShowRevokeModal(false);
+          setKeyToRevoke(null);
+        }}
+        title="Revoke API Key"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <Icon name="error" className="text-red-500 text-2xl shrink-0" />
+            <div className="text-sm text-red-200">
+              <strong className="block mb-1">This action cannot be undone</strong>
+              Revoking this API key will:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Immediately invalidate the key</li>
+                <li>Prevent any further API access using this key</li>
+                <li>Cannot be recovered once revoked</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-gray-300">
+            Are you sure you want to revoke the API key <strong>&quot;{keyToRevoke?.name}&quot;</strong>?
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setShowRevokeModal(false);
+                setKeyToRevoke(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={confirmRevokeKey}
+            >
+              Revoke API Key
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

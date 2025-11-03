@@ -4,7 +4,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { oauthApplication, oauthAccessToken } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { requireAuth } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -35,6 +35,8 @@ export interface ClientDetail {
 const updateClientSchema = z.object({
   name: z.string().min(2, "Client name must be at least 2 characters"),
   redirectURLs: z.string().min(1, "At least one redirect URL is required"),
+  authMethod: z.string().optional(),
+  grantTypes: z.string().optional(),
 });
 
 export type UpdateClientState = {
@@ -105,9 +107,9 @@ export const getClientById = cache(async (clientId: string): Promise<ClientDetai
         }
 
         // Count active tokens
-        const [tokenCount] = await db
+        const activeTokensResult = await db
           .select({
-            count: oauthAccessToken.id,
+            value: count(),
           })
           .from(oauthAccessToken)
           .where(eq(oauthAccessToken.clientId, clientId));
@@ -126,7 +128,7 @@ export const getClientById = cache(async (clientId: string): Promise<ClientDetai
           updatedAt: client.updatedAt || new Date(),
           metadata,
           lastUsed: tokens[0]?.createdAt || null,
-          activeTokenCount: tokenCount ? 1 : 0,
+          activeTokenCount: Number(activeTokensResult[0]?.value || 0),
         };
       },
       [`client-${clientId}`],
@@ -155,6 +157,8 @@ export async function updateClient(
     const rawData = {
       name: formData.get("name"),
       redirectURLs: formData.get("redirectURLs"),
+      authMethod: formData.get("authMethod"),
+      grantTypes: formData.get("grantTypes"),
     };
 
     const result = updateClientSchema.safeParse(rawData);
@@ -169,7 +173,7 @@ export async function updateClient(
       return { success: false, errors };
     }
 
-    const { name, redirectURLs } = result.data;
+    const { name, redirectURLs, authMethod, grantTypes } = result.data;
 
     // Parse redirect URLs (one per line)
     const redirectUrlsArray = redirectURLs
@@ -196,12 +200,52 @@ export async function updateClient(
       }
     }
 
+    // Parse grant types
+    let grantTypesArray: string[] = [];
+    if (grantTypes) {
+      try {
+        grantTypesArray = JSON.parse(grantTypes);
+      } catch {
+        grantTypesArray = [];
+      }
+    }
+
+    // Get current client metadata
+    const [currentClient] = await db
+      .select()
+      .from(oauthApplication)
+      .where(eq(oauthApplication.clientId, clientId))
+      .limit(1);
+
+    if (!currentClient) {
+      return {
+        success: false,
+        error: "Client not found",
+      };
+    }
+
+    // Parse existing metadata
+    let metadata = {};
+    try {
+      metadata = currentClient.metadata ? JSON.parse(currentClient.metadata) : {};
+    } catch {
+      metadata = {};
+    }
+
+    // Update metadata with new values
+    const updatedMetadata = {
+      ...metadata,
+      ...(authMethod && { tokenEndpointAuthMethod: authMethod }),
+      ...(grantTypesArray.length > 0 && { grantTypes: grantTypesArray }),
+    };
+
     // Update client
     await db
       .update(oauthApplication)
       .set({
         name,
         redirectURLs: JSON.stringify(redirectUrlsArray),
+        metadata: JSON.stringify(updatedMetadata),
         updatedAt: new Date(),
       })
       .where(eq(oauthApplication.clientId, clientId));

@@ -34,25 +34,28 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
   };
 
   // Debounced search effect
+  const debouncedSearch = React.useCallback((searchValue: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (searchValue) {
+      params.set("search", searchValue);
+    } else {
+      params.delete("search");
+    }
+    params.set("page", "1"); // Reset to page 1 on search
+    startTransition(() => {
+      router.push(`/admin/clients?${params.toString()}`);
+    });
+  }, [searchParams, router]);
+
   React.useEffect(() => {
     if (isInitialMount.current) return; // Skip on initial mount
     
     const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (search) {
-        params.set("search", search);
-      } else {
-        params.delete("search");
-      }
-      params.set("page", "1"); // Reset to page 1 on search
-      startTransition(() => {
-        router.push(`/admin/clients?${params.toString()}`);
-      });
+      debouncedSearch(search);
     }, 300);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, router]);
+  }, [search, debouncedSearch]);
 
   const handleFilterChange = (type: "all" | "trusted" | "dynamic") => {
     const params = new URLSearchParams(searchParams.toString());

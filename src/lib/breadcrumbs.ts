@@ -29,30 +29,44 @@ export function generateBreadcrumbs(pathname: string, dynamicLabels?: Record<str
     // If not just /admin, process the path
     if (pathname !== "/admin") {
       const segments = pathname.split("/").filter(Boolean);
-      let currentPath = "";
-      
+      let currentPath = "/admin";
+
       // Skip the first segment (admin) as we already added it
       for (let i = 1; i < segments.length; i++) {
-        currentPath += "/" + segments[i];
+        currentPath += `/${segments[i]}`;
         const fullPath = currentPath;
-        
+        const relativePath = fullPath.replace(/^\/admin/, "") || fullPath;
+        const isLast = i === segments.length - 1;
+
         // Check if this is a dynamic segment (UUID pattern or "edit")
         const isDynamic = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segments[i]);
         
-        if (isDynamic && dynamicLabels && dynamicLabels[fullPath]) {
-          // Use provided dynamic label (e.g., client name, user email)
-          items.push({ 
-            label: dynamicLabels[fullPath],
-            href: i < segments.length - 1 ? fullPath : undefined
-          });
-        } else if (!isDynamic) {
-          // Static route segment
-          const label = routeLabels[fullPath] || capitalize(segments[i]);
-          items.push({ 
-            label,
-            href: i < segments.length - 1 ? fullPath : undefined
-          });
+        if (isDynamic) {
+          const relativeKey = relativePath.startsWith("/")
+            ? relativePath
+            : `/${relativePath}`;
+          const dynamicLabel =
+            dynamicLabels?.[fullPath] ??
+            dynamicLabels?.[relativeKey] ??
+            dynamicLabels?.[relativeKey.slice(1)];
+
+          if (dynamicLabel) {
+            // Use provided dynamic label (e.g., client name, user email)
+            items.push({
+              label: dynamicLabel,
+              href: isLast ? undefined : fullPath,
+            });
+          }
+
+          continue;
         }
+
+        // Static route segment
+        const label = routeLabels[fullPath] || capitalize(segments[i]);
+        items.push({
+          label,
+          href: isLast ? undefined : fullPath,
+        });
       }
     }
   } else {

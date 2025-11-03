@@ -60,11 +60,11 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     if (updateState.success) {
       toast.success("Client updated successfully");
       setIsEditing(false);
-      window.location.reload();
+      router.refresh();
     } else if (updateState.error) {
       toast.error(updateState.error);
     }
-  }, [updateState.success, updateState.error]);
+  }, [updateState.success, updateState.error, router]);
 
   const handleRotateSecret = async () => {
     const result = await rotateClientSecret(client.clientId);
@@ -82,7 +82,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     const result = await toggleClientStatus(client.clientId, !client.disabled);
     if (result.success) {
       toast.success(client.disabled ? "Client enabled successfully" : "Client disabled successfully");
-      window.location.reload();
+      router.refresh();
     } else if (result.error) {
       toast.error(result.error);
     }
@@ -103,6 +103,8 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     const formData = new FormData();
     formData.append("name", editName);
     formData.append("redirectURLs", editRedirectUrls.join("\n"));
+    formData.append("authMethod", editAuthMethod);
+    formData.append("grantTypes", JSON.stringify(editGrantTypes));
     updateAction(formData);
   };
 
@@ -141,7 +143,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
           variant={isEditing ? "primary" : "secondary"}
           size="sm"
           onClick={isEditing ? handleSave : () => setIsEditing(true)}
-          disabled={isEditing && !editName.trim()}
+          disabled={isEditing && (!editName.trim() || editGrantTypes.length === 0)}
         >
           {isEditing ? "Save Changes" : "Edit"}
         </Button>
@@ -247,13 +249,18 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
           </CardHeader>
           <CardContent>
             {isEditing ? (
-              <UrlListBuilder
-                urls={editRedirectUrls}
-                onChange={setEditRedirectUrls}
-                placeholder="https://example.com/callback"
-                minUrls={1}
-                validateUrl
-              />
+              <>
+                <UrlListBuilder
+                  urls={editRedirectUrls}
+                  onChange={setEditRedirectUrls}
+                  placeholder="https://example.com/callback"
+                  minUrls={1}
+                  validateUrl
+                />
+                {updateState.errors?.redirectURLs && (
+                  <p className="text-sm text-red-400 mt-2">{updateState.errors.redirectURLs}</p>
+                )}
+              </>
             ) : (
               <div className="flex flex-col gap-3">
                 {client.redirectURLs.length === 0 ? (
@@ -419,12 +426,12 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
         </Modal>
 
       {/* New Secret Modal */}
-      <Modal
+        <Modal
           isOpen={!!(showSecretModal && newSecret)}
           onClose={() => {
             setShowSecretModal(false);
             setNewSecret(null);
-            window.location.reload();
+            router.refresh();
           }}
           title="New Client Secret"
         >
@@ -450,16 +457,14 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                 onClick={() => {
                   setShowSecretModal(false);
                   setNewSecret(null);
-                  window.location.reload();
+                  router.refresh();
                 }}
               >
                 I&apos;ve Saved the Secret
               </Button>
             </div>
           </div>
-        </Modal>
-
-      {/* Delete Client Modal */}
+        </Modal>      {/* Delete Client Modal */}
       <Modal
           isOpen={showDeleteModal}
           onClose={() => setShowDeleteModal(false)}

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/session";
 
 const createUserSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
@@ -27,6 +28,7 @@ export async function createUser(
   formData: FormData
 ): Promise<CreateUserState> {
   try {
+    await requireAdmin();
     // Parse form data
     const rawData = Object.fromEntries(formData.entries());
 
@@ -94,4 +96,3 @@ export async function createUser(
     };
   }
 }
-

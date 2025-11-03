@@ -1,7 +1,7 @@
 "use server";
 
-import { requireAuth } from "@/lib/session";
-import { webhookRepository } from "@/lib/repositories";
+import { requireAdmin } from "@/lib/session";
+import { webhookRepository, userRepository } from "@/lib/repositories";
 import {
   encryptSecret,
   decryptSecret,
@@ -18,7 +18,7 @@ import type {
   WebhookDeliveryFormat,
   WebhookRequestMethod,
 } from "@/lib/types";
-import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
+import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from "@/lib/constants";
 
 // Re-export types for client components
 export type {
@@ -112,7 +112,7 @@ export async function getWebhooks(params: {
   eventType?: string;
 }): Promise<GetWebhooksResult> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     const page = Math.max(1, params.page || 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize || 10));
@@ -160,7 +160,7 @@ export async function getWebhookById(
   id: string
 ): Promise<WebhookEndpointWithSubscriptions | null> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     const webhook = await webhookRepository.findByIdWithSubscriptions(id);
 
@@ -188,7 +188,7 @@ export async function getDeliveryHistory(
   }
 ): Promise<GetDeliveryHistoryResult> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Verify ownership
     const webhook = await webhookRepository.findById(webhookId);
@@ -229,7 +229,7 @@ export async function getDeliveryHistory(
  */
 export async function getDeliveryStats(): Promise<WebhookDeliveryStats> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
     return await webhookRepository.getDeliveryStats(session.user.id);
   } catch (error) {
     console.error("Failed to fetch delivery stats:", error);
@@ -256,7 +256,7 @@ export async function createWebhook(
   formData: FormData
 ): Promise<WebhookFormState> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Parse and validate form data
     const eventTypesRaw = formData.get("eventTypes");
@@ -348,7 +348,7 @@ export async function updateWebhook(
   formData: FormData
 ): Promise<WebhookFormState> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -436,7 +436,7 @@ export async function deleteWebhook(webhookId: string): Promise<{
   error?: string;
 }> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -477,7 +477,7 @@ export async function regenerateSecret(webhookId: string): Promise<{
   secret?: string;
 }> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -530,7 +530,7 @@ export async function toggleWebhookStatus(
   error?: string;
 }> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -575,7 +575,7 @@ export async function getDecryptedSecret(webhookId: string): Promise<{
   secret?: string;
 }> {
   try {
-    const session = await requireAuth();
+    const session = await requireAdmin();
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -598,6 +598,82 @@ export async function getDecryptedSecret(webhookId: string): Promise<{
     return {
       success: false,
       error: "Failed to retrieve secret",
+    };
+  }
+}
+
+/**
+ * Test a webhook by triggering a dummy user.updated event
+ * This will send a real webhook delivery to the endpoint
+ */
+const SUPPORTED_TEST_EVENT: WebhookEventType = "user.updated";
+
+/**
+ * Test a webhook by emitting a synthetic event
+ * This queues an event through the normal delivery pipeline
+ */
+export async function testWebhook(
+  webhookId: string
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const session = await requireAdmin();
+
+    const webhook = await webhookRepository.findByIdWithSubscriptions(webhookId);
+    if (!webhook || webhook.userId !== session.user.id) {
+      return { success: false, error: "Webhook not found or unauthorized" };
+    }
+
+    if (!webhook.isActive) {
+      return {
+        success: false,
+        error: "Cannot test an inactive webhook. Please enable it first.",
+      };
+    }
+
+    const isSupported = webhook.subscriptions.some(
+      (sub) => sub.eventType === SUPPORTED_TEST_EVENT
+    );
+
+    if (!isSupported) {
+      return {
+        success: false,
+        error:
+          "Test events currently require a subscription to 'user.updated'. Please add that event and try again.",
+      };
+    }
+
+    const userRecord = await userRepository.findById(webhook.userId);
+    if (!userRecord) {
+      return {
+        success: false,
+        error: "Unable to load user profile for test payload",
+      };
+    }
+
+    const { emitWebhookEvent } = await import("@/lib/webhooks/delivery-service");
+
+    await emitWebhookEvent(webhook.userId, SUPPORTED_TEST_EVENT, {
+      id: userRecord.id,
+      email: userRecord.email,
+      name: userRecord.name,
+      emailVerified: userRecord.emailVerified,
+      updatedAt: new Date().toISOString(),
+      testEvent: true,
+      note: "Webhook test triggered from admin UI",
+      triggeredBy: session.user.id,
+      triggeredAt: new Date().toISOString(),
+    });
+
+    return {
+      success: true,
+      message:
+        "Test event queued. Deliveries may take a few seconds to appear in the history.",
+    };
+  } catch (error) {
+    console.error("Failed to test webhook:", error);
+    return {
+      success: false,
+      error: "An unexpected error occurred while testing webhook",
     };
   }
 }

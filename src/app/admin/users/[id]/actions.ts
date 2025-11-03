@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAuth } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -60,7 +60,7 @@ const updateUserSchema = z.object({
  */
 export async function getUserById(userId: string): Promise<UserDetail | null> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     // Get user with accounts
     const userWithAccounts = await userRepository.findByIdWithAccounts(userId);
@@ -100,7 +100,7 @@ export async function updateUserProfile(
   formData: FormData
 ): Promise<UpdateUserState> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     const data = {
       name: formData.get("name") as string,
@@ -149,7 +149,7 @@ export async function toggleEmailVerification(
   verified: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     await userRepository.update(userId, {
       emailVerified: verified,
@@ -180,7 +180,7 @@ export async function unlinkAccount(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     await accountRepository.delete(accountId);
 
@@ -205,7 +205,7 @@ export async function revokeUserSession(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     await auth.api.revokeSession({
       body: { token: sessionToken },
@@ -231,7 +231,7 @@ export async function forceLogoutUser(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     await sessionRepository.deleteByUserId(userId);
 
@@ -255,7 +255,7 @@ export async function setUserPassword(
   newPassword: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     if (!newPassword || newPassword.length < 8) {
       return {
@@ -291,10 +291,10 @@ export async function sendPasswordResetEmail(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAdmin();
     if (process.env.SKIP_EMAIL_SENDING === 'true') {
       return { success: true };
     }
-    await requireAuth();
 
     // Get user to retrieve email
     const user = await userRepository.findById(userId);

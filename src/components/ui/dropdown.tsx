@@ -44,7 +44,7 @@ export function Dropdown({ trigger, items, align = "right", className }: Dropdow
 
       <MenuItems
         className={cn(
-          "absolute z-10 mt-2 w-56 origin-top-right rounded-lg",
+          "absolute z-50 mt-2 w-56 origin-top-right rounded-lg",
           "bg-[#1a2632] border border-[#243647]",
           "shadow-lg ring-1 ring-black ring-opacity-5",
           "focus:outline-none",

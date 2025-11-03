@@ -39,7 +39,7 @@ export async function registerClient(
   formData: FormData
 ): Promise<{ success: boolean; errors?: Record<string, string>; data?: unknown; error?: string }> {
   try {
-    await requireAuth();
+    const session = await requireAuth();
 
     const rawData = {
       name: formData.get("name"),
@@ -123,7 +123,7 @@ export async function registerClient(
       redirectURLs: JSON.stringify(redirectUrlsArray),
       metadata: JSON.stringify(metadata),
       type,
-      userId: trusted ? null : undefined, // Trusted clients don't need userId
+      userId: trusted ? session.user.id : null, // Use owning admin to mark trusted clients
       createdAt: new Date(),
       updatedAt: new Date(),
     });

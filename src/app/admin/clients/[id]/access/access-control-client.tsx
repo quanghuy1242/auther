@@ -77,7 +77,9 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
   const [showCreateGroupModal, setShowCreateGroupModal] = React.useState(false);
   const [showEditAccessModal, setShowEditAccessModal] = React.useState(false);
   const [showUserPicker, setShowUserPicker] = React.useState(false);
+  const [showRemoveUserModal, setShowRemoveUserModal] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState<ClientUser | null>(null);
+  const [userToRemove, setUserToRemove] = React.useState<{ userId: string; userName: string | null } | null>(null);
 
   // Form states
   const [assignUserId, setAssignUserId] = React.useState("");
@@ -90,13 +92,8 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
   const [allowedResources, setAllowedResources] = React.useState<PermissionRow[]>([]);
   const [isSavingResources, setIsSavingResources] = React.useState(false);
 
-  // Load data
-  React.useEffect(() => {
-    void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadData = async () => {
+  // Load data function wrapped in useCallback
+  const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
       const [metadataResult, usersResult, groupsResult] = await Promise.all([
@@ -128,7 +125,12 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [client.clientId]);
+
+  // Load data on mount
+  React.useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const handleToggleAccessPolicy = async () => {
     if (!metadata) return;
@@ -174,9 +176,34 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
           .map((a) => a.trim())
           .filter((a) => a.length > 0);
         
-        if (resource && actions.length > 0) {
-          resourcesJson[resource] = actions;
+        // Skip empty rows
+        if (!resource || actions.length === 0) {
+          continue;
         }
+        
+        // Validate resource name
+        if (!/^[a-zA-Z0-9_-]+$/.test(resource)) {
+          toast.error(
+            "Invalid resource name",
+            `Resource "${resource}" contains invalid characters. Use only letters, numbers, hyphens, and underscores.`
+          );
+          setIsSavingResources(false);
+          return;
+        }
+        
+        // Validate actions
+        for (const action of actions) {
+          if (!/^[a-zA-Z0-9_-]+$/.test(action)) {
+            toast.error(
+              "Invalid action name",
+              `Action "${action}" in resource "${resource}" contains invalid characters.`
+            );
+            setIsSavingResources(false);
+            return;
+          }
+        }
+        
+        resourcesJson[resource] = actions;
       }
 
       const result = await updateClientAccessPolicy({
@@ -222,12 +249,19 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
   };
 
   const handleRemoveUser = async (userId: string, userName: string | null) => {
-    if (!confirm(`Remove ${userName || "this user"}'s access?`)) return;
+    setUserToRemove({ userId, userName });
+    setShowRemoveUserModal(true);
+  };
 
-    const result = await removeUserFromClient(userId, client.clientId);
+  const confirmRemoveUser = async () => {
+    if (!userToRemove) return;
+
+    const result = await removeUserFromClient(userToRemove.userId, client.clientId);
 
     if (result.success) {
       toast.success("User access removed", "The user no longer has access to this client.");
+      setShowRemoveUserModal(false);
+      setUserToRemove(null);
       await loadData();
     } else {
       toast.error("Failed to remove user", result.error);
@@ -360,7 +394,9 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void loadData()}
+                onClick={() => {
+                  void loadData();
+                }}
                 disabled={isSavingResources}
               >
                 Reset
@@ -690,6 +726,53 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Remove User Confirmation Modal */}
+      <Modal
+        isOpen={showRemoveUserModal}
+        onClose={() => {
+          setShowRemoveUserModal(false);
+          setUserToRemove(null);
+        }}
+        title="Remove User Access"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <Icon name="error" className="text-red-500 text-2xl shrink-0" />
+            <div className="text-sm text-red-200">
+              <strong className="block mb-1">This will revoke access</strong>
+              Removing this user will:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Revoke their access to this client</li>
+                <li>Prevent future authorization attempts</li>
+                <li>Take effect immediately</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-gray-300">
+            Are you sure you want to remove <strong>{userToRemove?.userName || "this user"}&apos;s</strong> access?
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setShowRemoveUserModal(false);
+                setUserToRemove(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={confirmRemoveUser}
+            >
+              Remove Access
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

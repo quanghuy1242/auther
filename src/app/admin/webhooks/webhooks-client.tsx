@@ -11,14 +11,19 @@ import {
   MetricsCard,
   ResponsiveTable,
   Dropdown,
+  Modal,
   type DropdownItem,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { formatRelativeTime } from "@/lib/utils/time";
 import Link from "next/link";
+import { toast } from "@/lib/toast";
 import {
   type WebhookEndpointWithSubscriptions,
   type WebhookDeliveryStats,
+  toggleWebhookStatus,
+  deleteWebhook,
+  testWebhook,
 } from "./actions";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
 
@@ -57,6 +62,10 @@ export function WebhooksClient({
   
   // Track if this is the initial mount to prevent initial effect trigger
   const isInitialMount = useRef(true);
+
+  const handleActionComplete = useCallback(() => {
+    router.refresh();
+  }, [router]);
 
   const updateFilters = useCallback((updates: Partial<typeof initialFilters>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -107,8 +116,7 @@ export function WebhooksClient({
       updateFilters({ search });
     }, 300);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, initialFilters.search, updateFilters]);
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
@@ -239,7 +247,13 @@ export function WebhooksClient({
       key: "actions",
       header: "Actions",
       className: "w-[60px]",
-      render: (webhook: WebhookEndpointWithSubscriptions) => <WebhookActionsDropdown webhookId={webhook.id} />,
+      render: (webhook: WebhookEndpointWithSubscriptions) => (
+        <WebhookActionsDropdown 
+          webhookId={webhook.id} 
+          isActive={webhook.isActive}
+          onActionComplete={handleActionComplete}
+        />
+      ),
     },
   ];
 
@@ -317,7 +331,7 @@ export function WebhooksClient({
       )}
 
       {/* Webhooks Table */}
-      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-[#344d65]">
+      <div className="rounded-lg border-0 sm:border sm:border-[#344d65]">
         <ResponsiveTable<WebhookEndpointWithSubscriptions>
           columns={columns}
           data={initialWebhooks}
@@ -424,60 +438,211 @@ export function WebhooksClient({
 }
 
 // Actions dropdown component
-function WebhookActionsDropdown({ webhookId }: { webhookId: string }) {
+function WebhookActionsDropdown({ 
+  webhookId, 
+  isActive,
+  onActionComplete 
+}: { 
+  webhookId: string;
+  isActive: boolean;
+  onActionComplete: () => void;
+}) {
   const router = useRouter();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleTestWebhook = async () => {
+    setIsProcessing(true);
+    try {
+      const result = await testWebhook(webhookId);
+
+      if (result.success) {
+        toast.success(
+          "Test queued",
+          result.message || "Test event triggered successfully."
+        );
+        setTimeout(() => {
+          onActionComplete();
+        }, 1200);
+      } else {
+        toast.error(
+          "Test failed",
+          result.error || "Failed to trigger test event."
+        );
+      }
+    } catch (error) {
+      toast.error(
+        "Test failed",
+        error instanceof Error ? error.message : "Unexpected error occurred."
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleToggleStatus = async () => {
+    setShowDisableModal(false);
+    setIsProcessing(true);
+
+    try {
+      const result = await toggleWebhookStatus(webhookId, !isActive);
+
+      if (result.success) {
+        const message = isActive ? "Webhook disabled" : "Webhook enabled";
+        const description = isActive
+          ? "The webhook will no longer receive events"
+          : "The webhook is now active and will receive events";
+        toast.success(message, description);
+        onActionComplete();
+      } else {
+        toast.error("Failed to update webhook", result.error);
+      }
+    } catch (error) {
+      toast.error(
+        "Failed to update webhook",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setShowDeleteModal(false);
+    setIsProcessing(true);
+
+    try {
+      const result = await deleteWebhook(webhookId);
+
+      if (result.success) {
+        toast.success(
+          "Webhook deleted",
+          "The webhook endpoint has been permanently deleted."
+        );
+        onActionComplete();
+      } else {
+        toast.error("Failed to delete webhook", result.error);
+      }
+    } catch (error) {
+      toast.error(
+        "Failed to delete webhook",
+        error instanceof Error ? error.message : undefined
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const menuItems: DropdownItem[] = [
     {
       label: "Edit",
       icon: "edit",
       onClick: () => router.push(`/admin/webhooks/${webhookId}`),
+      disabled: isProcessing,
     },
     {
       label: "View Logs",
       icon: "receipt_long",
       onClick: () => router.push(`/admin/webhooks/${webhookId}#logs`),
+      disabled: isProcessing,
     },
     {
       label: "Test Webhook",
       icon: "send",
-      onClick: () => {
-        // Mock action
-        alert("Test webhook delivery initiated");
-      },
+      onClick: handleTestWebhook,
+      disabled: isProcessing,
     },
     {
-      label: "Disable",
-      icon: "toggle_off",
-      onClick: () => {
-        // Mock action
-        alert("Webhook disabled");
-      },
+      label: isActive ? "Disable" : "Enable",
+      icon: isActive ? "toggle_off" : "toggle_on",
+      onClick: () => setShowDisableModal(true),
+      disabled: isProcessing,
     },
     {
       label: "Delete",
       icon: "delete",
       danger: true,
-      onClick: () => {
-        if (confirm("Are you sure you want to delete this webhook?")) {
-          alert("Webhook deleted");
-        }
-      },
+      onClick: () => setShowDeleteModal(true),
+      disabled: isProcessing,
     },
   ];
 
   return (
-    <Dropdown
-      trigger={
-        <button
-          className="p-2 rounded-md hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-          aria-label="More actions"
-        >
-          <Icon name="more_vert" className="!text-xl" />
-        </button>
-      }
-      items={menuItems}
-      align="right"
-    />
+    <>
+      <Dropdown
+        trigger={
+          <button
+            className="p-2 rounded-md hover:bg-white/10 text-white/70 hover:text-white transition-colors disabled:opacity-50"
+            aria-label="More actions"
+            disabled={isProcessing}
+          >
+            <Icon name="more_vert" className="!text-xl" />
+          </button>
+        }
+        items={menuItems}
+        align="right"
+      />
+
+      {/* Disable/Enable Confirmation Modal */}
+      <Modal
+        isOpen={showDisableModal}
+        onClose={() => setShowDisableModal(false)}
+        title={isActive ? "Disable Webhook?" : "Enable Webhook?"}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            {isActive 
+              ? "This webhook will stop receiving events. You can re-enable it at any time."
+              : "This webhook will start receiving events again immediately."}
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDisableModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={isActive ? "secondary" : "primary"}
+              size="sm"
+              onClick={handleToggleStatus}
+            >
+              {isActive ? "Disable" : "Enable"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Delete Webhook?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            This action cannot be undone. All delivery history for this webhook will be permanently deleted.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDeleteModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleDelete}
+            >
+              Delete Webhook
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }

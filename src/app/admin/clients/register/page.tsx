@@ -41,7 +41,7 @@ function GrantTypesSelector() {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-200 mb-3">
-        Grant Types
+        Grant Types <span className="text-red-400">*</span>
       </label>
       <div className="space-y-3">
         {GRANT_TYPES.map((grant) => (
@@ -68,11 +68,12 @@ function GrantTypesSelector() {
         type="hidden"
         name="grantTypes"
         value={grantTypesInput}
+        required
       />
       <div className="mt-3 flex flex-wrap gap-2">
         <span className="text-sm text-gray-400">Selected:</span>
         {selectedGrants.length === 0 ? (
-          <span className="text-sm text-gray-500">None</span>
+          <span className="text-sm text-red-400">At least one grant type is required</span>
         ) : (
           selectedGrants.map((grant) => (
             <Badge key={grant} variant="default">

@@ -39,25 +39,28 @@ export function UsersClient({ initialData }: UsersClientProps) {
   };
 
   // Debounced search effect
+  const debouncedSearch = React.useCallback((searchValue: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (searchValue) {
+      params.set("search", searchValue);
+    } else {
+      params.delete("search");
+    }
+    params.set("page", "1"); // Reset to page 1 on search
+    startTransition(() => {
+      router.push(`/admin/users?${params.toString()}`);
+    });
+  }, [searchParams, router]);
+
   React.useEffect(() => {
     if (isInitialMount.current) return; // Skip on initial mount
     
     const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (search) {
-        params.set("search", search);
-      } else {
-        params.delete("search");
-      }
-      params.set("page", "1"); // Reset to page 1 on search
-      startTransition(() => {
-        router.push(`/admin/users?${params.toString()}`);
-      });
+      debouncedSearch(search);
     }, 300);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, router]);
+  }, [search, debouncedSearch]);
 
   const handleFilterChange = (status: "all" | "verified" | "unverified") => {
     const params = new URLSearchParams(searchParams.toString());

@@ -17,7 +17,7 @@ const createUserSchema = z.object({
   sendInvite: z.boolean().optional(),
 });
 
-function CreateUserForm() {
+function CreateUserForm({ onCancel }: { onCancel: () => void }) {
   const { watch, setValue } = useFormContext();
   const sendInvite = watch("sendInvite", false);
 
@@ -80,7 +80,7 @@ function CreateUserForm() {
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => window.history.back()}
+          onClick={onCancel}
         >
           Cancel
         </Button>
@@ -109,6 +109,10 @@ export default function CreateUserPage() {
     }, 2000);
   };
 
+  const handleCancel = () => {
+    router.back();
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       <PageHeading
@@ -135,12 +139,12 @@ export default function CreateUserPage() {
             ) : (
               <FormWrapper
                 schema={createUserSchema}
-                // @ts-expect-error TS2345
+                // @ts-expect-error - Zod version mismatch with react-hook-form resolver
                 action={createUser}
                 onSuccess={handleSuccess}
                 className="space-y-6"
               >
-                <CreateUserForm />
+                <CreateUserForm onCancel={handleCancel} />
               </FormWrapper>
             )}
           </CardContent>

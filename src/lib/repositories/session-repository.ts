@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { session, user } from "@/db/schema";
-import { desc, eq, gt, count, and, lt } from "drizzle-orm";
+import { desc, eq, gt, count, and, lt, type SQL } from "drizzle-orm";
 import { PaginatedResult } from "./base-repository";
 import { WebhookAwareRepository } from "./webhook-aware-repository";
 
@@ -90,25 +90,33 @@ export class SessionRepository extends WebhookAwareRepository {
       const now = new Date();
 
       // Build where conditions
-      const conditions = [];
+      const conditions: SQL<unknown>[] = [];
 
       if (filter?.activeOnly) {
         conditions.push(gt(session.expiresAt, now));
       }
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      let whereClause: SQL<unknown> | undefined;
+      if (conditions.length === 1) {
+        whereClause = conditions[0];
+      } else if (conditions.length > 1) {
+        whereClause = and(...conditions);
+      }
 
       // Get total count
-      const [totalResult] = await db
+      const totalQueryBuilder = db
         .select({ value: count() })
         .from(session)
-        .innerJoin(user, eq(session.userId, user.id))
-        .where(whereClause);
+        .innerJoin(user, eq(session.userId, user.id));
+
+      const [totalResult] = await (whereClause
+        ? totalQueryBuilder.where(whereClause)
+        : totalQueryBuilder);
 
       const total = totalResult?.value || 0;
 
       // Get sessions
-      let sessions = await db
+      const sessionsQueryBuilder = db
         .select({
           id: session.id,
           userId: session.userId,
@@ -121,8 +129,12 @@ export class SessionRepository extends WebhookAwareRepository {
           updatedAt: session.updatedAt,
         })
         .from(session)
-        .innerJoin(user, eq(session.userId, user.id))
-        .where(whereClause)
+        .innerJoin(user, eq(session.userId, user.id));
+      const sessionsQuery = whereClause
+        ? sessionsQueryBuilder.where(whereClause)
+        : sessionsQueryBuilder;
+
+      let sessions = await sessionsQuery
         .orderBy(desc(session.createdAt))
         .limit(pageSize)
         .offset(offset);

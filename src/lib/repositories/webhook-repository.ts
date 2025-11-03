@@ -135,26 +135,9 @@ export class WebhookRepository {
         conditions.push(eq(webhookEndpoint.isActive, filter.isActive));
       }
 
-      const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
+      let whereCondition =
+        conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Get total count
-      const countResult = await db
-        .select({ value: count() })
-        .from(webhookEndpoint)
-        .where(whereCondition);
-
-      const total = countResult[0]?.value || 0;
-
-      // Get endpoints
-      let endpointsQuery = db
-        .select()
-        .from(webhookEndpoint)
-        .where(whereCondition)
-        .orderBy(desc(webhookEndpoint.createdAt))
-        .limit(pageSize)
-        .offset(offset);
-
-      // Filter by event type if specified (requires join)
       if (filter?.eventType) {
         const endpointIdsWithEvent = await db
           .select({ endpointId: webhookSubscription.endpointId })
@@ -172,21 +155,29 @@ export class WebhookRepository {
           };
         }
 
-        endpointsQuery = db
-          .select()
-          .from(webhookEndpoint)
-          .where(
-            and(
-              whereCondition,
-              inArray(webhookEndpoint.id, ids)
-            )
-          )
-          .orderBy(desc(webhookEndpoint.createdAt))
-          .limit(pageSize)
-          .offset(offset);
+        const eventCondition = inArray(webhookEndpoint.id, ids);
+        whereCondition = whereCondition
+          ? and(whereCondition, eventCondition)
+          : eventCondition;
       }
 
-      const endpoints = await endpointsQuery;
+      const baseQuery = db.select().from(webhookEndpoint);
+      const filteredQuery = whereCondition
+        ? baseQuery.where(whereCondition)
+        : baseQuery;
+
+      const endpoints = await filteredQuery
+        .orderBy(desc(webhookEndpoint.createdAt))
+        .limit(pageSize)
+        .offset(offset);
+
+      // Get total count using final condition
+      const countQuery = db.select({ value: count() }).from(webhookEndpoint);
+      const countResult = whereCondition
+        ? await countQuery.where(whereCondition)
+        : await countQuery;
+
+      const total = countResult[0]?.value || 0;
 
       // Get subscriptions for these endpoints
       const endpointIds = endpoints.map((e) => e.id);
@@ -493,6 +484,53 @@ export class WebhookRepository {
   // ============================================================================
   // Webhook Deliveries
   // ============================================================================
+
+  /**
+   * Find delivery by ID
+   */
+  async findDeliveryById(id: string): Promise<WebhookDeliveryEntity | null> {
+    try {
+      const [result] = await db
+        .select()
+        .from(webhookDelivery)
+        .where(eq(webhookDelivery.id, id))
+        .limit(1);
+
+      return (result as WebhookDeliveryEntity) ?? null;
+    } catch (error) {
+      console.error("WebhookRepository.findDeliveryById error:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Find delivery by event and endpoint
+   */
+  async findDeliveryByEventAndEndpoint(
+    eventId: string,
+    endpointId: string
+  ): Promise<WebhookDeliveryEntity | null> {
+    try {
+      const [result] = await db
+        .select()
+        .from(webhookDelivery)
+        .where(
+          and(
+            eq(webhookDelivery.eventId, eventId),
+            eq(webhookDelivery.endpointId, endpointId)
+          )
+        )
+        .limit(1);
+
+      return (result as WebhookDeliveryEntity) ?? null;
+    } catch (error) {
+      console.error(
+        "WebhookRepository.findDeliveryByEventAndEndpoint error:",
+        error
+      );
+      return null;
+    }
+  }
 
   /**
    * Create a delivery attempt record

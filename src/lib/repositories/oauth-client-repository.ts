@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { oauthApplication } from "@/db/schema";
-import { desc, like, or, eq, count, isNull, isNotNull } from "drizzle-orm";
+import { desc, like, or, eq, count, isNull, isNotNull, and, type SQL } from "drizzle-orm";
 import { PaginatedResult } from "./base-repository";
 
 export interface OAuthClientMetadata {
@@ -142,43 +142,59 @@ export class OAuthClientRepository {
       const offset = (page - 1) * pageSize;
 
       // Build where conditions
-      let whereCondition = undefined;
+      const conditions: SQL<unknown>[] = [];
 
       if (filter?.search) {
-        whereCondition = or(
+        const searchCondition = or(
           like(oauthApplication.name, `%${filter.search}%`),
           like(oauthApplication.clientId, `%${filter.search}%`)
         );
+        if (searchCondition) {
+          conditions.push(searchCondition);
+        }
       }
 
       if (filter?.type === "trusted") {
-        const typeCondition = isNotNull(oauthApplication.userId);
-        whereCondition = whereCondition
-          ? or(whereCondition, typeCondition)
-          : typeCondition;
+        conditions.push(isNotNull(oauthApplication.userId));
       } else if (filter?.type === "dynamic") {
-        const typeCondition = isNull(oauthApplication.userId);
-        whereCondition = whereCondition
-          ? or(whereCondition, typeCondition)
-          : typeCondition;
+        conditions.push(isNull(oauthApplication.userId));
+      }
+
+      let whereCondition: SQL<unknown> | undefined;
+      if (conditions.length === 1) {
+        whereCondition = conditions[0];
+      } else if (conditions.length > 1) {
+        const combined = and(...conditions);
+        if (combined) {
+          whereCondition = combined;
+        }
       }
 
       // Get total count
-      const countResult = await db
-        .select({ value: count() })
-        .from(oauthApplication)
-        .where(whereCondition);
+      const countResult = whereCondition
+        ? await db
+            .select({ value: count() })
+            .from(oauthApplication)
+            .where(whereCondition!)
+        : await db.select({ value: count() }).from(oauthApplication);
 
       const total = countResult[0]?.value || 0;
 
       // Get clients
-      const clients = await db
-        .select()
-        .from(oauthApplication)
-        .where(whereCondition)
-        .orderBy(desc(oauthApplication.createdAt))
-        .limit(pageSize)
-        .offset(offset);
+      const clients = whereCondition
+        ? await db
+            .select()
+            .from(oauthApplication)
+            .where(whereCondition!)
+            .orderBy(desc(oauthApplication.createdAt))
+            .limit(pageSize)
+            .offset(offset)
+        : await db
+            .select()
+            .from(oauthApplication)
+            .orderBy(desc(oauthApplication.createdAt))
+            .limit(pageSize)
+            .offset(offset);
 
       // Transform data
       const clientsInfo: OAuthClientEntity[] = clients.map((client) => ({

@@ -134,18 +134,25 @@ export class UserRepository
       }
 
       // Get total count
-      const countResult = await db
+      const countQueryBuilder = db
         .select({ value: count() })
-        .from(user)
-        .where(whereCondition);
+        .from(user);
+
+      const countResult = await (whereCondition
+        ? countQueryBuilder.where(whereCondition)
+        : countQueryBuilder);
 
       const total = countResult[0]?.value || 0;
 
       // Get users
-      const users = await db
+      const usersQueryBuilder = db
         .select()
-        .from(user)
-        .where(whereCondition)
+        .from(user);
+      const usersQuery = whereCondition
+        ? usersQueryBuilder.where(whereCondition)
+        : usersQueryBuilder;
+
+      const users = await usersQuery
         .orderBy(desc(user.createdAt))
         .limit(pageSize)
         .offset(offset);

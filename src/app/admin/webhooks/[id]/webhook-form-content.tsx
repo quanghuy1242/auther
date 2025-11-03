@@ -21,6 +21,16 @@ export function WebhookFormContent() {
     { value: "none", label: "No Retries" },
   ];
 
+  const deliveryFormatOptions = [
+    { value: "json", label: "JSON" },
+    { value: "form-encoded", label: "Form-encoded" },
+  ];
+
+  const requestMethodOptions = [
+    { value: "POST", label: "POST" },
+    { value: "PUT", label: "PUT" },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Basic Configuration */}
@@ -80,15 +90,39 @@ export function WebhookFormContent() {
         </summary>
 
         <div className="mt-4 space-y-6 pl-7">
-          <div>
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-              Retry Policy
-            </label>
-            <ControlledSelect
-              name="retryPolicy"
-              options={retryPolicyOptions}
-              placeholder="Select retry policy"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                Retry Policy
+              </label>
+              <ControlledSelect
+                name="retryPolicy"
+                options={retryPolicyOptions}
+                placeholder="Select retry policy"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                Delivery Format
+              </label>
+              <ControlledSelect
+                name="deliveryFormat"
+                options={deliveryFormatOptions}
+                placeholder="Select delivery format"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                Request Method
+              </label>
+              <ControlledSelect
+                name="requestMethod"
+                options={requestMethodOptions}
+                placeholder="Select request method"
+              />
+            </div>
           </div>
         </div>
       </details>

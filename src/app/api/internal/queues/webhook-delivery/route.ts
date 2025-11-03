@@ -36,24 +36,6 @@ function parseDeliveryJob(body: string): WebhookDeliveryJob {
 }
 
 /**
- * Find existing delivery record by eventId and endpointId
- */
-async function findDeliveryRecord(
-  eventId: string,
-  endpointId: string
-): Promise<string | null> {
-  try {
-    // Query deliveries for this event and endpoint
-    const result = await webhookRepository.getDeliveryHistory(endpointId, 1, 100);
-    const delivery = result.items.find((d) => d.eventId === eventId);
-    return delivery?.id || null;
-  } catch (error) {
-    console.error("Failed to find delivery record:", { eventId, endpointId, error });
-    return null;
-  }
-}
-
-/**
  * POST /api/internal/queues/webhook-delivery
  * Queue worker that processes webhook delivery jobs from QStash
  */
@@ -93,8 +75,11 @@ export async function POST(request: Request) {
   const { eventId, endpointId } = job;
 
   // Find delivery record
-  const deliveryId = await findDeliveryRecord(eventId, endpointId);
-  if (!deliveryId) {
+  const deliveryRecord = await webhookRepository.findDeliveryByEventAndEndpoint(
+    eventId,
+    endpointId
+  );
+  if (!deliveryRecord) {
     console.error("[webhook-delivery] Delivery record not found:", {
       eventId,
       endpointId,
@@ -102,16 +87,13 @@ export async function POST(request: Request) {
     return new Response("delivery-record-not-found", { status: 404 });
   }
 
-  // Get current attempt count
-  const deliveryHistory = await webhookRepository.getDeliveryHistory(endpointId, 1, 1);
-  const currentDelivery = deliveryHistory.items.find((d) => d.id === deliveryId);
-  const attemptCount = (currentDelivery?.attemptCount || 0) + 1;
+  const attemptCount = (deliveryRecord.attemptCount ?? 0) + 1;
 
   // Deliver webhook
   const result = await deliverWebhook(eventId, endpointId);
 
   // Record result
-  await recordDeliveryResult(deliveryId, result, attemptCount);
+  await recordDeliveryResult(deliveryRecord.id, result, attemptCount);
 
   if (result.success) {
     return new Response("delivered", { status: 200 });

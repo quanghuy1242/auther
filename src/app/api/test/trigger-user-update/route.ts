@@ -10,9 +10,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { user } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAdmin();
+
     const body = await request.json();
     const { userId } = body;
 

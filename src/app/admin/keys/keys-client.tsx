@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Badge, Modal, Icon } from "@/components/ui";
 import { rotateKeys, type JwksKey } from "./actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
@@ -13,9 +14,15 @@ interface KeysClientProps {
 }
 
 export function KeysClient({ initialKeys }: KeysClientProps) {
-  const keys = initialKeys;
+  const router = useRouter();
+  const [keys, setKeys] = React.useState(initialKeys);
   const [showRotateModal, setShowRotateModal] = React.useState(false);
   const [isRotating, setIsRotating] = React.useState(false);
+
+  // Update keys when initialKeys change
+  React.useEffect(() => {
+    setKeys(initialKeys);
+  }, [initialKeys]);
 
   const handleRotateKeys = async () => {
     setIsRotating(true);
@@ -24,17 +31,20 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
       const result = await rotateKeys();
       
       if (result.success) {
-        toast.success(result.message || "Keys rotated successfully");
+        if (result.rotated) {
+          toast.success(result.message || "Keys rotated successfully");
+        } else {
+          toast.info(result.message || "No rotation needed at this time");
+        }
         setShowRotateModal(false);
-        // Refresh the page to show new keys
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // Refresh the page data using Next.js router
+        router.refresh();
       } else {
         toast.error(result.message || "Failed to rotate keys");
       }
-    } catch {
-      toast.error("An error occurred while rotating keys");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An error occurred while rotating keys";
+      toast.error(errorMessage);
     } finally {
       setIsRotating(false);
     }
@@ -131,22 +141,22 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
           <h3 className="text-lg font-semibold text-white">Rotation Configuration</h3>
         </div>
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <p className="text-sm font-medium text-gray-400">Rotation Interval</p>
               <p className="text-lg font-semibold text-white mt-1">
                 {rotationIntervalDays} days
               </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-400">Retention Window</p>
-              <p className="text-lg font-semibold text-white mt-1">
-                {Math.floor(JWKS_ROTATION_INTERVAL_MS / (1000 * 60 * 60 * 24))} days
+              <p className="text-xs text-gray-500 mt-1">
+                Keys are automatically rotated at this interval
               </p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-400">Active Keys</p>
               <p className="text-lg font-semibold text-white mt-1">{keys.length}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Old keys are retained for validation during transition
+              </p>
             </div>
           </div>
         </div>

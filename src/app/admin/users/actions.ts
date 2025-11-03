@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAuth } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import { userRepository } from "@/lib/repositories";
 import type { UserWithAccounts, UserStats } from "@/lib/repositories";
 
@@ -24,7 +24,7 @@ export async function getUsers(params: {
   verified?: boolean | null;
 }): Promise<GetUsersResult> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     const page = Math.max(1, params.page || 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize || 10));
@@ -58,7 +58,7 @@ export async function getUsers(params: {
  */
 export async function getUserStats(): Promise<UserStats> {
   try {
-    await requireAuth();
+    await requireAdmin();
     return await userRepository.getStats();
   } catch (error) {
     console.error("Failed to fetch user stats:", error);
@@ -83,7 +83,7 @@ export interface UserPickerItem {
  */
 export async function getAllUsers(searchQuery?: string): Promise<UserPickerItem[]> {
   try {
-    await requireAuth();
+    await requireAdmin();
 
     // Use the existing getUsers function with high page size
     const result = await getUsers({

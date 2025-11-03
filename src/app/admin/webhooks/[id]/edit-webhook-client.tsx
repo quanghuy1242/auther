@@ -16,6 +16,7 @@ import {
   TableHead,
   TableCell,
   Tabs,
+  Modal,
   type TabItem,
 } from "@/components/ui";
 import {
@@ -54,6 +55,8 @@ const updateWebhookSchema = z.object({
   isActive: z.boolean().default(true),
   eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
+  deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
+  requestMethod: z.enum(["POST", "PUT"]).default("POST"),
 });
 
 interface EditWebhookClientProps {
@@ -64,6 +67,7 @@ interface EditWebhookClientProps {
 export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClientProps) {
   const router = useRouter();
   const [regeneratedSecret, setRegeneratedSecret] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Prepare default values from webhook data - memoized to prevent infinite loops
   const defaultValues = useMemo(() => ({
@@ -72,7 +76,17 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     isActive: webhook.isActive,
     eventTypes: webhook.subscriptions.map((sub) => sub.eventType),
     retryPolicy: webhook.retryPolicy as "none" | "standard" | "aggressive",
-  }), [webhook.displayName, webhook.url, webhook.isActive, webhook.subscriptions, webhook.retryPolicy]);
+    deliveryFormat: webhook.deliveryFormat,
+    requestMethod: webhook.requestMethod,
+  }), [
+    webhook.displayName,
+    webhook.url,
+    webhook.isActive,
+    webhook.subscriptions,
+    webhook.retryPolicy,
+    webhook.deliveryFormat,
+    webhook.requestMethod,
+  ]);
 
   const handleSubmit = async (
     prevState: WebhookFormState,
@@ -105,14 +119,13 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
   };
 
   const handleDelete = async () => {
-    if (confirm("Are you sure you want to delete this webhook? This action cannot be undone.")) {
-      const result = await deleteWebhook(webhook.id);
-      if (result.success) {
-        toast.success("Webhook deleted", "The webhook endpoint has been deleted.");
-        router.push("/admin/webhooks");
-      } else {
-        toast.error("Failed to delete webhook", result.error);
-      }
+    setShowDeleteModal(false);
+    const result = await deleteWebhook(webhook.id);
+    if (result.success) {
+      toast.success("Webhook deleted", "The webhook endpoint has been deleted.");
+      router.push("/admin/webhooks");
+    } else {
+      toast.error("Failed to delete webhook", result.error);
     }
   };
 
@@ -151,7 +164,12 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
 
                 {/* Form Actions */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between pt-6 mt-6 border-t border-gray-700">
-                  <Button type="button" variant="danger" size="sm" onClick={handleDelete}>
+                  <Button 
+                    type="button" 
+                    variant="danger" 
+                    size="sm" 
+                    onClick={() => setShowDeleteModal(true)}
+                  >
                     Delete Webhook
                   </Button>
                   <div className="flex flex-col sm:flex-row gap-3">
@@ -270,6 +288,35 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
       />
 
       <Tabs tabs={tabs} defaultIndex={0} />
+      
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Delete Webhook?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            This action cannot be undone. This webhook endpoint and all its delivery history will be permanently deleted.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDeleteModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleDelete}
+            >
+              Delete Webhook
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

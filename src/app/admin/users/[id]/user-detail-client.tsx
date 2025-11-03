@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useFormState } from "react-dom";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input, Label, Tabs, Modal, CopyableInput } from "@/components/ui";
 import { Icon } from "@/components/ui/icon";
@@ -25,6 +26,7 @@ interface UserDetailClientProps {
 }
 
 export function UserDetailClient({ user }: UserDetailClientProps) {
+  const router = useRouter();
   const [isEditing, setIsEditing] = React.useState(false);
   const [accountToUnlink, setAccountToUnlink] = React.useState<string | null>(null);
   const [sessionToRevoke, setSessionToRevoke] = React.useState<string | null>(null);
@@ -49,21 +51,23 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
   );
 
   React.useEffect(() => {
-    if (profileState.success) {
+    if (profileState?.success) {
       setIsEditing(false);
       toast.success("Profile updated", "User profile has been updated successfully.");
-    } else if (profileState.error) {
-      toast.error("Failed to update profile", profileState.error);
+      router.refresh();
+    } else if (profileState?.error) {
+      toast.error("Update failed", profileState.error);
     }
-  }, [profileState.success, profileState.error]);
+  }, [profileState, router]);
 
-  const handleToggleVerification = async () => {
+  const handleToggleEmailVerification = async () => {
     const result = await toggleEmailVerification(user.id, !user.emailVerified);
     if (result?.success) {
-      toast.success(
-        user.emailVerified ? "Email unverified" : "Email verified",
-        user.emailVerified ? "User email has been marked as unverified." : "User email has been marked as verified."
-      );
+      const message = user.emailVerified 
+        ? "Email verification status removed" 
+        : "Email marked as verified";
+      toast.success("Status updated", message);
+      router.refresh();
     }
   };
 
@@ -72,6 +76,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
     setAccountToUnlink(null);
     if (result?.success) {
       toast.success("Account unlinked", "The OAuth account has been unlinked from this user.");
+      router.refresh();
     }
   };
 
@@ -80,6 +85,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
     setSessionToRevoke(null);
     if (result?.success) {
       toast.success("Session revoked", "The user session has been revoked.");
+      router.refresh();
     }
   };
 
@@ -88,6 +94,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
     setShowForceLogoutModal(false);
     if (result?.success) {
       toast.success("User logged out", "All user sessions have been terminated.");
+      router.refresh();
     }
   };
 
@@ -160,7 +167,7 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           <Button
             variant={user.emailVerified ? "secondary" : "primary"}
             size="sm"
-            onClick={handleToggleVerification}
+            onClick={handleToggleEmailVerification}
           >
             {user.emailVerified ? "Mark Unverified" : "Mark Verified"}
           </Button>
