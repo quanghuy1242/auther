@@ -2,6 +2,14 @@
 
 import * as React from "react";
 import { Icon } from "@/components/ui";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export interface AccessControlEntry {
   id: string;
@@ -22,13 +30,6 @@ export interface AccessControlTableProps {
 /**
  * Access Control Table component for displaying assigned users/groups
  * Shows user avatars or group icons with access levels and actions
- * 
- * @example
- * <AccessControlTable
- *   entries={assignedUsersAndGroups}
- *   onRemove={handleRemove}
- *   onEdit={handleEdit}
- * />
  */
 export function AccessControlTable({
   entries,
@@ -46,20 +47,20 @@ export function AccessControlTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-input/60">
-          <tr>
-            <th className="p-3 font-medium text-[#93adc8]">Name</th>
-            <th className="p-3 font-medium text-[#93adc8]">Role</th>
-            <th className="p-3 font-medium text-[#93adc8]">Access Level</th>
-            <th className="p-3 font-medium text-[#93adc8] text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="text-white divide-y divide-slate-800">
+    <div className="rounded-lg border border-slate-800">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-input/60 hover:bg-input/60">
+            <TableHead>Name</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Access Level</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {entries.map((entry) => (
-            <tr key={entry.id} className="hover:bg-[#243647]/50 transition-colors">
-              <td className="p-3">
+            <TableRow key={entry.id}>
+              <TableCell>
                 <div className="flex items-center gap-3">
                   {entry.type === "user" ? (
                     <div
@@ -87,10 +88,10 @@ export function AccessControlTable({
                     )}
                   </div>
                 </div>
-              </td>
-              <td className="p-3 text-[#93adc8] capitalize">{entry.type}</td>
-              <td className="p-3 text-[#93adc8]">{entry.accessLevel}</td>
-              <td className="p-3">
+              </TableCell>
+              <TableCell className="text-[#93adc8] capitalize">{entry.type}</TableCell>
+              <TableCell className="text-[#93adc8]">{entry.accessLevel}</TableCell>
+              <TableCell>
                 <div className="flex items-center justify-end gap-2">
                   {onEdit && (
                     <button
@@ -111,11 +112,11 @@ export function AccessControlTable({
                     <Icon name="delete" className="text-lg" />
                   </button>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

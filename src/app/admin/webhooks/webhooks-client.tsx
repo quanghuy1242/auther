@@ -573,7 +573,7 @@ function WebhookActionsDropdown({
           </button>
         }
         items={menuItems}
-        align="right"
+        align="end"
       />
 
       {/* Disable/Enable Confirmation Modal */}

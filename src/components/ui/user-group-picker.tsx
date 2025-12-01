@@ -1,44 +1,44 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { Modal, Button, Input, Icon } from "@/components/ui";
-import { getAllUsers, type UserPickerItem } from "@/app/admin/users/actions";
-import { getAllGroups } from "@/app/admin/clients/[id]/access/actions";
+import * as React from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/modal"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import { Icon } from "@/components/ui/icon"
+import { getAllUsers, type UserPickerItem } from "@/app/admin/users/actions"
+import { getAllGroups } from "@/app/admin/clients/[id]/access/actions"
 
 export interface User {
-  id: string;
-  name: string | null;
-  email: string;
-  image?: string | null;
+  id: string
+  name: string | null
+  email: string
+  image?: string | null
 }
 
 export interface Group {
-  id: string;
-  name: string;
-  memberCount: number;
+  id: string
+  name: string
+  memberCount: number
 }
 
 export interface UserGroupPickerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  type: "user" | "group";
-  onSelect: (selected: User | Group) => void;
-  excludeIds?: string[];
-  title?: string;
+  isOpen: boolean
+  onClose: () => void
+  type: "user" | "group"
+  onSelect: (selected: User | Group) => void
+  excludeIds?: string[]
+  title?: string
 }
 
 /**
  * User/Group Picker modal component for selecting users or groups
- * Includes search functionality and displays avatars/icons
- * 
- * @example
- * <UserGroupPicker
- *   isOpen={showPicker}
- *   onClose={() => setShowPicker(false)}
- *   type="user"
- *   onSelect={(user) => handleAddUser(user)}
- *   excludeIds={assignedUserIds}
- * />
+ * Uses Command primitive for accessible searching and filtering
  */
 export function UserGroupPicker({
   isOpen,
@@ -48,150 +48,112 @@ export function UserGroupPicker({
   excludeIds = [],
   title,
 }: UserGroupPickerProps) {
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [users, setUsers] = React.useState<UserPickerItem[]>([]);
-  const [groups, setGroups] = React.useState<Group[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [items, setItems] = React.useState<(User | Group)[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-  // Load data when modal opens
   React.useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return
 
     const loadData = async () => {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
       
       try {
         if (type === "user") {
-          const fetchedUsers = await getAllUsers();
-          setUsers(fetchedUsers);
+          const fetchedUsers = await getAllUsers()
+          setItems(fetchedUsers as User[])
         } else {
-          const fetchedGroups = await getAllGroups();
-          setGroups(fetchedGroups);
+          const fetchedGroups = await getAllGroups()
+          setItems(fetchedGroups)
         }
       } catch (err) {
-        console.error("Failed to load data:", err);
-        setError("Failed to load data. Please try again.");
+        console.error("Failed to load data:", err)
+        setError("Failed to load data. Please try again.")
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    loadData();
-  }, [isOpen, type]);
+    loadData()
+  }, [isOpen, type])
 
-  const items = type === "user" ? users : groups;
-
-  const filteredItems = items.filter((item) => {
-    if (excludeIds.includes(item.id)) return false;
-    if (!searchQuery) return true;
-    
-    const name = item.name?.toLowerCase() || "";
-    const query = searchQuery.toLowerCase();
-    
-    return name.includes(query) ||
-      (type === "user" && (item as User).email.toLowerCase().includes(query));
-  });
-
-  const handleSelect = (item: User | Group) => {
-    onSelect(item);
-    onClose();
-    setSearchQuery("");
-  };
-
-  const modalTitle = title || (type === "user" ? "Add User" : "Add Group");
+  const filteredItems = items.filter((item) => !excludeIds.includes(item.id))
+  const modalTitle = title || (type === "user" ? "Add User" : "Add Group")
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
-      <div className="flex flex-col gap-4">
-        {/* Search input */}
-        <div className="relative">
-          <Icon
-            name="search"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${type === "user" ? "users" : "groups"}...`}
-            className="pl-10 bg-input border-slate-700"
-          />
-        </div>
-
-        {/* Loading state */}
-        {loading && (
-          <div className="text-center py-8 text-gray-400">
-            Loading {type === "user" ? "users" : "groups"}...
-          </div>
-        )}
-
-        {/* Error state */}
-        {error && (
-          <div className="text-center py-8 text-red-400">
-            {error}
-          </div>
-        )}
-
-        {/* List of items */}
-        {!loading && !error && (
-          <div className="max-h-96 overflow-y-auto space-y-2">
-            {filteredItems.length === 0 ? (
-              <p className="text-center py-8 text-gray-400">
-                No {type === "user" ? "users" : "groups"} found
-              </p>
-            ) : (
-              filteredItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSelect(item)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-[#243647] transition-colors text-left"
-              >
-                {type === "user" ? (
-                  <>
-                    <div
-                      className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shrink-0"
-                      style={{
-                        backgroundImage: `url(${(item as User).image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.name}`})`,
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="gap-0 p-0 outline-none max-w-[450px]">
+        <DialogHeader className="px-4 pb-4 pt-5">
+          <DialogTitle>{modalTitle}</DialogTitle>
+        </DialogHeader>
+        <Command className="overflow-hidden rounded-t-none border-t border-slate-700 bg-transparent">
+          <CommandInput placeholder={`Search ${type === "user" ? "users" : "groups"}...`} />
+          <CommandList className="max-h-[350px] p-2">
+            {loading && (
+              <div className="py-6 text-center text-sm text-muted-foreground text-gray-400">
+                Loading {type === "user" ? "users" : "groups"}...
+              </div>
+            )}
+            {error && (
+              <div className="py-6 text-center text-sm text-red-400">
+                {error}
+              </div>
+            )}
+            {!loading && !error && (
+              <>
+                <CommandEmpty>No results found.</CommandEmpty>
+                <CommandGroup heading={type === "user" ? "Users" : "Groups"}>
+                  {filteredItems.map((item) => (
+                    <CommandItem
+                      key={item.id}
+                      onSelect={() => {
+                        onSelect(item)
+                        onClose()
                       }}
-                    />
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="font-medium text-white truncate">
-                        {item.name}
-                      </span>
-                      <span className="text-xs text-[#93adc8] truncate">
-                        {(item as User).email}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-center rounded-full size-10 bg-slate-700 text-slate-400 shrink-0">
-                      <Icon name="group" className="text-lg" />
-                    </div>
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="font-medium text-white truncate">
-                        {item.name}
-                      </span>
-                      <span className="text-xs text-[#93adc8]">
-                        {(item as Group).memberCount} members
-                      </span>
-                    </div>
-                  </>
-                )}
-              </button>
-            ))
-          )}
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800">
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
-    </Modal>
-  );
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#243647] aria-selected:bg-[#243647]"
+                    >
+                      {type === "user" ? (
+                        <>
+                          <div
+                            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 shrink-0"
+                            style={{
+                              backgroundImage: `url(${(item as User).image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.name}`})`,
+                            }}
+                          />
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="font-medium text-white truncate">
+                              {item.name}
+                            </span>
+                            <span className="text-xs text-gray-400 truncate">
+                              {(item as User).email}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-center rounded-full size-8 bg-slate-700 text-slate-400 shrink-0">
+                            <Icon name="group" className="text-lg" />
+                          </div>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="font-medium text-white truncate">
+                              {item.name}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {(item as Group).memberCount} members
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      <Icon name="add" className="ml-auto text-gray-500" size="sm" />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </DialogContent>
+    </Dialog>
+  )
 }

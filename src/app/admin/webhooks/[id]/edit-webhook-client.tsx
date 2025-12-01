@@ -23,7 +23,8 @@ import {
   FormWrapper,
   SubmitButton,
 } from "@/components/forms";
-import { Alert, PageHeading } from "@/components/layout";
+import { PageHeading } from "@/components/layout";
+import { Alert } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { formatRelativeTime } from "@/lib/utils/time";
 import {

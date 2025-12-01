@@ -13,7 +13,7 @@ import {
   Label, 
   Modal, 
   Input, 
-  StyledCheckbox, 
+  Checkbox, 
   CopyableInput,
 } from "@/components/ui";
 import { UrlListBuilder } from "@/components/ui/url-list-builder";
@@ -255,7 +255,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                 <Label className="text-sm font-medium text-[#93adc8]">Authentication Methods</Label>
                 <div className="flex flex-col gap-2.5">
                   {AUTH_METHODS.map((method) => (
-                    <StyledCheckbox
+                    <Checkbox
                       key={method}
                       checked={authMethod === method}
                       onChange={isEditing ? () => setEditAuthMethod(method) : undefined}
@@ -270,7 +270,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                 <Label className="text-sm font-medium text-[#93adc8]">Grant Types</Label>
                 <div className="flex flex-col gap-2.5">
                   {GRANT_TYPES.map((grant) => (
-                    <StyledCheckbox
+                    <Checkbox
                       key={grant}
                       checked={grantTypes.includes(grant)}
                       onChange={isEditing ? () => toggleGrantType(grant) : undefined}

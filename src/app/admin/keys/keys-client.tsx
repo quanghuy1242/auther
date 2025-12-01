@@ -6,7 +6,7 @@ import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, 
 import { rotateKeys, type JwksKey } from "./actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
 import { formatDate, formatAge } from "@/lib/utils/date-formatter";
-import { Alert } from "@/components/layout";
+import { Alert } from "@/components/ui";
 import { toast } from "@/lib/toast";
 
 interface KeysClientProps {

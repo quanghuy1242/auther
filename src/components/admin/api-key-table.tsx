@@ -3,6 +3,14 @@
 import * as React from "react";
 import { Badge } from "@/components/ui";
 import { formatDateShort } from "@/lib/utils/date-formatter";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export interface ApiKey {
   keyId: string;
@@ -21,12 +29,6 @@ export interface ApiKeyTableProps {
 /**
  * API Key Table component for displaying issued API keys
  * Shows key metadata, status badges, and revoke actions
- * 
- * @example
- * <ApiKeyTable
- *   apiKeys={clientApiKeys}
- *   onRevoke={handleRevokeKey}
- * />
  */
 export function ApiKeyTable({ apiKeys, onRevoke }: ApiKeyTableProps) {
   if (apiKeys.length === 0) {
@@ -40,32 +42,32 @@ export function ApiKeyTable({ apiKeys, onRevoke }: ApiKeyTableProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-input/60">
-          <tr>
-            <th className="p-3 font-medium text-[#93adc8]">Key ID</th>
-            <th className="p-3 font-medium text-[#93adc8]">Owner</th>
-            <th className="p-3 font-medium text-[#93adc8]">Created</th>
-            <th className="p-3 font-medium text-[#93adc8]">Expires</th>
-            <th className="p-3 font-medium text-[#93adc8]">Permissions</th>
-            <th className="p-3 font-medium text-[#93adc8]">Status</th>
-            <th className="p-3 font-medium text-[#93adc8]">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="text-white divide-y divide-slate-800">
+    <div className="rounded-lg border border-slate-800">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-input/60 hover:bg-input/60">
+            <TableHead>Key ID</TableHead>
+            <TableHead>Owner</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead>Expires</TableHead>
+            <TableHead>Permissions</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {apiKeys.map((key) => (
-            <tr key={key.keyId} className="hover:bg-[#243647]/50 transition-colors">
-              <td className="p-3 font-mono text-[#93adc8]">{key.keyId}</td>
-              <td className="p-3 text-[#93adc8]">{key.owner}</td>
-              <td className="p-3 text-[#93adc8]">{formatDateShort(key.created)}</td>
-              <td className="p-3 text-[#93adc8]">
+            <TableRow key={key.keyId}>
+              <TableCell className="font-mono text-[#93adc8]">{key.keyId}</TableCell>
+              <TableCell className="text-[#93adc8]">{key.owner}</TableCell>
+              <TableCell className="text-[#93adc8]">{formatDateShort(key.created)}</TableCell>
+              <TableCell className="text-[#93adc8]">
                 {key.expires ? formatDateShort(key.expires) : "Never"}
-              </td>
-              <td className="p-3 font-mono text-[#93adc8] max-w-xs truncate">
+              </TableCell>
+              <TableCell className="font-mono text-[#93adc8] max-w-xs truncate">
                 {key.permissions}
-              </td>
-              <td className="p-3">
+              </TableCell>
+              <TableCell>
                 {key.status === "active" ? (
                   <Badge variant="success" dot>
                     Active
@@ -75,8 +77,8 @@ export function ApiKeyTable({ apiKeys, onRevoke }: ApiKeyTableProps) {
                     Revoked
                   </Badge>
                 )}
-              </td>
-              <td className="p-3">
+              </TableCell>
+              <TableCell>
                 {key.status === "active" ? (
                   <button
                     type="button"
@@ -88,11 +90,11 @@ export function ApiKeyTable({ apiKeys, onRevoke }: ApiKeyTableProps) {
                 ) : (
                   <span className="text-slate-500">-</span>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

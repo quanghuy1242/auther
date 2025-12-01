@@ -3,7 +3,7 @@
 import * as React from "react";
 import { z } from "zod";
 import { PageHeading } from "@/components/layout/page-heading";
-import { Card, CardContent, Button, Icon, Badge, UrlListBuilder, StyledCheckbox, CopyableInput } from "@/components/ui";
+import { Card, CardContent, Button, Icon, Badge, UrlListBuilder, Checkbox, CopyableInput } from "@/components/ui";
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { registerClient, type RegisterClientState } from "./actions";
 import { useRouter } from "next/navigation";
@@ -49,8 +49,7 @@ function GrantTypesSelector() {
             key={grant.value}
             className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
           >
-            <StyledCheckbox
-              checked={selectedGrants.includes(grant.value)}
+                                <Checkbox              checked={selectedGrants.includes(grant.value)}
               onChange={() => toggleGrant(grant.value)}
               className="mt-0.5"
             />

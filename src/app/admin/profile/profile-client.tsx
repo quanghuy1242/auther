@@ -249,7 +249,7 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
                     const isExpired = new Date(session.expiresAt) < new Date();
 
                     return (
-                      <Card key={session.id} variant={isCurrent ? "bordered" : "default"}>
+                      <Card key={session.id} className={isCurrent ? "border-primary" : ""}>
                         <CardContent>
                           <div className="flex items-start justify-between">
                             <div className="flex-1">

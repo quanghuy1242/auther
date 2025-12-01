@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useFormContext, Controller } from "react-hook-form";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 
 interface ControlledCheckboxProps {
   name: string;
@@ -48,7 +48,7 @@ export function ControlledCheckbox({ name, label, description, disabled, classNa
               ref={field.ref}
               value={checked ? "true" : "false"}
             />
-            <Checkbox
+            <Switch
               checked={checked}
               onChange={(value) => {
                 field.onChange(value);
