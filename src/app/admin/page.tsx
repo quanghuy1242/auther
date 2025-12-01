@@ -34,7 +34,7 @@ export default async function AdminDashboard() {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card>
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-[#1773cf]/20 flex items-center justify-center">
                 <Icon name="group" size="lg" className="text-[#1773cf]" />
@@ -51,7 +51,7 @@ export default async function AdminDashboard() {
         </Card>
 
         <Card>
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
                 <Icon name="apps" size="lg" className="text-green-500" />
@@ -68,7 +68,7 @@ export default async function AdminDashboard() {
         </Card>
 
         <Card>
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-yellow-500/20 flex items-center justify-center">
                 <Icon name="schedule" size="lg" className="text-yellow-500" />
@@ -83,7 +83,7 @@ export default async function AdminDashboard() {
         </Card>
 
         <Card>
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
                 <Icon name="key" size="lg" className="text-purple-500" />
@@ -111,7 +111,7 @@ export default async function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link href="/admin/users/create">
             <Card className="hover:border-[#1773cf] transition-colors cursor-pointer">
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
                   <Icon name="person_add" size="lg" className="text-[#1773cf]" />
                   <div>
@@ -125,7 +125,7 @@ export default async function AdminDashboard() {
 
           <Link href="/admin/clients/register">
             <Card className="hover:border-[#1773cf] transition-colors cursor-pointer">
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
                   <Icon name="add_box" size="lg" className="text-[#1773cf]" />
                   <div>
@@ -139,7 +139,7 @@ export default async function AdminDashboard() {
 
           <Link href="/admin/keys">
             <Card className="hover:border-[#1773cf] transition-colors cursor-pointer">
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
                   <Icon name="sync" size="lg" className="text-[#1773cf]" />
                   <div>
@@ -155,7 +155,7 @@ export default async function AdminDashboard() {
 
       {/* Recent Activity */}
       <Card>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Recent Sign-ins</h2>
             <Link href="/admin/sessions" className="text-sm text-[#1773cf] hover:underline">

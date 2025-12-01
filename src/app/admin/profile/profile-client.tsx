@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useFormState } from "react-dom";
 import Image from "next/image";
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input, Label, Tabs, Modal } from "@/components/ui";
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input, Label, Tabs, Modal, CopyableInput } from "@/components/ui";
 import { updateProfile, revokeSession, revokeAllOtherSessions, type UpdateProfileState } from "./actions";
 import type { SessionUser, SessionInfo } from "@/lib/session";
 import { getUserInitials } from "@/lib/session-utils";
@@ -192,8 +192,8 @@ export function ProfileClient({ user, sessions, currentSessionId }: ProfileClien
                     <CardContent>
                       <div className="space-y-4">
                         <div>
-                          <Label className="text-gray-400">User ID</Label>
-                          <p className="text-sm text-white mt-1 break-all font-mono">{user.id}</p>
+                          <Label className="text-gray-400 mb-1 block">User ID</Label>
+                          <CopyableInput value={user.id} readOnly />
                         </div>
                         <div>
                           <Label className="text-gray-400">Date Joined</Label>
