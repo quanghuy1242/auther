@@ -11,7 +11,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { Icon } from "@/components/ui/icon"
-import { getAllUsers, type UserPickerItem } from "@/app/admin/users/actions"
+import { getAllUsers } from "@/app/admin/users/actions"
 import { getAllGroups } from "@/app/admin/clients/[id]/access/actions"
 
 export interface User {

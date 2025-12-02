@@ -57,10 +57,6 @@ export function PermissionTagInput({
     onChange(selectedPermissions.filter((p) => p !== value))
   }
 
-  const availableToAdd = availablePermissions.filter(
-    (p) => !selectedPermissions.includes(p.value)
-  )
-
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {label && (
