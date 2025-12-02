@@ -71,7 +71,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
 
         {/* Section: JWT Audiences */}
         <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+          <CardHeader className="border-white/10">
             <CardTitle className="text-lg font-bold">JWT Audiences</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Configure allowed audiences for JWT token validation. At least one audience is required.
@@ -90,7 +90,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
 
         {/* Section: Feature Flags */}
         <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+          <CardHeader className="border-white/10">
             <CardTitle className="text-lg font-bold">Feature Flags</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Enable or disable specific application features.
@@ -114,7 +114,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
 
         {/* Section: Internal API Secrets */}
         <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+          <CardHeader className="border-white/10">
             <CardTitle className="text-lg font-bold">Internal API Secrets</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Manage the status of internal secrets used for service-to-service communication.
@@ -131,7 +131,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
 
         {/* Section: Webhook Registration */}
         <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+          <CardHeader className="border-white/10">
             <CardTitle className="text-lg font-bold">Webhook Registration (Payload CMS)</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               Configure webhook delivery to Payload CMS for user sync events and bidirectional synchronization.

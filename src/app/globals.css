@@ -294,3 +294,85 @@ body {
     transform: scale(0.95);
   }
 }
+
+/* Tailwind Animate Utilities Polyfill */
+.animate-in {
+  animation-duration: 150ms;
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  --tw-enter-opacity: initial;
+  --tw-enter-scale: initial;
+  --tw-enter-rotate: initial;
+  --tw-enter-translate-x: initial;
+  --tw-enter-translate-y: initial;
+}
+
+.animate-out {
+  animation-duration: 150ms;
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  --tw-exit-opacity: initial;
+  --tw-exit-scale: initial;
+  --tw-exit-rotate: initial;
+  --tw-exit-translate-x: initial;
+  --tw-exit-translate-y: initial;
+}
+
+.fade-in-0 {
+  --tw-enter-opacity: 0;
+  animation-name: enter;
+}
+
+.fade-out-0 {
+  --tw-exit-opacity: 0;
+  animation-name: exit;
+}
+
+.zoom-in-95 {
+  --tw-enter-scale: 0.95;
+  animation-name: enter;
+}
+
+.zoom-out-95 {
+  --tw-exit-scale: 0.95;
+  animation-name: exit;
+}
+
+.slide-in-from-top-2 {
+  --tw-enter-translate-y: -0.5rem;
+  animation-name: slide-in-from-top;
+}
+
+.slide-in-from-bottom-2 {
+  --tw-enter-translate-y: 0.5rem;
+  animation-name: slide-in-from-bottom;
+}
+
+.slide-in-from-left-1\/2 {
+  --tw-enter-translate-x: -50%;
+  animation-name: slide-in-from-left;
+}
+
+.slide-in-from-top-\[48\%\] {
+  --tw-enter-translate-y: -48%;
+  animation-name: slide-in-from-top;
+}
+
+.slide-out-to-left-1\/2 {
+  --tw-exit-translate-x: -50%;
+  animation-name: slide-out-to-left;
+}
+
+.slide-out-to-top-\[48\%\] {
+  --tw-exit-translate-y: -48%;
+  animation-name: slide-out-to-top;
+}
+
+.slide-in-from-left {
+  animation-name: slide-in-from-left;
+}
+
+.slide-out-to-left {
+  animation-name: slide-out-to-left;
+}
+
