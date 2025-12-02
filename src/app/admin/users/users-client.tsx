@@ -106,7 +106,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
       </FilterBar>
 
       {/* Responsive Table */}
-      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-border-dark">
+      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-border-dark sm:bg-card">
         <ResponsiveTable
           columns={[
             {

@@ -38,7 +38,7 @@ export function AccessControlTable({
 }: AccessControlTableProps) {
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg border border-slate-800 p-8 text-center">
+      <div className="rounded-lg border border-border-dark p-8 text-center bg-card">
         <p className="text-gray-400 text-sm">
           No users or groups assigned yet. Click &quot;Add User&quot; or &quot;Add Group&quot; to get started.
         </p>
@@ -47,10 +47,10 @@ export function AccessControlTable({
   }
 
   return (
-    <div className="rounded-lg border border-slate-800">
+    <div className="rounded-lg border border-border-dark bg-card">
       <Table>
         <TableHeader>
-          <TableRow className="bg-input/60 hover:bg-input/60">
+          <TableRow className="bg-card hover:bg-card">
             <TableHead>Name</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Access Level</TableHead>
@@ -70,27 +70,27 @@ export function AccessControlTable({
                       }}
                     />
                   ) : (
-                    <div className="flex items-center justify-center rounded-full size-8 bg-slate-700 text-slate-400 shrink-0">
+                    <div className="flex items-center justify-center rounded-full size-8 bg-white/10 text-gray-400 shrink-0">
                       <Icon name="group" className="text-lg" />
                     </div>
                   )}
                   <div className="flex flex-col min-w-0">
                     <span className="font-medium truncate">{entry.name}</span>
                     {entry.type === "user" && entry.email && (
-                      <span className="text-xs text-[#93adc8] truncate">
+                      <span className="text-xs text-gray-400 truncate">
                         {entry.email}
                       </span>
                     )}
                     {entry.type === "group" && entry.memberCount !== undefined && (
-                      <span className="text-xs text-[#93adc8]">
+                      <span className="text-xs text-gray-400">
                         {entry.memberCount} members
                       </span>
                     )}
                   </div>
                 </div>
               </TableCell>
-              <TableCell className="text-[#93adc8] capitalize">{entry.type}</TableCell>
-              <TableCell className="text-[#93adc8]">{entry.accessLevel}</TableCell>
+              <TableCell className="text-gray-400 capitalize">{entry.type}</TableCell>
+              <TableCell className="text-gray-400">{entry.accessLevel}</TableCell>
               <TableCell>
                 <div className="flex items-center justify-end gap-2">
                   {onEdit && (

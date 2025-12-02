@@ -303,7 +303,7 @@ export function WebhooksClient({
       </div>
 
       {/* Webhooks Table */}
-      <div className="rounded-lg border-0 sm:border sm:border-border-dark">
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark sm:bg-card">
         <ResponsiveTable<WebhookEndpointWithSubscriptions>
           columns={columns}
           data={initialWebhooks}

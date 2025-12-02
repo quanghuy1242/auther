@@ -24,14 +24,13 @@ export interface SecretStatusRowProps {
 export function SecretStatusRow({ secret }: SecretStatusRowProps) {
   return (
     <div 
-      className="flex items-start sm:items-center justify-between py-3 px-4 rounded-lg border border-white/10 gap-3" 
-      style={{ backgroundColor: '#0a0f14' }}
+      className="flex items-start sm:items-center justify-between py-3 px-4 rounded-lg border border-border-dark gap-3 bg-input"
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <p className="text-white font-medium font-mono text-sm break-all">{secret.name}</p>
         <div className="relative group flex-shrink-0">
           <Icon name="info" className="!text-base text-white/50 cursor-pointer" />
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 border border-white/10 rounded-lg text-xs text-[#93adc8] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10" style={{ backgroundColor: '#0d131a' }}>
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 border border-border-dark rounded-lg text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 bg-input">
             {secret.description}
           </div>
         </div>
