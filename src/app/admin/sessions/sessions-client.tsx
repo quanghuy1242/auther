@@ -153,7 +153,7 @@ export function SessionsClient({
         </div>
       </div>
 
-      <div className="rounded-lg border-0 sm:border sm:border-border-dark bg-card">
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark">
         <div className="p-0">
           <div className="overflow-x-auto">
             <Table>
