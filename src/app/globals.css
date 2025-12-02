@@ -165,141 +165,28 @@ body {
   color: #60a5fa !important;
 }
 
+/* Tailwind Animate Utilities Polyfill for Tailwind v4 */
+@theme inline {
+  --animate-in: enter 150ms ease-out;
+  --animate-out: exit 150ms ease-in;
+}
+
 @keyframes enter {
   from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), 1) rotate(var(--tw-enter-rotate, 0));
   }
 }
 
 @keyframes exit {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
   to {
-    opacity: 0;
-    transform: scale(0.95);
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), 1) rotate(var(--tw-exit-rotate, 0));
   }
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes fade-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes slide-in-from-top {
-  from {
-    transform: translateY(-100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes slide-in-from-bottom {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes slide-in-from-left {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes slide-in-from-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes slide-out-to-top {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-100%);
-  }
-}
-
-@keyframes slide-out-to-bottom {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes slide-out-to-left {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes slide-out-to-right {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes zoom-in {
-  from {
-    transform: scale(0.95);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-@keyframes zoom-out {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(0.95);
-  }
-}
-
-/* Tailwind Animate Utilities Polyfill */
 .animate-in {
-  animation-duration: 150ms;
-  animation-fill-mode: both;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation: enter 150ms ease-out;
   --tw-enter-opacity: initial;
   --tw-enter-scale: initial;
   --tw-enter-rotate: initial;
@@ -308,9 +195,7 @@ body {
 }
 
 .animate-out {
-  animation-duration: 150ms;
-  animation-fill-mode: both;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation: exit 150ms ease-in;
   --tw-exit-opacity: initial;
   --tw-exit-scale: initial;
   --tw-exit-rotate: initial;
@@ -320,59 +205,57 @@ body {
 
 .fade-in-0 {
   --tw-enter-opacity: 0;
-  animation-name: enter;
 }
 
 .fade-out-0 {
   --tw-exit-opacity: 0;
-  animation-name: exit;
 }
 
 .zoom-in-95 {
   --tw-enter-scale: 0.95;
-  animation-name: enter;
 }
 
 .zoom-out-95 {
   --tw-exit-scale: 0.95;
-  animation-name: exit;
 }
 
 .slide-in-from-top-2 {
   --tw-enter-translate-y: -0.5rem;
-  animation-name: slide-in-from-top;
 }
 
 .slide-in-from-bottom-2 {
   --tw-enter-translate-y: 0.5rem;
-  animation-name: slide-in-from-bottom;
 }
 
 .slide-in-from-left-1\/2 {
   --tw-enter-translate-x: -50%;
-  animation-name: slide-in-from-left;
 }
 
 .slide-in-from-top-\[48\%\] {
   --tw-enter-translate-y: -48%;
-  animation-name: slide-in-from-top;
 }
 
 .slide-out-to-left-1\/2 {
   --tw-exit-translate-x: -50%;
-  animation-name: slide-out-to-left;
 }
 
 .slide-out-to-top-\[48\%\] {
   --tw-exit-translate-y: -48%;
-  animation-name: slide-out-to-top;
 }
 
 .slide-in-from-left {
-  animation-name: slide-in-from-left;
+  --tw-enter-translate-x: -100%;
 }
 
 .slide-out-to-left {
-  animation-name: slide-out-to-left;
+  --tw-exit-translate-x: -100%;
+}
+
+.slide-in-from-right {
+  --tw-enter-translate-x: 100%;
+}
+
+.slide-out-to-right {
+  --tw-exit-translate-x: 100%;
 }
 
