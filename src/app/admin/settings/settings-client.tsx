@@ -41,7 +41,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
     <div className="flex flex-col gap-8">
         {/* Section: Environment Configuration */}
         <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+          <CardHeader className="border-white/10">
             <CardTitle className="text-lg font-bold">Environment Configuration</CardTitle>
             <p className="text-[#93adc8] text-sm font-normal mt-1">
               These values are derived from your environment and cannot be changed here.
