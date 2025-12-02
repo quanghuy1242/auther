@@ -37,7 +37,7 @@ export function Dropdown({ trigger, items, align = "end", className }: DropdownP
         <DropdownMenuPrimitive.Content
           align={align}
           className={cn(
-            "z-50 min-w-[8rem] overflow-hidden rounded-lg border border-[#243647] bg-[#1a2632] p-1 shadow-md animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+            "z-50 w-56 overflow-hidden rounded-lg border border-[#243647] bg-[#1a2632] p-1 shadow-md animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
             className
           )}
         >
@@ -52,7 +52,7 @@ export function Dropdown({ trigger, items, align = "end", className }: DropdownP
                   <Icon
                     name={item.icon}
                     size="sm"
-                    className={cn("mr-2 h-4 w-4", item.danger ? "text-red-400" : "text-gray-400")}
+                    className={cn("mr-2", item.danger ? "text-red-400" : "text-gray-400")}
                   />
                 )}
                 <span className="flex-1">{item.label}</span>
