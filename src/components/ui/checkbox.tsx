@@ -50,10 +50,12 @@ export function Checkbox({
           !disabled && !readOnly && !checked && "hover:bg-[#2a3f52]"
         )}
       >
-        <CheckboxPrimitive.Indicator>
+        <CheckboxPrimitive.Indicator
+          className={cn("flex items-center justify-center transition-transform duration-100 ease-in-out data-[state=checked]:scale-100 data-[state=unchecked]:scale-0")}
+        >
           <Icon
             name="check"
-            className="text-white !text-[14px] font-bold"
+            className="text-white !text-[14px] font-bold translate-y-[0.5px]"
           />
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Root>
