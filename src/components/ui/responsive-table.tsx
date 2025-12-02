@@ -41,7 +41,7 @@ export function ResponsiveTable<T>({
     <>
       {/* Desktop Table View */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="min-w-full divide-y divide-border-dark">
+        <table className="min-w-full divide-y divide-border-dark bg-[#1a2632]">
           <thead className="bg-card">
             <tr>
               {columns.map((column) => (
