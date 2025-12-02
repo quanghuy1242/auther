@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { cn } from "@/lib/utils/cn";
 
 interface Column<T> {
   key: string;
@@ -40,25 +41,29 @@ export function ResponsiveTable<T>({
     <>
       {/* Desktop Table View */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="min-w-full divide-y divide-[#344d65]">
-          <thead className="bg-[#1a2632]">
+        <table className="min-w-full divide-y divide-border-dark">
+          <thead className="bg-card">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${column.className || ""}`}
+                  className={cn(
+                    "px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider",
+                    column.className
+                  )}
                 >
                   {column.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-[#1a2632] divide-y divide-[#344d65]">
+          <tbody className="bg-card divide-y divide-border-dark">
             {data.map((item) => (
-                      <tr key={keyExtractor(item)} className="hover:bg-hover-primary">
-                        {columns.map((column) => (
-                          <td                    key={column.key}
-                    className={`px-6 py-4 whitespace-nowrap ${column.className || ""}`}
+              <tr key={keyExtractor(item)} className="hover:bg-hover-primary transition-colors">
+                {columns.map((column) => (
+                  <td
+                    key={column.key}
+                    className={cn("px-6 py-4 whitespace-nowrap", column.className)}
                   >
                     {column.render(item)}
                   </td>
@@ -78,7 +83,7 @@ export function ResponsiveTable<T>({
           : data.map((item) => (
               <div
                 key={keyExtractor(item)}
-                className="bg-[#1a2632] rounded-lg p-4 space-y-3 border border-[#344d65]"
+                className="bg-card rounded-lg p-4 space-y-3 border border-border-dark"
               >
                 {columns.map((column) => (
                   <div key={column.key} className="flex justify-between items-start">

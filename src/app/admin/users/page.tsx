@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import * as React from "react";
 import Link from "next/link";
-import { PageHeading } from "@/components/layout/page-heading";
+import { PageHeading, PageContainer } from "@/components/layout";
 import { Button } from "@/components/ui";
 import { getUsers } from "./actions";
 import { UsersClient } from "./users-client";
@@ -33,7 +33,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   });
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageContainer>
       <PageHeading
         title="User Management"
         description="Manage, search, and filter all users in the system."
@@ -47,6 +47,6 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       />
 
       <UsersClient initialData={usersData} />
-    </div>
+    </PageContainer>
   );
 }

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Icon, Badge, Input, Checkbox, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Modal } from "@/components/ui";
+import { Button, Icon, Badge, Checkbox, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Modal, SearchInput } from "@/components/ui";
 import { revokeSession, revokeExpiredSessions } from "../actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
 import { parseUserAgent } from "@/lib/utils/user-agent";
@@ -38,34 +38,24 @@ export function SessionsClient({
 }: SessionsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = React.useState(initialSearch);
   const [activeOnly, setActiveOnly] = React.useState(initialActiveOnly);
   const [revokeModalSession, setRevokeModalSession] = React.useState<Session | null>(null);
   const [isRevoking, setIsRevoking] = React.useState(false);
   const [isCleaningUp, setIsCleaningUp] = React.useState(false);
-  const isInitialMount = React.useRef(true);
+  const [isPending, startTransition] = React.useTransition();
 
-  // Debounced search
-  React.useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
+  const handleSearch = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set("search", value);
+    } else {
+      params.delete("search");
     }
-
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (search) {
-        params.set("search", search);
-      } else {
-        params.delete("search");
-      }
-      params.delete("page"); // Reset to page 1 on search
+    params.delete("page"); // Reset to page 1 on search
+    startTransition(() => {
       router.push(`/admin/sessions?${params.toString()}`);
-    }, 300);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+    });
+  };
 
   const handleFilterChange = (newActiveOnly: boolean) => {
     setActiveOnly(newActiveOnly);
@@ -76,13 +66,17 @@ export function SessionsClient({
       params.delete("activeOnly");
     }
     params.delete("page");
-    router.push(`/admin/sessions?${params.toString()}`);
+    startTransition(() => {
+      router.push(`/admin/sessions?${params.toString()}`);
+    });
   };
 
   const handlePageChange = (newPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", newPage.toString());
-    router.push(`/admin/sessions?${params.toString()}`);
+    startTransition(() => {
+      router.push(`/admin/sessions?${params.toString()}`);
+    });
   };
 
   const handleRevoke = async () => {
@@ -125,15 +119,14 @@ export function SessionsClient({
 
   return (
     <>
-      <div className="mb-6 p-0 rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
+      <div className="mb-6 p-0 rounded-lg border border-border-dark bg-card">
         <div className="p-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex-1 w-full sm:max-w-md">
-              <Input
+              <SearchInput
                 placeholder="Search by email, name, or IP address..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                leftIcon="search"
+                defaultValue={initialSearch}
+                onSearch={handleSearch}
               />
             </div>
             <div className="flex gap-3 items-center flex-wrap">
@@ -160,7 +153,7 @@ export function SessionsClient({
         </div>
       </div>
 
-      <div className="rounded-lg border-0 sm:border sm:border-border-dark" style={{ backgroundColor: '#1a2632' }}>
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark bg-card">
         <div className="p-0">
           <div className="overflow-x-auto">
             <Table>
@@ -241,12 +234,12 @@ export function SessionsClient({
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-white/10">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border-dark">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => handlePageChange(initialPage - 1)}
-                disabled={initialPage === 1}
+                disabled={initialPage === 1 || isPending}
                 leftIcon="chevron_left"
               >
                 Previous
@@ -258,7 +251,7 @@ export function SessionsClient({
                 variant="secondary"
                 size="sm"
                 onClick={() => handlePageChange(initialPage + 1)}
-                disabled={initialPage === totalPages}
+                disabled={initialPage === totalPages || isPending}
                 rightIcon="chevron_right"
               >
                 Next
@@ -279,7 +272,7 @@ export function SessionsClient({
             <p className="text-sm text-gray-400">
               Are you sure you want to revoke this session? The user will be logged out immediately.
             </p>
-            <div className="p-4 rounded-lg border border-white/10 space-y-2" style={{ backgroundColor: '#0a0f14' }}>
+            <div className="p-4 rounded-lg border border-border-dark space-y-2 bg-input">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">User:</span>
                 <span className="text-white">{revokeModalSession.userEmail}</span>

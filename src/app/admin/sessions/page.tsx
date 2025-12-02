@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import * as React from "react";
-import { PageHeading } from "@/components/layout/page-heading";
+import { PageHeading, PageContainer } from "@/components/layout";
 import { getSessions } from "../actions";
 import { SessionsClient } from "./sessions-client";
 
@@ -28,7 +28,7 @@ export default async function SessionsPage({
   });
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageContainer>
       <PageHeading
         title="Sessions"
         description="Manage active and expired user sessions across all devices"
@@ -42,6 +42,6 @@ export default async function SessionsPage({
         initialSearch={search}
         initialActiveOnly={activeOnly}
       />
-    </div>
+    </PageContainer>
   );
 }

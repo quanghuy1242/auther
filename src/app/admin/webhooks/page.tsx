@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PageHeading } from "@/components/layout";
+import { PageHeading, PageContainer } from "@/components/layout";
 import { Button } from "@/components/ui";
 import Link from "next/link";
 import { WebhooksClient } from "./webhooks-client";
@@ -49,7 +49,7 @@ export default async function WebhooksPage({ searchParams }: PageProps) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <PageContainer maxWidth="7xl">
       <PageHeading
         title="Webhooks"
         description="Manage webhook endpoints and monitor delivery performance"
@@ -72,6 +72,6 @@ export default async function WebhooksPage({ searchParams }: PageProps) {
           eventType,
         }}
       />
-    </div>
+    </PageContainer>
   );
 }

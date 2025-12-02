@@ -4,7 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Badge, Button, Input, ResponsiveTable } from "@/components/ui";
+import { Badge, Button, ResponsiveTable, SearchInput, Pagination } from "@/components/ui";
+import { FilterBar } from "@/components/admin";
 import { formatDate } from "@/lib/utils/date-formatter";
 import type { GetClientsResult } from "./actions";
 
@@ -15,29 +16,18 @@ interface ClientsClientProps {
 export function ClientsClient({ initialData }: ClientsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = React.useState("");
   const [isPending, startTransition] = React.useTransition();
-  const isInitialMount = React.useRef(true);
   
   const filterType = (searchParams.get("type") as "all" | "trusted" | "dynamic") || "all";
-
-  // Initialize search from URL params only on mount
-  React.useEffect(() => {
-    if (isInitialMount.current) {
-      setSearch(searchParams.get("search") || "");
-      isInitialMount.current = false;
-    }
-  }, [searchParams]);
 
   const getClientType = (userId: string | null): "trusted" | "dynamic" => {
     return userId ? "trusted" : "dynamic";
   };
 
-  // Debounced search effect
-  const debouncedSearch = React.useCallback((searchValue: string) => {
+  const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (searchValue) {
-      params.set("search", searchValue);
+    if (value) {
+      params.set("search", value);
     } else {
       params.delete("search");
     }
@@ -45,17 +35,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
     startTransition(() => {
       router.push(`/admin/clients?${params.toString()}`);
     });
-  }, [searchParams, router]);
-
-  React.useEffect(() => {
-    if (isInitialMount.current) return; // Skip on initial mount
-    
-    const timer = setTimeout(() => {
-      debouncedSearch(search);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [search, debouncedSearch]);
+  };
 
   const handleFilterChange = (type: "all" | "trusted" | "dynamic") => {
     const params = new URLSearchParams(searchParams.toString());
@@ -81,52 +61,45 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
   return (
     <>
       {/* Filters */}
-      <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative flex-grow min-w-[300px]">
-            <Icon
-              name="search"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <Input
-              type="text"
-              placeholder="Search by client name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 w-full"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={filterType === "all" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => handleFilterChange("all")}
-              disabled={isPending}
-            >
-              All
-            </Button>
-            <Button
-              variant={filterType === "trusted" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => handleFilterChange("trusted")}
-              disabled={isPending}
-            >
-              Trusted
-            </Button>
-            <Button
-              variant={filterType === "dynamic" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => handleFilterChange("dynamic")}
-              disabled={isPending}
-            >
-              Dynamic
-            </Button>
-          </div>
+      <FilterBar>
+        <div className="relative flex-grow min-w-[300px]">
+          <SearchInput
+            placeholder="Search by client name..."
+            defaultValue={searchParams.get("search") || ""}
+            onSearch={handleSearch}
+            className="w-full"
+          />
         </div>
-      </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={filterType === "all" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => handleFilterChange("all")}
+            disabled={isPending}
+          >
+            All
+          </Button>
+          <Button
+            variant={filterType === "trusted" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => handleFilterChange("trusted")}
+            disabled={isPending}
+          >
+            Trusted
+          </Button>
+          <Button
+            variant={filterType === "dynamic" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => handleFilterChange("dynamic")}
+            disabled={isPending}
+          >
+            Dynamic
+          </Button>
+        </div>
+      </FilterBar>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-[#344d65]">
+      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-border-dark">
         <ResponsiveTable
           columns={[
             {
@@ -173,7 +146,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
                     <span className="text-gray-500">No redirect URIs</span>
                   ) : (
                     <>
-                      <span className="text-sm text-[#93adc8]">{client.redirectURLs[0]}</span>
+                      <span className="text-sm text-gray-400">{client.redirectURLs[0]}</span>
                       {client.redirectURLs.length > 1 && (
                         <span className="text-xs text-gray-500">
                           +{client.redirectURLs.length - 1} more
@@ -188,7 +161,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
               key: "createdAt",
               header: "Created",
               render: (client) => (
-                <span className="text-sm text-[#93adc8]">{formatDate(client.createdAt)}</span>
+                <span className="text-sm text-gray-400">{formatDate(client.createdAt)}</span>
               ),
             },
             {
@@ -211,7 +184,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
             const clientType = getClientType(client.userId);
             return (
               <Link href={`/admin/clients/${client.clientId}`}>
-                <div className="rounded-lg p-4 space-y-3 border border-[#344d65] hover:border-[#1773cf] transition-colors" style={{ backgroundColor: '#1a2632' }}>
+                <div className="rounded-lg p-4 space-y-3 border border-border-dark hover:border-[#1773cf] transition-colors bg-card">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">
@@ -243,7 +216,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
                         <p className="text-sm text-gray-500">No redirect URIs</p>
                       ) : (
                         <div className="space-y-1">
-                          <p className="text-sm text-[#93adc8] truncate">{client.redirectURLs[0]}</p>
+                          <p className="text-sm text-gray-400 truncate">{client.redirectURLs[0]}</p>
                           {client.redirectURLs.length > 1 && (
                             <p className="text-xs text-gray-500">
                               +{client.redirectURLs.length - 1} more
@@ -253,10 +226,10 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-[#344d65]">
+                    <div className="flex items-center justify-between pt-2 border-t border-border-dark">
                       <div>
                         <p className="text-xs text-gray-400 uppercase">Created</p>
-                        <p className="text-sm text-[#93adc8] mt-0.5">{formatDate(client.createdAt)}</p>
+                        <p className="text-sm text-gray-400 mt-0.5">{formatDate(client.createdAt)}</p>
                       </div>
                       <Icon name="chevron_right" className="text-[#1773cf]" />
                     </div>
@@ -270,42 +243,14 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
       </div>
 
       {/* Pagination */}
-      <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <p className="text-sm text-[#93adc8]">
-          Showing{" "}
-          <span className="font-medium text-white">
-            {initialData.clients.length > 0
-              ? (initialData.page - 1) * initialData.pageSize + 1
-              : 0}
-          </span>{" "}
-          to{" "}
-          <span className="font-medium text-white">
-            {Math.min(initialData.page * initialData.pageSize, initialData.total)}
-          </span>{" "}
-          of <span className="font-medium text-white">{initialData.total}</span>{" "}
-          results
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={initialData.page <= 1 || isPending}
-            leftIcon="chevron_left"
-            onClick={() => handlePageChange(initialData.page - 1)}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={initialData.page >= initialData.totalPages || isPending}
-            rightIcon="chevron_right"
-            onClick={() => handlePageChange(initialData.page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={initialData.page}
+        pageSize={initialData.pageSize}
+        totalItems={initialData.total}
+        onPageChange={handlePageChange}
+        isPending={isPending}
+        className="items-start sm:items-center"
+      />
     </>
   );
 }

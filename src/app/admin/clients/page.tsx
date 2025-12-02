@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import * as React from "react";
 import Link from "next/link";
-import { PageHeading } from "@/components/layout/page-heading";
+import { PageHeading, PageContainer } from "@/components/layout";
 import { Button } from "@/components/ui";
 import { getOAuthClients } from "./actions";
 import { ClientsClient } from "./clients-client";
@@ -33,7 +33,7 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
   });
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageContainer>
       <PageHeading
         title="OAuth Client Management"
         description="Manage trusted and dynamically registered OAuth clients."
@@ -47,6 +47,6 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
       />
 
       <ClientsClient initialData={clientsData} />
-    </div>
+    </PageContainer>
   );
 }

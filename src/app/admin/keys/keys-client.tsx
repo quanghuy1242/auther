@@ -61,8 +61,8 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
       </Alert>
 
       {/* Current Active Keys */}
-      <div className="mb-6 rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
-        <div className="p-6 border-b border-white/10">
+      <div className="mb-6 rounded-lg border border-border-dark bg-card">
+        <div className="p-6 border-b border-border-dark">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-white">Current Active Keys</h3>
             <Button
@@ -136,8 +136,8 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
       </div>
 
       {/* Configuration Card */}
-      <div className="rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
-        <div className="p-6 border-b border-white/10">
+      <div className="rounded-lg border border-border-dark bg-card">
+        <div className="p-6 border-b border-border-dark">
           <h3 className="text-lg font-semibold text-white">Rotation Configuration</h3>
         </div>
         <div className="p-6">
