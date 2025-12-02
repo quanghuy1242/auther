@@ -45,7 +45,7 @@ export function TopBarUserMenu({ user }: { user?: SessionUser }) {
   return (
     <Dropdown
       trigger={
-        <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#243647] transition-colors">
+        <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-hover-primary transition-colors">
           {avatarUrl ? (
             <Image
               src={avatarUrl}
@@ -111,7 +111,7 @@ export function TopBarNotifications() {
   const [count] = React.useState(3);
 
   return (
-    <button className="relative p-2 rounded-lg hover:bg-[#243647] transition-colors">
+    <button className="relative p-2 rounded-lg hover:bg-hover-primary transition-colors">
       <Icon name="notifications" size="sm" className="text-gray-400" />
       {count > 0 && (
         <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />

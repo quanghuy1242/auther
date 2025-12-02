@@ -114,13 +114,10 @@ export function UrlListBuilder({
             </div>
             <button
               type="button"
-              onClick={() => handleRemove(index)}
-              disabled={urls.length <= minUrls}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
-              title={urls.length <= minUrls ? `At least ${minUrls} URL(s) required` : "Remove URI"}
+              onClick={() => onRemove(index)}
+              disabled={disabled}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
             >
-              <Icon name="delete" className="text-xl!" />
-            </button>
           </div>
         ))}
 

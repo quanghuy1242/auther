@@ -28,6 +28,7 @@
   --color-text-secondary: light-dark(#6b7280, #93adc8);
   
   --color-hover: light-dark(#f3f4f6, #243647);
+  --color-hover-primary: #243647;
   
   /* Status colors */
   --color-success: light-dark(#10b981, #34d399);

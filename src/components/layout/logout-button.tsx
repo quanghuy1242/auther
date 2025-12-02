@@ -9,10 +9,9 @@ export function LogoutButton() {
   };
 
   return (
-    <a
-      href="#"
-      onClick={handleSignOut}
-      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-[#243647] rounded-lg transition-colors"
+    <button
+      onClick={handleLogout}
+      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-hover-primary rounded-lg transition-colors"
     >
       <span className="material-symbols-outlined text-[18px]">
         logout

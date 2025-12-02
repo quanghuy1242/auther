@@ -55,10 +55,9 @@ export function ResponsiveTable<T>({
           </thead>
           <tbody className="bg-[#1a2632] divide-y divide-[#344d65]">
             {data.map((item) => (
-              <tr key={keyExtractor(item)} className="hover:bg-[#243647]">
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
+                      <tr key={keyExtractor(item)} className="hover:bg-hover-primary">
+                        {columns.map((column) => (
+                          <td                    key={column.key}
                     className={`px-6 py-4 whitespace-nowrap ${column.className || ""}`}
                   >
                     {column.render(item)}

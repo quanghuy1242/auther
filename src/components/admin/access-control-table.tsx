@@ -97,7 +97,7 @@ export function AccessControlTable({
                     <button
                       type="button"
                       onClick={() => onEdit(entry.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-white transition-colors"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-white transition-colors"
                       title="Edit access level"
                     >
                       <Icon name="edit" className="text-lg" />
@@ -106,7 +106,7 @@ export function AccessControlTable({
                   <button
                     type="button"
                     onClick={() => onRemove(entry.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500 transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors"
                     title="Remove access"
                   >
                     <Icon name="delete" className="text-lg" />

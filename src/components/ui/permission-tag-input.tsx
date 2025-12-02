@@ -121,7 +121,7 @@ export function PermissionTagInput({
               <Badge
                 key={value}
                 variant="default"
-                className="pl-3 pr-1.5 py-1 h-auto bg-[#243647] hover:bg-[#243647] text-white border-0 gap-2"
+                className="pl-3 pr-1.5 py-1 h-auto bg-[#243647] hover:bg-hover-primary text-white border-0 gap-2"
               >
                 <span className="font-mono text-sm">{perm?.label || value}</span>
                 <button

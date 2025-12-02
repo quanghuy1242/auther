@@ -86,13 +86,11 @@ export function PermissionRowBuilder({
               placeholder={actionsPlaceholder}
               className="flex-1 bg-input border-slate-700 text-white placeholder-gray-500 focus:border-primary focus:ring-primary text-sm font-mono"
             />
-            <button
-              type="button"
-              onClick={() => handleRemove(index)}
-              disabled={permissions.length <= minRows}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-[#243647] hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
-              title={permissions.length <= minRows ? `At least ${minRows} permission(s) required` : "Remove permission"}
-            >
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+          >
               <Icon name="delete" className="text-xl!" />
             </button>
           </div>
