@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils/cn"
 import { Icon } from "./icon"
 
 const alertVariants = cva(
-  "relative w-full rounded-lg border px-4 py-4 text-sm [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground [&>div]:pl-7",
+  "relative w-full rounded-lg border px-4 py-4 text-sm flex gap-3",
   {
     variants: {
       variant: {
@@ -42,7 +42,9 @@ const Alert = React.forwardRef<
     className={cn(alertVariants({ variant }), className)}
     {...props}
   >
-    <Icon name={iconMap[variant || "default"] || "info"} size="sm" className="h-4 w-4" />
+    <div className="flex-shrink-0 mt-0.5">
+      <Icon name={iconMap[variant || "default"] || "info"} size="sm" className="h-5 w-5" />
+    </div>
     <div className="flex-1">
         {title && <h5 className="mb-1 font-medium leading-none tracking-tight">{title}</h5>}
         <div className="text-sm [&_p]:leading-relaxed">{children}</div>
@@ -50,7 +52,7 @@ const Alert = React.forwardRef<
     {onClose && (
       <button
         onClick={onClose}
-        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        className="flex-shrink-0 ml-2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
       >
         <Icon name="close" size="sm" className="h-4 w-4" />
         <span className="sr-only">Close</span>
