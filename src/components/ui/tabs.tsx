@@ -46,7 +46,7 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps)
               value={`tab-${index}`}
               disabled={tab.disabled}
               className={cn(
-                "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative rounded-t-lg",
+                "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative rounded-t-lg group",
                 "hover:text-white hover:bg-slate-800/50",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900",
                 "disabled:cursor-not-allowed disabled:opacity-50",
@@ -64,23 +64,9 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps)
               <span 
                 className={cn(
                   "absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 transition-opacity duration-200",
-                  "data-[state=active]:opacity-100 data-[state=inactive]:opacity-0"
+                  "opacity-0 group-data-[state=active]:opacity-100"
                 )}
-                // Since Radix doesn't expose selected state to children easily without Context, 
-                // we rely on parent data-state for the trigger, but we need this span to show/hide.
-                // CSS sibling selector or data-state on parent is cleanest.
               />
-              {/* 
-                Note: Radix Trigger sets data-state="active" on itself. 
-                We can use that for the indicator visibility.
-                Using a pseudo-element or a child with a conditional class based on the parent's data-state 
-                is best done via Tailwind's group modifier or simple CSS.
-                Here, I'll simply use the data-state selector on the span itself if I could pass it, 
-                but Radix passes it to the Trigger button.
-                
-                Let's fix the indicator: 
-                The easiest way in Tailwind is to use the `group` pattern or `[&[data-state=active]>span]:opacity-100`.
-              */}
             </TabsPrimitive.Trigger>
           ))}
         </TabsPrimitive.List>
