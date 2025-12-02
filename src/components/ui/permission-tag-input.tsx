@@ -96,6 +96,7 @@ export function PermissionTagInput({
                   return (
                     <CommandItem
                       key={permission.value}
+                      value={permission.label}
                       onSelect={() => handleSelect(permission.value)}
                       className="flex items-center justify-between"
                     >

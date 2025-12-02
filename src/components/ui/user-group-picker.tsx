@@ -106,9 +106,12 @@ export function UserGroupPicker({
                 <CommandGroup heading={type === "user" ? "Users" : "Groups"}>
                   {filteredItems.map((item) => (
                 <CommandItem
-                  key={group.id}
-                  value={group.name}
-                  onSelect={() => toggleGroup(group.id)}
+                  key={item.id}
+                  value={item.name || (item as User).email || ""}
+                  onSelect={() => {
+                    onSelect(item)
+                    onClose()
+                  }}
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-hover-primary aria-selected:bg-hover-primary"
                 >
                       {type === "user" ? (
