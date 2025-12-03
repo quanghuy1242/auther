@@ -46,6 +46,11 @@ export function SessionsClient({
 
   const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
+    const currentSearch = params.get("search") || "";
+    
+    // Avoid redundant navigation
+    if (value === currentSearch) return;
+
     if (value) {
       params.set("search", value);
     } else {

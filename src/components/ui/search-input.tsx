@@ -23,6 +23,9 @@ export function SearchInput({
   const [internalValue, setInternalValue] = React.useState<string>(
     (controlledValue || defaultValue || "").toString()
   );
+  
+  // Track first render to avoid triggering onSearch on mount
+  const isFirstRender = React.useRef(true);
 
   React.useEffect(() => {
     if (controlledValue !== undefined) {
@@ -32,6 +35,12 @@ export function SearchInput({
 
   React.useEffect(() => {
     if (!onSearch) return;
+
+    // Skip the initial run to prevent infinite loops when used with navigation
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
 
     const timer = setTimeout(() => {
       onSearch(internalValue);
