@@ -1,37 +1,36 @@
-import * as React from "react";
-import { cn } from "@/lib/utils/cn";
+"use client"
 
-export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {
-  required?: boolean;
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils/cn"
+
+const labelVariants = cva(
+  "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-gray-200"
+)
+
+export interface LabelProps
+  extends React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>,
+    VariantProps<typeof labelVariants> {
+  required?: boolean
 }
 
-/**
- * Label component for form fields
- * Displays an asterisk indicator for required fields
- * 
- * @example
- * <Label htmlFor="email" required>Email Address</Label>
- */
-export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
-  ({ className, required, children, ...props }, ref) => {
-    return (
-      <label
-        ref={ref}
-        className={cn(
-          "block text-sm font-medium text-gray-200",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        {required && (
-          <span className="ml-1 text-red-400" aria-label="required">
-            *
-          </span>
-        )}
-      </label>
-    );
-  }
-);
+const Label = React.forwardRef<React.ElementRef<typeof LabelPrimitive.Root>, LabelProps>(
+  ({ className, required, children, ...props }, ref) => (
+    <LabelPrimitive.Root
+      ref={ref}
+      className={cn(labelVariants(), className)}
+      {...props}
+    >
+      {children}
+      {required && (
+        <span className="ml-1 text-red-400" aria-label="required">
+          *
+        </span>
+      )}
+    </LabelPrimitive.Root>
+  )
+)
+Label.displayName = LabelPrimitive.Root.displayName
 
-Label.displayName = "Label";
+export { Label }

@@ -55,7 +55,7 @@ export function SidebarNavItem({ item, onNavigate }: SidebarNavItemProps) {
         ${
           isActive
             ? "bg-[#243647] text-white border-r-2 border-primary"
-            : "text-gray-400 hover:text-white hover:bg-[#243647]/50"
+            : "text-gray-400 hover:text-white hover:bg-hover-primary"
         }
       `}
     >

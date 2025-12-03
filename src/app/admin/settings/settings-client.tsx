@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Card, CardHeader, CardTitle, CardContent, Button, Checkbox, CopyableInput, UrlListBuilder } from "@/components/ui";
 import { SecretStatusRow } from "@/components/admin";
-import { cardBackgroundStyle } from "@/lib/constants";
 import type { SettingsData } from "./types";
 
 interface SettingsClientProps {
@@ -40,10 +39,10 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
   return (
     <div className="flex flex-col gap-8">
         {/* Section: Environment Configuration */}
-        <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+        <Card className="border border-border-dark">
+          <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Environment Configuration</CardTitle>
-            <p className="text-[#93adc8] text-sm font-normal mt-1">
+            <p className="text-gray-400 text-sm font-normal mt-1">
               These values are derived from your environment and cannot be changed here.
             </p>
           </CardHeader>
@@ -52,15 +51,15 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
               <CopyableInput 
                 label="Issuer" 
                 value={initialData.environment.issuer}
-                labelClassName="text-sm font-medium text-[#93adc8]"
+                labelClassName="text-sm font-medium text-gray-400"
               />
               <CopyableInput 
                 label="Base URL" 
                 value={initialData.environment.baseUrl}
-                labelClassName="text-sm font-medium text-[#93adc8]"
+                labelClassName="text-sm font-medium text-gray-400"
               />
               <div>
-                <label className="text-sm font-medium text-[#93adc8] block mb-1.5">Rotation Cadence</label>
+                <label className="text-sm font-medium text-gray-400 block mb-1.5">Rotation Cadence</label>
                 <p className="text-white text-sm px-4 py-2.5 bg-input border border-slate-700 rounded-lg">
                   {initialData.environment.rotationCadence}
                 </p>
@@ -70,10 +69,10 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: JWT Audiences */}
-        <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+        <Card className="border border-border-dark">
+          <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">JWT Audiences</CardTitle>
-            <p className="text-[#93adc8] text-sm font-normal mt-1">
+            <p className="text-gray-400 text-sm font-normal mt-1">
               Configure allowed audiences for JWT token validation. At least one audience is required.
             </p>
           </CardHeader>
@@ -89,10 +88,10 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Feature Flags */}
-        <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+        <Card className="border border-border-dark">
+          <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Feature Flags</CardTitle>
-            <p className="text-[#93adc8] text-sm font-normal mt-1">
+            <p className="text-gray-400 text-sm font-normal mt-1">
               Enable or disable specific application features.
             </p>
           </CardHeader>
@@ -100,7 +99,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
             <div className="flex items-center justify-between">
               <div className="pr-4 flex-1">
                 <p className="text-white font-medium">Allow Dynamic Client Registration</p>
-                <p className="text-[#93adc8] text-sm mt-1">
+                <p className="text-gray-400 text-sm mt-1">
                   Permits OAuth/OIDC clients to be created dynamically via an API endpoint.
                 </p>
               </div>
@@ -113,10 +112,10 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Internal API Secrets */}
-        <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+        <Card className="border border-border-dark">
+          <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Internal API Secrets</CardTitle>
-            <p className="text-[#93adc8] text-sm font-normal mt-1">
+            <p className="text-gray-400 text-sm font-normal mt-1">
               Manage the status of internal secrets used for service-to-service communication.
             </p>
           </CardHeader>
@@ -130,10 +129,10 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Webhook Registration */}
-        <Card className="border border-white/10" style={cardBackgroundStyle}>
-          <CardHeader className="border-b border-white/10">
+        <Card className="border border-border-dark">
+          <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Webhook Registration (Payload CMS)</CardTitle>
-            <p className="text-[#93adc8] text-sm font-normal mt-1">
+            <p className="text-gray-400 text-sm font-normal mt-1">
               Configure webhook delivery to Payload CMS for user sync events and bidirectional synchronization.
             </p>
           </CardHeader>
@@ -144,7 +143,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
                 <CopyableInput
                   label="Payload Webhook URL" 
                   value={initialData.webhook.payloadWebhookUrl}
-                  labelClassName="text-sm font-medium text-[#93adc8]"
+                  labelClassName="text-sm font-medium text-gray-400"
                 />
                 <p className="text-xs text-gray-400 mt-2">
                   Endpoint where user sync events are delivered. Configured via PAYLOAD_WEBHOOK_URL environment variable.

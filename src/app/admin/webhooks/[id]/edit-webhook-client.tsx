@@ -23,7 +23,8 @@ import {
   FormWrapper,
   SubmitButton,
 } from "@/components/forms";
-import { Alert, PageHeading } from "@/components/layout";
+import { PageHeading } from "@/components/layout";
+import { Alert } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { formatRelativeTime } from "@/lib/utils/time";
 import {
@@ -33,31 +34,9 @@ import {
   type WebhookFormState,
 } from "../actions";
 import type { WebhookEndpointWithSubscriptions, WebhookDeliveryEntity } from "@/lib/types";
-import { z } from "zod";
 import { WebhookFormContent } from "./webhook-form-content";
 import { toast } from "@/lib/toast";
-
-// Form schema matching backend implementation
-const updateWebhookSchema = z.object({
-  displayName: z.string().optional(),
-  url: z.string().url("Please enter a valid URL").refine(
-    (url) => {
-      // Allow HTTPS, localhost, Docker network URLs, and local IPs
-      return (
-        url.startsWith("https://") || 
-        url.startsWith("http://localhost") ||
-        url.startsWith("http://127.0.0.1") ||
-        /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url)
-      );
-    },
-    "URL must use HTTPS or be a valid local/Docker network URL"
-  ),
-  isActive: z.boolean().default(true),
-  eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
-  retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
-  deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
-  requestMethod: z.enum(["POST", "PUT"]).default("POST"),
-});
+import { webhookSchema } from "../shared";
 
 interface EditWebhookClientProps {
   webhook: WebhookEndpointWithSubscriptions;
@@ -154,7 +133,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
           <Card>
             <CardContent>
               <FormWrapper
-                schema={updateWebhookSchema}
+                schema={webhookSchema}
                 action={handleSubmitWrapper}
                 onSuccess={handleSuccess}
                 defaultValues={defaultValues}

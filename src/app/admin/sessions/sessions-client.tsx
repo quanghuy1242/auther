@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Icon, Badge, Input, Checkbox, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Modal } from "@/components/ui";
+import { Button, Icon, Badge, Checkbox, Modal, SearchInput, ResponsiveTable, Pagination } from "@/components/ui";
 import { revokeSession, revokeExpiredSessions } from "../actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
 import { parseUserAgent } from "@/lib/utils/user-agent";
@@ -38,34 +38,29 @@ export function SessionsClient({
 }: SessionsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = React.useState(initialSearch);
   const [activeOnly, setActiveOnly] = React.useState(initialActiveOnly);
   const [revokeModalSession, setRevokeModalSession] = React.useState<Session | null>(null);
   const [isRevoking, setIsRevoking] = React.useState(false);
   const [isCleaningUp, setIsCleaningUp] = React.useState(false);
-  const isInitialMount = React.useRef(true);
+  const [isPending, startTransition] = React.useTransition();
 
-  // Debounced search
-  React.useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
+  const handleSearch = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const currentSearch = params.get("search") || "";
+    
+    // Avoid redundant navigation
+    if (value === currentSearch) return;
+
+    if (value) {
+      params.set("search", value);
+    } else {
+      params.delete("search");
     }
-
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (search) {
-        params.set("search", search);
-      } else {
-        params.delete("search");
-      }
-      params.delete("page"); // Reset to page 1 on search
+    params.delete("page"); // Reset to page 1 on search
+    startTransition(() => {
       router.push(`/admin/sessions?${params.toString()}`);
-    }, 300);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+    });
+  };
 
   const handleFilterChange = (newActiveOnly: boolean) => {
     setActiveOnly(newActiveOnly);
@@ -76,13 +71,17 @@ export function SessionsClient({
       params.delete("activeOnly");
     }
     params.delete("page");
-    router.push(`/admin/sessions?${params.toString()}`);
+    startTransition(() => {
+      router.push(`/admin/sessions?${params.toString()}`);
+    });
   };
 
   const handlePageChange = (newPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", newPage.toString());
-    router.push(`/admin/sessions?${params.toString()}`);
+    startTransition(() => {
+      router.push(`/admin/sessions?${params.toString()}`);
+    });
   };
 
   const handleRevoke = async () => {
@@ -125,15 +124,14 @@ export function SessionsClient({
 
   return (
     <>
-      <div className="mb-6 p-0 rounded-lg border border-white/10" style={{ backgroundColor: '#1a2632' }}>
+      <div className="mb-6 p-0 rounded-lg border border-border-dark bg-card">
         <div className="p-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex-1 w-full sm:max-w-md">
-              <Input
+              <SearchInput
                 placeholder="Search by email, name, or IP address..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                leftIcon="search"
+                defaultValue={initialSearch}
+                onSearch={handleSearch}
               />
             </div>
             <div className="flex gap-3 items-center flex-wrap">
@@ -160,113 +158,140 @@ export function SessionsClient({
         </div>
       </div>
 
-      <div className="rounded-lg border-0 sm:border sm:border-border-dark" style={{ backgroundColor: '#1a2632' }}>
-        <div className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Device</TableHead>
-                  <TableHead>IP Address</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {initialSessions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-400">
-                      <Icon name="search_off" className="text-4xl mb-2" />
-                      <p>No sessions found</p>
-                    </TableCell>
-                  </TableRow>
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark overflow-hidden">
+        <ResponsiveTable
+          columns={[
+            {
+              key: "user",
+              header: "User",
+              render: (session) => (
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {session.userName || "Unknown"}
+                  </p>
+                  <p className="text-xs text-gray-400">{session.userEmail}</p>
+                </div>
+              ),
+            },
+            {
+              key: "device",
+              header: "Device",
+              render: (session) => (
+                <div className="flex items-center gap-2">
+                  <Icon name="devices" className="text-gray-400" />
+                  <span className="text-sm text-gray-200">{parseUserAgent(session.userAgent)}</span>
+                </div>
+              ),
+            },
+            {
+              key: "ip",
+              header: "IP Address",
+              render: (session) => (
+                <code className="text-xs text-gray-400">
+                  {session.ipAddress || "N/A"}
+                </code>
+              ),
+            },
+            {
+              key: "created",
+              header: "Created",
+              render: (session) => (
+                <span className="text-sm text-gray-400">
+                  {formatTimeAgo(session.createdAt)}
+                </span>
+              ),
+            },
+            {
+              key: "lastActive",
+              header: "Last Active",
+              render: (session) => (
+                <span className="text-sm text-gray-400">
+                  {formatTimeAgo(session.updatedAt)}
+                </span>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (session) => (
+                isExpired(session.expiresAt) ? (
+                  <Badge variant="default">Expired</Badge>
                 ) : (
-                  initialSessions.map((session) => (
-                    <TableRow key={session.id}>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {session.userName || "Unknown"}
-                          </p>
-                          <p className="text-xs text-gray-400">{session.userEmail}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Icon name="devices" className="text-gray-400" />
-                          <span className="text-sm">{parseUserAgent(session.userAgent)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-xs text-gray-400">
-                          {session.ipAddress || "N/A"}
-                        </code>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-400">
-                          {formatTimeAgo(session.createdAt)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-400">
-                          {formatTimeAgo(session.updatedAt)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {isExpired(session.expiresAt) ? (
-                          <Badge variant="default">Expired</Badge>
-                        ) : (
-                          <Badge variant="success">Active</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setRevokeModalSession(session)}
-                          leftIcon="block"
-                        >
-                          Revoke
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <Badge variant="success">Active</Badge>
+                )
+              ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (session) => (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRevokeModalSession(session)}
+                  leftIcon="block"
+                >
+                  Revoke
+                </Button>
+              ),
+            },
+          ]}
+          data={initialSessions}
+          keyExtractor={(session) => session.id}
+          mobileCardRender={(session) => (
+            <div className="p-4 border border-border-dark rounded-lg bg-card space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {session.userName || "Unknown"}
+                  </p>
+                  <p className="text-xs text-gray-400">{session.userEmail}</p>
+                </div>
+                {isExpired(session.expiresAt) ? (
+                  <Badge variant="default">Expired</Badge>
+                ) : (
+                  <Badge variant="success">Active</Badge>
                 )}
-              </TableBody>
-            </Table>
-          </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-gray-400">Device:</div>
+                <div className="text-white text-right">{parseUserAgent(session.userAgent)}</div>
+                
+                <div className="text-gray-400">IP:</div>
+                <div className="text-white text-right">{session.ipAddress || "N/A"}</div>
+                
+                <div className="text-gray-400">Active:</div>
+                <div className="text-white text-right">{formatTimeAgo(session.updatedAt)}</div>
+              </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-white/10">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handlePageChange(initialPage - 1)}
-                disabled={initialPage === 1}
-                leftIcon="chevron_left"
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-400">
-                Page {initialPage} of {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handlePageChange(initialPage + 1)}
-                disabled={initialPage === totalPages}
-                rightIcon="chevron_right"
-              >
-                Next
-              </Button>
+              <div className="pt-2 border-t border-border-dark">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-red-400 hover:text-red-300"
+                  onClick={() => setRevokeModalSession(session)}
+                  leftIcon="block"
+                >
+                  Revoke Session
+                </Button>
+              </div>
             </div>
           )}
-        </div>
+          emptyMessage="No sessions found"
+        />
       </div>
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={initialPage}
+        pageSize={20}
+        totalItems={initialTotal}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        isPending={isPending}
+        className="mt-6"
+      />
 
       {/* Revoke Modal */}
       {revokeModalSession && (
@@ -279,7 +304,7 @@ export function SessionsClient({
             <p className="text-sm text-gray-400">
               Are you sure you want to revoke this session? The user will be logged out immediately.
             </p>
-            <div className="p-4 rounded-lg border border-white/10 space-y-2" style={{ backgroundColor: '#0a0f14' }}>
+            <div className="p-4 rounded-lg border border-border-dark space-y-2 bg-input">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">User:</span>
                 <span className="text-white">{revokeModalSession.userEmail}</span>

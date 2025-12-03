@@ -4,15 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/session";
-import { booleanField } from "@/lib/utils/validation";
-
-const createUserSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  username: z.string().optional().transform(val => val || undefined),
-  password: z.string().optional().transform(val => val || undefined),
-  sendInvite: booleanField.optional().default(false),
-});
+import { createUserSchema } from "../shared";
 
 export type CreateUserState = {
   success: boolean;

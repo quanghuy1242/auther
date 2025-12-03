@@ -11,6 +11,7 @@ import {
 } from "@/lib/repositories";
 import { isValidAccessLevel } from "@/lib/utils/access-control";
 import type { AccessLevel } from "@/lib/utils/access-control";
+import { updateClientPolicySchema } from "../../types";
 
 // ============================================================================
 // User Access Management
@@ -221,14 +222,6 @@ export async function getClientUsers(clientId: string) {
 // ============================================================================
 // Client Metadata & Access Policy
 // ============================================================================
-
-const updateClientPolicySchema = z.object({
-  clientId: z.string().min(1, "Client ID is required"),
-  accessPolicy: z.enum(["all_users", "restricted"]),
-  allowsApiKeys: z.boolean().optional(),
-  allowedResources: z.record(z.string(), z.array(z.string())).optional(),
-  defaultApiKeyPermissions: z.record(z.string(), z.array(z.string())).optional(),
-});
 
 /**
  * Update client's access policy and metadata

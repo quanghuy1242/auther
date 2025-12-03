@@ -1,16 +1,17 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { Button } from "./button";
-import { Modal, ModalFooter } from "./modal";
-import { CopyableInput } from "./copyable-input";
+import { useState } from "react"
+import { Button } from "./button"
+import { Modal, ModalFooter } from "./modal"
+import { CopyableInput } from "./copyable-input"
+import { Alert } from "./alert"
 
 interface WebhookSecretFieldProps {
-  secret: string;
-  isNewSecret?: boolean; // Show warning for newly created secrets
-  onRegenerate?: () => void;
-  readOnly?: boolean; // Disable copying for masked/hidden secrets
-  className?: string;
+  secret: string
+  isNewSecret?: boolean
+  onRegenerate?: () => void
+  readOnly?: boolean
+  className?: string
 }
 
 export function WebhookSecretField({
@@ -20,12 +21,12 @@ export function WebhookSecretField({
   readOnly = false,
   className = "",
 }: WebhookSecretFieldProps) {
-  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
 
   const handleRegenerate = () => {
-    setShowRegenerateModal(false);
-    onRegenerate?.();
-  };
+    setShowRegenerateModal(false)
+    onRegenerate?.()
+  }
 
   return (
     <div className={className}>
@@ -34,14 +35,9 @@ export function WebhookSecretField({
           <label className="block text-base font-medium text-[var(--color-text-primary)]">
             Secret
           </label>
-          <div className="flex items-start gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-            <span className="material-symbols-outlined text-yellow-600 dark:text-yellow-400 text-2xl shrink-0">
-              warning
-            </span>
-            <p className="text-sm text-yellow-800 dark:text-yellow-300">
-              This is the only time you will see this secret. Copy it now and store it securely.
-            </p>
-          </div>
+          <Alert variant="warning">
+            This is the only time you will see this secret. Copy it now and store it securely.
+          </Alert>
         </div>
       )}
 
@@ -78,18 +74,10 @@ export function WebhookSecretField({
         size="md"
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-            <span className="material-symbols-outlined text-yellow-500 text-xl shrink-0">
-              warning
-            </span>
-            <div className="text-sm">
-              <p className="font-medium text-yellow-500 mb-1">This action cannot be undone</p>
-              <p className="text-[var(--color-text-secondary)]">
-                Regenerating the secret will invalidate the current secret. Any webhooks using the
-                old secret will fail until updated.
-              </p>
-            </div>
-          </div>
+          <Alert variant="warning" title="This action cannot be undone">
+            Regenerating the secret will invalidate the current secret. Any webhooks using the
+            old secret will fail until updated.
+          </Alert>
 
           <p className="text-sm text-[var(--color-text-secondary)]">
             After regeneration, you&apos;ll need to update the secret in all systems that consume this
@@ -107,5 +95,5 @@ export function WebhookSecretField({
         </ModalFooter>
       </Modal>
     </div>
-  );
+  )
 }

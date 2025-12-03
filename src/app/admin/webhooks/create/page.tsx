@@ -6,158 +6,13 @@ import { useFormContext } from "react-hook-form";
 import { Card, CardContent, Button, WebhookSecretField } from "@/components/ui";
 import {
   FormWrapper,
-  FormField,
   SubmitButton,
-  ControlledCheckbox,
-  ControlledSelect,
-  EventSelector,
 } from "@/components/forms";
 import { PageHeading } from "@/components/layout";
-import { z } from "zod";
-import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
 import { Icon } from "@/components/ui";
 import { createWebhook } from "../actions";
-import { booleanField } from "@/lib/utils/validation";
-
-// Form schema
-const createWebhookSchema = z.object({
-  displayName: z.string().min(2, "Display name must be at least 2 characters"),
-  url: z.string().url("Please enter a valid URL").refine(
-    (url) => {
-      // Allow HTTPS, localhost, Docker network URLs, and local IPs
-      return (
-        url.startsWith("https://") || 
-        url.startsWith("http://localhost") ||
-        url.startsWith("http://127.0.0.1") ||
-        /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url)
-      );
-    },
-    "URL must use HTTPS or be a valid local/Docker network URL"
-  ),
-  isActive: booleanField.default(true),
-  eventTypes: z.array(z.string()).min(1, "Please select at least one event"),
-  retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
-  deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
-  requestMethod: z.enum(["POST", "PUT"]).default("POST"),
-});
-
-// Form content component
-function WebhookFormContent() {
-  const form = useFormContext();
-
-  // Dropdown options
-  const retryPolicyOptions = [
-    { value: "none", label: "No Retries" },
-    { value: "standard", label: "Standard (3 retries)" },
-    { value: "aggressive", label: "Aggressive (5 retries)" },
-  ];
-
-  const deliveryFormatOptions = [
-    { value: "json", label: "JSON" },
-    { value: "form-encoded", label: "Form-encoded" },
-  ];
-
-  const requestMethodOptions = [
-    { value: "POST", label: "POST" },
-    { value: "PUT", label: "PUT" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Basic Configuration */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField
-          name="displayName"
-          label="Display Name"
-          placeholder="My Production Webhook"
-          required
-          helperText="Friendly name for this webhook"
-        />
-        <FormField
-          name="url"
-          label="Webhook URL"
-          placeholder="https://api.example.com/webhook-receiver"
-          required
-          helperText="The endpoint that will receive webhook events"
-        />
-      </div>
-
-      {/* Status Toggle */}
-      <div 
-        className="flex items-start gap-3 p-4 rounded-lg border border-white/10"
-        style={{ backgroundColor: '#1a2632' }}
-      >
-        <ControlledCheckbox
-          name="isActive"
-          label="Enable webhook immediately"
-          description="Toggle to activate or deactivate this webhook endpoint"
-        />
-      </div>
-
-      {/* Event Subscriptions */}
-      <EventSelector
-        name="eventTypes"
-        control={form.control}
-        events={WEBHOOK_EVENT_TYPES.map((e) => ({
-          value: e.value,
-          label: e.label,
-          description: e.description,
-        }))}
-        label="Event Subscriptions"
-      />
-
-      {/* Advanced Options */}
-      <details className="group">
-        <summary className="flex items-center gap-2 cursor-pointer text-[var(--color-text-primary)] hover:text-[var(--color-primary)] transition-colors font-medium select-none">
-          <Icon
-            name="expand_more"
-            className="text-xl! group-open:rotate-180 transition-transform"
-          />
-          Advanced Options
-        </summary>
-
-        <div className="mt-4 space-y-6 pl-7">
-          {/* Retry Policy, Delivery Format, Request Method */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                Retry Policy
-              </label>
-              <ControlledSelect
-                name="retryPolicy"
-                options={retryPolicyOptions}
-                placeholder="Select retry policy"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                Delivery Format
-              </label>
-              <ControlledSelect
-                name="deliveryFormat"
-                options={deliveryFormatOptions}
-                placeholder="Select format"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                Request Method
-              </label>
-              <ControlledSelect
-                name="requestMethod"
-                options={requestMethodOptions}
-                placeholder="Select method"
-              />
-            </div>
-          </div>
-        </div>
-      </details>
-    </div>
-  );
-}
-
+import { webhookSchema } from "../shared";
+import { WebhookFormContent } from "../[id]/webhook-form-content";
 
 export default function CreateWebhookPage() {
   const router = useRouter();
@@ -236,7 +91,7 @@ export default function CreateWebhookPage() {
       <Card>
         <CardContent>
           <FormWrapper
-            schema={createWebhookSchema}
+            schema={webhookSchema}
             action={handleSubmit}
             onSuccess={handleSuccess}
             defaultValues={defaultValues}

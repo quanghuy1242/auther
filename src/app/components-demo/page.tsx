@@ -13,7 +13,7 @@ import {
   Textarea,
   Label,
   Select,
-  Checkbox,
+  Switch,
   Table,
   TableHeader,
   TableBody,
@@ -24,7 +24,7 @@ import {
   Tabs,
   Dropdown,
 } from "@/components/ui";
-import { Alert } from "@/components/layout/alert";
+import { Alert } from "@/components/ui/alert";
 
 export default function ComponentShowcase() {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
@@ -206,10 +206,10 @@ export default function ComponentShowcase() {
           </CardContent>
         </Card>
 
-        {/* Select & Checkbox */}
+        {/* Select & Switch */}
         <Card>
           <CardHeader>
-            <CardTitle>Select & Checkbox</CardTitle>
+            <CardTitle>Select & Switch</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4 max-w-md">
@@ -227,7 +227,7 @@ export default function ComponentShowcase() {
                 />
               </div>
               <div>
-                <Checkbox
+                <Switch
                   checked={isEnabled}
                   onChange={setIsEnabled}
                   label="Enable notifications"
@@ -447,7 +447,7 @@ export default function ComponentShowcase() {
                 />
               </div>
 
-              <Checkbox
+              <Switch
                 checked={isEnabled}
                 onChange={setIsEnabled}
                 label="Enable email notifications"
@@ -508,7 +508,7 @@ export default function ComponentShowcase() {
         <div>
           <h2 className="text-xl font-bold text-white mb-4">Stat Cards</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card variant="bordered">
+            <Card>
               <CardContent>
                 <div className="flex items-center gap-3">
                   <Icon name="person" size="xl" className="text-[#1773cf]" />
@@ -519,7 +519,7 @@ export default function ComponentShowcase() {
                 </div>
               </CardContent>
             </Card>
-            <Card variant="bordered">
+            <Card>
               <CardContent>
                 <div className="flex items-center gap-3">
                   <Icon name="apps" size="xl" className="text-green-500" />
@@ -530,7 +530,7 @@ export default function ComponentShowcase() {
                 </div>
               </CardContent>
             </Card>
-            <Card variant="bordered">
+            <Card>
               <CardContent>
                 <div className="flex items-center gap-3">
                   <Icon name="schedule" size="xl" className="text-yellow-500" />

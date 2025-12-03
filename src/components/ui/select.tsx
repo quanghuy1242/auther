@@ -1,45 +1,33 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from "@headlessui/react";
-import { cn } from "@/lib/utils/cn";
-import { Label } from "./label";
-import { Icon } from "./icon";
+import * as React from "react"
+import * as SelectPrimitive from "@radix-ui/react-select"
+import { cn } from "@/lib/utils/cn"
+import { Label } from "./label"
+import { Icon } from "./icon"
 
 export interface SelectOption {
-  value: string;
-  label: string;
-  disabled?: boolean;
+  value: string
+  label: string
+  disabled?: boolean
 }
 
 export interface SelectProps {
-  options: SelectOption[];
-  value?: string;
-  onChange: (value: string) => void;
-  label?: string;
-  placeholder?: string;
-  error?: string;
-  required?: boolean;
-  disabled?: boolean;
-  className?: string;
-  name?: string;
+  options: SelectOption[]
+  value?: string
+  onChange: (value: string) => void
+  label?: string
+  placeholder?: string
+  error?: string
+  required?: boolean
+  disabled?: boolean
+  className?: string
+  name?: string
 }
 
 /**
- * Select dropdown component using Headless UI Listbox
+ * Select dropdown component using Radix UI Select
  * Provides accessible keyboard navigation and screen reader support
- * 
- * @example
- * <Select
- *   label="User Role"
- *   options={[
- *     { value: 'viewer', label: 'Viewer' },
- *     { value: 'editor', label: 'Editor' },
- *     { value: 'admin', label: 'Admin' },
- *   ]}
- *   value={selectedRole}
- *   onChange={setSelectedRole}
- * />
  */
 export function Select({
   options,
@@ -53,78 +41,63 @@ export function Select({
   className,
   name,
 }: SelectProps) {
-  const selectedOption = options.find((opt) => opt.value === value);
-
   return (
     <div className={cn("space-y-1 rounded-md", className)}>
       {label && <Label required={required}>{label}</Label>}
-      <Listbox value={value} onChange={onChange} disabled={disabled} name={name}>
-        {({ open }) => (
-          <div className="relative rounded-md">
-            <ListboxButton
-              className={cn(
-                "relative w-full rounded-md border px-3 py-2 text-left text-sm",
-                "bg-input text-white",
-                "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                "transition-colors",
-                error ? "border-red-500" : "border-gray-700"
-              )}
-            >
-              <span className={cn(!selectedOption && "text-gray-500")}>
-                {selectedOption?.label || placeholder}
-              </span>
-              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                <Icon
-                  name={open ? "expand_less" : "expand_more"}
-                  size="sm"
-                  className="text-gray-400"
-                />
-              </span>
-            </ListboxButton>
-            <ListboxOptions
-              className={cn(
-                "absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md",
-                "bg-sidebar border border-gray-700",
-                "py-1 text-sm shadow-lg",
-                "focus:outline-none"
-              )}
-            >
+      <SelectPrimitive.Root
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        name={name}
+      >
+        <SelectPrimitive.Trigger
+          className={cn(
+            "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm placeholder:text-gray-500",
+            "bg-input text-white",
+            "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "transition-colors",
+            error ? "border-red-500" : "border-gray-700"
+          )}
+        >
+          <SelectPrimitive.Value placeholder={placeholder} />
+          <SelectPrimitive.Icon asChild>
+            <Icon name="expand_more" size="sm" className="text-gray-400 opacity-50" />
+          </SelectPrimitive.Icon>
+        </SelectPrimitive.Trigger>
+        
+        <SelectPrimitive.Portal>
+          <SelectPrimitive.Content
+            className={cn(
+              "relative z-50 min-w-[8rem] overflow-hidden rounded-md border border-gray-700 bg-sidebar text-gray-200 shadow-md animate-in fade-in-80",
+              "data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1"
+            )}
+            position="popper"
+            sideOffset={4}
+          >
+            <SelectPrimitive.Viewport className="p-1 max-h-[var(--radix-select-content-available-height)] w-full min-w-[var(--radix-select-trigger-width)]">
               {options.map((option) => (
-                <ListboxOption
+                <SelectPrimitive.Item
                   key={option.value}
                   value={option.value}
                   disabled={option.disabled}
-                  className={({ focus, selected }) =>
-                    cn(
-                      "relative cursor-pointer select-none py-2 pl-3 pr-9",
-                      "transition-colors",
-                      focus && "bg-primary text-white",
-                      !focus && selected && "bg-primary/20 text-white",
-                      !focus && !selected && "text-gray-200",
-                      option.disabled && "cursor-not-allowed opacity-50"
-                    )
-                  }
-                >
-                  {({ selected }) => (
-                    <>
-                      <span className={cn("block truncate", selected && "font-semibold")}>
-                        {option.label}
-                      </span>
-                      {selected && (
-                        <span className="absolute inset-y-0 right-0 flex items-center pr-3">
-                          <Icon name="check" size="sm" className="text-white" />
-                        </span>
-                      )}
-                    </>
+                  className={cn(
+                    "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-primary focus:text-white data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
                   )}
-                </ListboxOption>
+                >
+                  <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                    <SelectPrimitive.ItemIndicator>
+                      <Icon name="check" size="sm" className="h-4 w-4" />
+                    </SelectPrimitive.ItemIndicator>
+                  </span>
+                  <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                </SelectPrimitive.Item>
               ))}
-            </ListboxOptions>
-          </div>
-        )}
-      </Listbox>
+            </SelectPrimitive.Viewport>
+          </SelectPrimitive.Content>
+        </SelectPrimitive.Portal>
+      </SelectPrimitive.Root>
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
-  );
+  )
 }

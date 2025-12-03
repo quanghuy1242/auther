@@ -1,79 +1,34 @@
-import * as React from "react";
-import { cn } from "@/lib/utils/cn";
-import { Label } from "./label";
-import type { InputVariant } from "@/lib/types";
+import * as React from "react"
+import { cn } from "@/lib/utils/cn"
+import { Label } from "./label"
 
-export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  variant?: InputVariant;
-  label?: string;
-  error?: string;
-  helperText?: string;
-  containerClassName?: string;
+export interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string
+  error?: string
+  helperText?: string
+  containerClassName?: string
 }
 
-const variantStyles: Record<InputVariant, string> = {
-  default: cn(
-    "border-gray-700 bg-input",
-    "focus:border-white focus:ring-2 focus:ring-white/40"
-  ),
-  error: cn(
-    "border-red-500 bg-input",
-    "focus:border-red-400 focus:ring-2 focus:ring-red-400/40"
-  ),
-  success: cn(
-    "border-green-500 bg-input",
-    "focus:border-green-400 focus:ring-2 focus:ring-green-400/40"
-  ),
-};
-
-/**
- * Textarea component for multi-line text input
- * Consistent styling with Input component
- * 
- * @example
- * <Textarea 
- *   label="Description" 
- *   rows={4}
- *   placeholder="Enter description..."
- * />
- */
-export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  (
-    {
-      className,
-      containerClassName,
-      variant = "default",
-      label,
-      error,
-      helperText,
-      required,
-      id,
-      ...props
-    },
-    ref
-  ) => {
-    const textareaId = id || props.name;
-    const actualVariant = error ? "error" : variant;
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, containerClassName, label, error, helperText, required, id, ...props }, ref) => {
+    const textareaId = id || props.name
 
     return (
-      <div className={cn("space-y-1", containerClassName)}>
+      <div className={cn("space-y-2", containerClassName)}>
         {label && (
           <Label htmlFor={textareaId} required={required}>
             {label}
           </Label>
         )}
         <textarea
-          ref={ref}
-          id={textareaId}
           className={cn(
-            "w-full rounded-md border px-3 py-2 text-sm text-white",
-            "placeholder:text-gray-500",
-            "focus:outline-none transition-colors",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            "resize-y min-h-20",
-            variantStyles[actualVariant],
+            "flex min-h-[80px] w-full rounded-md border border-gray-700 bg-input px-3 py-2 text-sm text-white ring-offset-background placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50",
+            error && "border-red-500 focus-visible:ring-red-400/40",
             className
           )}
+          ref={ref}
+          id={textareaId}
           aria-invalid={error ? "true" : "false"}
           aria-describedby={
             error ? `${textareaId}-error` : helperText ? `${textareaId}-helper` : undefined
@@ -81,18 +36,19 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           {...props}
         />
         {error && (
-          <p id={`${textareaId}-error`} className="text-sm text-red-400">
+          <p id={`${textareaId}-error`} className="text-sm text-red-400 font-medium">
             {error}
           </p>
         )}
         {helperText && !error && (
-          <p id={`${textareaId}-helper`} className="text-sm text-gray-400">
+          <p id={`${textareaId}-helper`} className="text-sm text-gray-400 text-muted-foreground">
             {helperText}
           </p>
         )}
       </div>
-    );
+    )
   }
-);
+)
+Textarea.displayName = "Textarea"
 
-Textarea.displayName = "Textarea";
+export { Textarea }

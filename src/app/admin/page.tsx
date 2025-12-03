@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import * as React from "react";
-import { PageHeading } from "@/components/layout/page-heading";
-import { Alert } from "@/components/layout/alert";
-import { Card, CardContent, Badge, Icon } from "@/components/ui";
 import Link from "next/link";
+import { PageHeading, PageContainer } from "@/components/layout";
+import { Alert } from "@/components/ui/alert";
+import { Card, CardContent, Badge, Icon } from "@/components/ui";
+import { StatCard, StatCardProps } from "@/components/admin";
 import { getDashboardStats, getRecentSignIns } from "./actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
 
@@ -17,7 +18,7 @@ export default async function AdminDashboard() {
   const recentSignIns = await getRecentSignIns(3);
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageContainer>
       {/* Alert Banner */}
       {stats.jwks.daysOld >= 25 && (
         <Alert variant="warning" title="JWKS Key Rotation Recommended" className="mb-6">
@@ -33,76 +34,50 @@ export default async function AdminDashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-[#1773cf]/20 flex items-center justify-center">
-                <Icon name="group" size="lg" className="text-[#1773cf]" />
-              </div>
-              <div className="flex-1">
-                <p className="text-2xl font-bold text-white">{stats.users.total.toLocaleString()}</p>
-                <p className="text-sm text-gray-400">Total Users</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {stats.users.verified} verified, {stats.users.unverified} unverified
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon="group"
+          iconClassName="text-primary"
+          iconBgClassName="bg-primary/20"
+          value={stats.users.total.toLocaleString()}
+          label="Total Users"
+          description={`${stats.users.verified} verified, ${stats.users.unverified} unverified`}
+        />
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <Icon name="apps" size="lg" className="text-green-500" />
-              </div>
-              <div className="flex-1">
-                <p className="text-2xl font-bold text-white">{stats.clients.total}</p>
-                <p className="text-sm text-gray-400">OAuth Clients</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {stats.clients.trusted} trusted, {stats.clients.dynamic} dynamic
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon="apps"
+          iconClassName="text-green-500"
+          iconBgClassName="bg-green-500/20"
+          value={stats.clients.total}
+          label="OAuth Clients"
+          description={`${stats.clients.trusted} trusted, ${stats.clients.dynamic} dynamic`}
+        />
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                <Icon name="schedule" size="lg" className="text-yellow-500" />
-              </div>
-              <div className="flex-1">
-                <p className="text-2xl font-bold text-white">{stats.activeSessions.toLocaleString()}</p>
-                <p className="text-sm text-gray-400">Active Sessions</p>
-                <p className="text-xs text-gray-500 mt-1">All good</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon="schedule"
+          iconClassName="text-yellow-500"
+          iconBgClassName="bg-yellow-500/20"
+          value={stats.activeSessions.toLocaleString()}
+          label="Active Sessions"
+          description="All good"
+        />
 
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <Icon name="key" size="lg" className="text-purple-500" />
-              </div>
-              <div className="flex-1">
-                <p className="text-2xl font-bold text-white">{stats.jwks.total}</p>
-                <p className="text-sm text-gray-400">JWKS Keys</p>
-                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                  Latest: {stats.jwks.latestKeyAge}
-                  {stats.jwks.isHealthy ? (
-                    <Badge variant="success" className="text-xs">Healthy</Badge>
-                  ) : (
-                    <Badge variant="warning" className="text-xs">Rotate Soon</Badge>
-                  )}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon="key"
+          iconClassName="text-purple-500"
+          iconBgClassName="bg-purple-500/20"
+          value={stats.jwks.total}
+          label="JWKS Keys"
+          description={
+            <span className="flex items-center gap-1">
+              Latest: {stats.jwks.latestKeyAge}
+              {stats.jwks.isHealthy ? (
+                <Badge variant="success" className="text-xs">Healthy</Badge>
+              ) : (
+                <Badge variant="warning" className="text-xs">Rotate Soon</Badge>
+              )}
+            </span>
+          }
+        />
       </div>
 
       {/* Quick Links */}
@@ -110,10 +85,10 @@ export default async function AdminDashboard() {
         <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link href="/admin/users/create">
-            <Card className="hover:border-[#1773cf] transition-colors cursor-pointer">
-              <CardContent>
+            <Card className="hover:border-primary transition-colors cursor-pointer">
+              <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <Icon name="person_add" size="lg" className="text-[#1773cf]" />
+                  <Icon name="person_add" size="lg" className="text-primary" />
                   <div>
                     <p className="font-semibold text-white">Create User</p>
                     <p className="text-sm text-gray-400">Add a new user account</p>
@@ -124,10 +99,10 @@ export default async function AdminDashboard() {
           </Link>
 
           <Link href="/admin/clients/register">
-            <Card className="hover:border-[#1773cf] transition-colors cursor-pointer">
-              <CardContent>
+            <Card className="hover:border-primary transition-colors cursor-pointer">
+              <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <Icon name="add_box" size="lg" className="text-[#1773cf]" />
+                  <Icon name="add_box" size="lg" className="text-primary" />
                   <div>
                     <p className="font-semibold text-white">Register Client</p>
                     <p className="text-sm text-gray-400">Add new OAuth client</p>
@@ -138,10 +113,10 @@ export default async function AdminDashboard() {
           </Link>
 
           <Link href="/admin/keys">
-            <Card className="hover:border-[#1773cf] transition-colors cursor-pointer">
-              <CardContent>
+            <Card className="hover:border-primary transition-colors cursor-pointer">
+              <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <Icon name="sync" size="lg" className="text-[#1773cf]" />
+                  <Icon name="sync" size="lg" className="text-primary" />
                   <div>
                     <p className="font-semibold text-white">Rotate JWKS</p>
                     <p className="text-sm text-gray-400">Manage signing keys</p>
@@ -155,10 +130,10 @@ export default async function AdminDashboard() {
 
       {/* Recent Activity */}
       <Card>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Recent Sign-ins</h2>
-            <Link href="/admin/sessions" className="text-sm text-[#1773cf] hover:underline">
+            <Link href="/admin/sessions" className="text-sm text-primary hover:underline">
               View all
             </Link>
           </div>
@@ -172,7 +147,7 @@ export default async function AdminDashboard() {
               {recentSignIns.map((activity) => (
                 <div key={activity.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 sm:py-2 border-b border-white/10 last:border-0 gap-3 sm:gap-0">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#1773cf] flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                       <Icon name="person" size="sm" className="text-white" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -190,6 +165,6 @@ export default async function AdminDashboard() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

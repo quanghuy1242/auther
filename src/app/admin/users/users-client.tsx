@@ -4,9 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Badge, Button, Input, ResponsiveTable } from "@/components/ui";
+import { Badge, Button, ResponsiveTable, SearchInput, Pagination } from "@/components/ui";
+import { FilterBar } from "@/components/admin";
 import { formatDateShort } from "@/lib/utils/date-formatter";
 import type { GetUsersResult } from "./actions";
+import { getProviderConfig } from "./shared";
 
 interface UsersClientProps {
   initialData: GetUsersResult;
@@ -15,34 +17,19 @@ interface UsersClientProps {
 export function UsersClient({ initialData }: UsersClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = React.useState("");
   const [isPending, startTransition] = React.useTransition();
-  const isInitialMount = React.useRef(true);
   
   const filterStatus = (searchParams.get("verified") === "true" ? "verified" : searchParams.get("verified") === "false" ? "unverified" : "all") as "all" | "verified" | "unverified";
 
-  // Initialize search from URL params only on mount
-  React.useEffect(() => {
-    if (isInitialMount.current) {
-      setSearch(searchParams.get("search") || "");
-      isInitialMount.current = false;
-    }
-  }, [searchParams]);
-
-  const getProviderIcon = (providerId: string) => {
-    const icons: Record<string, string> = {
-      google: "https://www.google.com/favicon.ico",
-      github: "https://github.com/favicon.ico",
-      credential: "mail",
-    };
-    return icons[providerId] || "key";
-  };
-
-  // Debounced search effect
-  const debouncedSearch = React.useCallback((searchValue: string) => {
+  const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (searchValue) {
-      params.set("search", searchValue);
+    const currentSearch = params.get("search") || "";
+    
+    // Avoid redundant navigation
+    if (value === currentSearch) return;
+
+    if (value) {
+      params.set("search", value);
     } else {
       params.delete("search");
     }
@@ -50,17 +37,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
     startTransition(() => {
       router.push(`/admin/users?${params.toString()}`);
     });
-  }, [searchParams, router]);
-
-  React.useEffect(() => {
-    if (isInitialMount.current) return; // Skip on initial mount
-    
-    const timer = setTimeout(() => {
-      debouncedSearch(search);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [search, debouncedSearch]);
+  };
 
   const handleFilterChange = (status: "all" | "verified" | "unverified") => {
     const params = new URLSearchParams(searchParams.toString());
@@ -88,52 +65,45 @@ export function UsersClient({ initialData }: UsersClientProps) {
   return (
     <>
       {/* Control Bar */}
-      <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative flex-grow min-w-full sm:min-w-[300px]">
-            <Icon
-              name="search"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <Input
-              type="text"
-              placeholder="Search by email, name, or username..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 w-full"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant={filterStatus === "all" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => handleFilterChange("all")}
-              disabled={isPending}
-            >
-              All
-            </Button>
-            <Button
-              variant={filterStatus === "verified" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => handleFilterChange("verified")}
-              disabled={isPending}
-            >
-              Verified
-            </Button>
-            <Button
-              variant={filterStatus === "unverified" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => handleFilterChange("unverified")}
-              disabled={isPending}
-            >
-              Unverified
-            </Button>
-          </div>
+      <FilterBar>
+        <div className="relative flex-grow min-w-full sm:min-w-[300px]">
+          <SearchInput
+            placeholder="Search by email, name, or username..."
+            defaultValue={searchParams.get("search") || ""}
+            onSearch={handleSearch}
+            className="w-full"
+          />
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={filterStatus === "all" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => handleFilterChange("all")}
+            disabled={isPending}
+          >
+            All
+          </Button>
+          <Button
+            variant={filterStatus === "verified" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => handleFilterChange("verified")}
+            disabled={isPending}
+          >
+            Verified
+          </Button>
+          <Button
+            variant={filterStatus === "unverified" ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => handleFilterChange("unverified")}
+            disabled={isPending}
+          >
+            Unverified
+          </Button>
+        </div>
+      </FilterBar>
 
       {/* Responsive Table */}
-      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-[#344d65]">
+      <div className="overflow-hidden rounded-lg border-0 sm:border sm:border-border-dark">
         <ResponsiveTable
           columns={[
             {
@@ -147,14 +117,14 @@ export function UsersClient({ initialData }: UsersClientProps) {
               key: "name",
               header: "Full Name",
               render: (user) => (
-                <span className="text-sm text-[#93adc8]">{user.name}</span>
+                <span className="text-sm text-gray-400">{user.name}</span>
               ),
             },
             {
               key: "createdAt",
               header: "Date Created",
               render: (user) => (
-                <span className="text-sm text-[#93adc8]">{formatDateShort(user.createdAt)}</span>
+                <span className="text-sm text-gray-400">{formatDateShort(user.createdAt)}</span>
               ),
             },
             {
@@ -184,7 +154,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
                           <Icon name="mail" className="text-gray-400" />
                         ) : (
                           <Icon
-                            name={getProviderIcon(account.providerId)}
+                            name={getProviderConfig(account.providerId).icon}
                             className="text-gray-400"
                           />
                         )}
@@ -211,7 +181,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
           data={initialData.users}
           keyExtractor={(user) => user.id}
           mobileCardRender={(user) => (
-            <div className="rounded-lg p-4 border border-[#344d65] sm:border-0 space-y-3" style={{ backgroundColor: '#1a2632' }}>
+            <div className="rounded-lg p-4 border border-border-dark sm:border-0 space-y-3 bg-card">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-white">{user.name}</p>
@@ -221,7 +191,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
                   {user.emailVerified ? "Verified" : "Unverified"}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between pt-2 border-t border-[#344d65]">
+              <div className="flex items-center justify-between pt-2 border-t border-border-dark">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400">Providers:</span>
                   <div className="flex items-center gap-1">
@@ -231,7 +201,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
                       user.accounts.map((account, idx) => (
                         <Icon
                           key={idx}
-                          name={account.providerId === "credential" ? "mail" : getProviderIcon(account.providerId)}
+                          name={account.providerId === "credential" ? "mail" : getProviderConfig(account.providerId).icon}
                           className="text-gray-400"
                           size="sm"
                         />
@@ -256,39 +226,14 @@ export function UsersClient({ initialData }: UsersClientProps) {
       </div>
 
       {/* Pagination */}
-      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p className="text-sm text-[#93adc8]">
-          Showing{" "}
-          <span className="font-medium text-white">
-            {initialData.users.length > 0 ? (initialData.page - 1) * initialData.pageSize + 1 : 0}
-          </span>{" "}
-          to{" "}
-          <span className="font-medium text-white">
-            {Math.min(initialData.page * initialData.pageSize, initialData.total)}
-          </span>{" "}
-          of <span className="font-medium text-white">{initialData.total}</span> results
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={initialData.page <= 1 || isPending}
-            leftIcon="chevron_left"
-            onClick={() => handlePageChange(initialData.page - 1)}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={initialData.page >= initialData.totalPages || isPending}
-            rightIcon="chevron_right"
-            onClick={() => handlePageChange(initialData.page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        currentPage={initialData.page}
+        pageSize={initialData.pageSize}
+        totalItems={initialData.total}
+        totalPages={initialData.totalPages}
+        onPageChange={handlePageChange}
+        isPending={isPending}
+      />
     </>
   );
 }

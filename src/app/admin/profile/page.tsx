@@ -3,6 +3,7 @@ import * as React from "react";
 import { requireAuth } from "@/lib/session";
 import { getUserSessions } from "./actions";
 import { ProfileClient } from "./profile-client";
+import { PageContainer } from "@/components/layout";
 
 export const metadata: Metadata = {
   title: "Profile Settings",
@@ -15,8 +16,8 @@ export default async function ProfilePage() {
   const sessions = await getUserSessions();
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageContainer>
       <ProfileClient user={user} sessions={sessions} currentSessionId={session.id} />
-    </div>
+    </PageContainer>
   );
 }

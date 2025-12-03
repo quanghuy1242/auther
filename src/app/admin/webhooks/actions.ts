@@ -19,7 +19,7 @@ import type {
   WebhookRequestMethod,
 } from "@/lib/types";
 import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from "@/lib/constants";
-import { booleanField } from "@/lib/utils/validation";
+import { webhookSchema } from "./shared";
 
 // Re-export types for client components
 export type {
@@ -57,46 +57,6 @@ export interface WebhookFormState {
     secret?: string; // Only populated on create/regenerate for one-time reveal
   };
 }
-
-// ============================================================================
-// Validation Schemas
-// ============================================================================
-
-const webhookSchema = z.object({
-  displayName: z
-    .string()
-    .min(2, "Display name must be at least 2 characters")
-    .max(100, "Display name must be less than 100 characters"),
-  url: z
-    .string()
-    .url("Must be a valid URL")
-    .refine(
-      (url) => {
-        // Allow HTTPS, localhost, and Docker network URLs (e.g., http://webhook-tester:8080)
-        return (
-          url.startsWith("https://") || 
-          url.startsWith("http://localhost") ||
-          url.startsWith("http://127.0.0.1") ||
-          /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url) // Docker service names with port
-        );
-      },
-      "URL must use HTTPS or be a valid local/Docker network URL (http://localhost, http://service-name:port)"
-    ),
-  isActive: booleanField.default(true),
-  eventTypes: z
-    .array(z.string())
-    .min(1, "At least one event type must be selected")
-    .refine(
-      (types) =>
-        types.every((t) =>
-          WEBHOOK_EVENT_TYPES.some((evt) => evt.value === t)
-        ),
-      "Invalid event type selected"
-    ),
-  retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
-  deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
-  requestMethod: z.enum(["POST", "PUT"]).default("POST"),
-});
 
 // ============================================================================
 // Query Actions

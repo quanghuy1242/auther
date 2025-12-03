@@ -1,43 +1,126 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
-import { cn } from "@/lib/utils/cn";
-import { Icon } from "./icon";
+import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { cn } from "@/lib/utils/cn"
+import { Icon } from "./icon"
+
+const Dialog = DialogPrimitive.Root
+const DialogTrigger = DialogPrimitive.Trigger
+const DialogPortal = DialogPrimitive.Portal
+const DialogClose = DialogPrimitive.Close
+
+const DialogOverlay = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    className={cn(
+      "fixed inset-0 z-50 bg-black/75 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      className
+    )}
+    {...props}
+  />
+))
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+const DialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPortal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:rounded-lg",
+        "bg-sidebar border-[#243647]", // Custom theme
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Content>
+  </DialogPortal>
+))
+DialogContent.displayName = DialogPrimitive.Content.displayName
+
+const DialogHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col space-y-1.5 text-center sm:text-left",
+      className
+    )}
+    {...props}
+  />
+)
+DialogHeader.displayName = "DialogHeader"
+
+const DialogFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      className
+    )}
+    {...props}
+  />
+)
+DialogFooter.displayName = "DialogFooter"
+
+const DialogTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn(
+      "text-lg font-semibold leading-none tracking-tight text-white",
+      className
+    )}
+    {...props}
+  />
+))
+DialogTitle.displayName = DialogPrimitive.Title.displayName
+
+const DialogDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-muted-foreground text-gray-400", className)}
+    {...props}
+  />
+))
+DialogDescription.displayName = DialogPrimitive.Description.displayName
 
 export interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title?: string;
-  description?: string;
-  children: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
-  showCloseButton?: boolean;
-  className?: string;
+  isOpen: boolean
+  onClose: () => void
+  title?: string
+  description?: string
+  children: React.ReactNode
+  size?: "sm" | "md" | "lg" | "xl"
+  showCloseButton?: boolean
+  className?: string
 }
 
 const sizeStyles = {
-  sm: "w-[calc(100%-2rem)] md:max-w-md",
-  md: "w-[calc(100%-2rem)] md:max-w-lg",
-  lg: "w-[calc(100%-2rem)] md:max-w-2xl",
-  xl: "w-[calc(100%-2rem)] md:max-w-6xl",
-};
+  sm: "max-w-md",
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-6xl",
+}
 
 /**
- * Modal dialog component using Headless UI Dialog
- * Provides accessible modal with backdrop, transitions, and focus management
- * 
- * @example
- * <Modal
- *   isOpen={isOpen}
- *   onClose={() => setIsOpen(false)}
- *   title="Delete User"
- *   description="This action cannot be undone."
- * >
- *   <div className="mt-4">
- *     <Button variant="danger" onClick={handleDelete}>Delete</Button>
- *   </div>
- * </Modal>
+ * Modal wrapper for backward compatibility and ease of use
  */
 export function Modal({
   isOpen,
@@ -50,82 +133,33 @@ export function Modal({
   className,
 }: ModalProps) {
   return (
-    <Transition show={isOpen} as={React.Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
-        <TransitionChild
-          as={React.Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
-        </TransitionChild>
-
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-2 sm:p-4 text-center">
-            <TransitionChild
-              as={React.Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <DialogPanel
-                className={cn(
-                  "w-full transform overflow-hidden rounded-xl",
-                  "bg-sidebar border border-[#243647]",
-                  "p-4 sm:p-6 text-left align-middle shadow-xl transition-all",
-                  sizeStyles[size],
-                  className
-                )}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    {title && (
-                      <DialogTitle
-                        as="h3"
-                        className="text-lg font-semibold leading-6 text-white"
-                      >
-                        {title}
-                      </DialogTitle>
-                    )}
-                    {description && (
-                      <p className="mt-1 text-sm text-gray-400">{description}</p>
-                    )}
-                  </div>
-                  {showCloseButton && (
-                    <button
-                      type="button"
-                      className={cn(
-                        "rounded-lg p-1 text-gray-400 flex",
-                        "hover:bg-white/5 hover:text-white",
-                        "focus:outline-none focus:ring-2 focus:ring-white/50",
-                        "transition-colors"
-                      )}
-                      onClick={onClose}
-                    >
-                      <Icon name="close" size="sm" />
-                    </button>
-                  )}
-                </div>
-                {children}
-              </DialogPanel>
-            </TransitionChild>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className={cn(sizeStyles[size], "w-[calc(100%-2rem)] p-4 sm:p-6", className)}>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            {title && <DialogTitle>{title}</DialogTitle>}
+            {description && (
+              <DialogDescription className="mt-1">
+                {description}
+              </DialogDescription>
+            )}
           </div>
+          {showCloseButton && (
+            <DialogClose className="rounded-lg p-1 text-gray-400 flex hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-colors">
+              <Icon name="close" size="sm" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
+          )}
         </div>
-      </Dialog>
-    </Transition>
-  );
+        {children}
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export interface ModalFooterProps {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function ModalFooter({ children, className }: ModalFooterProps) {
@@ -139,5 +173,18 @@ export function ModalFooter({ children, className }: ModalFooterProps) {
     >
       {children}
     </div>
-  );
+  )
+}
+
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogClose,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
 }

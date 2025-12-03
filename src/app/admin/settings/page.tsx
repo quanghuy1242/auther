@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import * as React from "react";
 import { requireAuth } from "@/lib/session";
-import { PageHeading } from "@/components/layout/page-heading";
+import { PageHeading, PageContainer } from "@/components/layout";
 import { env } from "@/env";
 import { getRotationCadenceDisplay } from "@/lib/constants";
 import { resolveQueueBaseUrl } from "@/lib/webhooks/payload";
@@ -65,12 +65,12 @@ export default async function SettingsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <PageContainer>
       <PageHeading
         title="Configuration & Secrets"
         description="Manage environment settings, feature flags, and internal secrets."
       />
       <SettingsClient initialData={settingsData} />
-    </div>
+    </PageContainer>
   );
 }

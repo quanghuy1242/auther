@@ -1,7 +1,7 @@
 "use client";
 
 import { Control, Controller } from "react-hook-form";
-import { StyledCheckbox } from "@/components/ui";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils/cn";
 
 export interface EventOption {
@@ -79,8 +79,7 @@ export function EventSelector({ name, control, events, label, className }: Event
                     )}
                     style={!isSelected ? { backgroundColor: '#1a2632' } : undefined}
                   >
-                    <StyledCheckbox
-                      checked={isSelected}
+                                              <Checkbox                      checked={isSelected}
                       onChange={() => toggleEvent(event.value)}
                       label={event.value}
                     />

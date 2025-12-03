@@ -2,21 +2,13 @@
 
 import * as React from "react";
 import { z } from "zod";
-import { booleanField } from "@/lib/utils/validation";
 import { useFormContext } from "react-hook-form";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, Button } from "@/components/ui";
 import { FormWrapper, FormField, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { createUser } from "./actions";
 import { useRouter } from "next/navigation";
-
-const createUserSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  username: z.string().optional().transform(val => val || undefined),
-  password: z.string().optional().transform(val => val || undefined),
-  sendInvite: booleanField.optional().default(false),
-});
+import { createUserSchema } from "../shared";
 
 function CreateUserForm({ onCancel }: { onCancel: () => void }) {
   const { watch, setValue } = useFormContext();

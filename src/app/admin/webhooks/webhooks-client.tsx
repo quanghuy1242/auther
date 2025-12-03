@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useTransition, useCallback, useRef } from "react";
+import { useState, useTransition, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Input,
   Select,
   Button,
   Badge,
@@ -12,6 +11,8 @@ import {
   ResponsiveTable,
   Dropdown,
   Modal,
+  SearchInput,
+  Pagination,
   type DropdownItem,
 } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
@@ -56,13 +57,9 @@ export function WebhooksClient({
   const [isPending, startTransition] = useTransition();
 
   // Local state for filters
-  const [search, setSearch] = useState(initialFilters.search);
   const [status, setStatus] = useState(initialFilters.status);
   const [eventType, setEventType] = useState(initialFilters.eventType);
   
-  // Track if this is the initial mount to prevent initial effect trigger
-  const isInitialMount = useRef(true);
-
   const handleActionComplete = useCallback(() => {
     router.refresh();
   }, [router]);
@@ -101,22 +98,6 @@ export function WebhooksClient({
       router.push(`/admin/webhooks?${params.toString()}`);
     });
   }, [router, searchParams]);
-
-  // Debounced search - only update URL if search value differs from URL
-  useEffect(() => {
-    // Skip on initial mount
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    
-    if (search === initialFilters.search) return;
-    
-    const timer = setTimeout(() => {
-      updateFilters({ search });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search, initialFilters.search, updateFilters]);
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
@@ -258,7 +239,7 @@ export function WebhooksClient({
   ];
 
   return (
-    <div className="space-y-6 relative">{/* Note: Removed loading overlay to match users list behavior and prevent flickering */}
+    <div className="space-y-6 relative">
 
       {/* Metrics Card */}
       <MetricsCard
@@ -276,11 +257,10 @@ export function WebhooksClient({
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           {/* Search */}
           <div className="flex-1 min-w-0">
-            <Input
-              leftIcon="search"
+            <SearchInput
               placeholder="Search by name or URL..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              defaultValue={initialFilters.search}
+              onSearch={(value) => updateFilters({ search: value })}
               className="w-full"
             />
           </div>
@@ -330,7 +310,7 @@ export function WebhooksClient({
           keyExtractor={(webhook) => webhook.id}
           mobileCardRender={(webhook: WebhookEndpointWithSubscriptions) => (
             <Link href={`/admin/webhooks/${webhook.id}`}>
-              <div className="rounded-lg p-4 space-y-3 border border-[#344d65] hover:border-[#1773cf] transition-colors sm:border-0" style={{ backgroundColor: '#1a2632' }}>
+              <div className="rounded-lg p-4 space-y-3 border border-border-dark hover:border-primary transition-colors sm:border-0 bg-card">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">
@@ -366,7 +346,7 @@ export function WebhooksClient({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-[#344d65]">
+                  <div className="flex items-center justify-between pt-2 border-t border-border-dark">
                     <div className="flex-1">
                       <p className="text-xs text-gray-400 uppercase">Last Delivery</p>
                       {webhook.lastDelivery ? (
@@ -380,7 +360,7 @@ export function WebhooksClient({
                                 : "text-red-500"
                             )}
                           />
-                          <span className="text-sm text-[#93adc8]">
+                          <span className="text-sm text-[var(--color-text-secondary)]">
                             {formatRelativeTime(webhook.lastDelivery.timestamp)}
                           </span>
                         </div>
@@ -388,7 +368,7 @@ export function WebhooksClient({
                         <p className="text-sm text-gray-500 mt-0.5">N/A</p>
                       )}
                     </div>
-                    <Icon name="chevron_right" className="text-[#1773cf]" />
+                    <Icon name="chevron_right" className="text-primary" />
                   </div>
                 </div>
               </div>
@@ -399,31 +379,14 @@ export function WebhooksClient({
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            Showing {(pagination.page - 1) * pagination.pageSize + 1} to{" "}
-            {Math.min(pagination.page * pagination.pageSize, pagination.totalItems)} of{" "}
-            {pagination.totalItems} webhooks
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => handlePageChange(pagination.page - 1)}
-              disabled={!pagination.hasPreviousPage || isPending}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => handlePageChange(pagination.page + 1)}
-              disabled={!pagination.hasNextPage || isPending}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        <Pagination
+          currentPage={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          onPageChange={handlePageChange}
+          isPending={isPending}
+        />
       )}
     </div>
   );
@@ -573,7 +536,7 @@ function WebhookActionsDropdown({
           </button>
         }
         items={menuItems}
-        align="right"
+        align="end"
       />
 
       {/* Disable/Enable Confirmation Modal */}
