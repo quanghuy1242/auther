@@ -10,26 +10,15 @@ import {
   EventSelector,
 } from "@/components/forms";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
+import { 
+  RETRY_POLICY_OPTIONS, 
+  DELIVERY_FORMAT_OPTIONS, 
+  REQUEST_METHOD_OPTIONS 
+} from "../shared";
 
 export function WebhookFormContent() {
   const form = useFormContext();
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const retryPolicyOptions = [
-    { value: "standard", label: "Standard (3 retries)" },
-    { value: "aggressive", label: "Aggressive (5 retries)" },
-    { value: "none", label: "No Retries" },
-  ];
-
-  const deliveryFormatOptions = [
-    { value: "json", label: "JSON" },
-    { value: "form-encoded", label: "Form-encoded" },
-  ];
-
-  const requestMethodOptions = [
-    { value: "POST", label: "POST" },
-    { value: "PUT", label: "PUT" },
-  ];
 
   return (
     <div className="space-y-6">
@@ -97,7 +86,7 @@ export function WebhookFormContent() {
               </label>
               <ControlledSelect
                 name="retryPolicy"
-                options={retryPolicyOptions}
+                options={RETRY_POLICY_OPTIONS}
                 placeholder="Select retry policy"
               />
             </div>
@@ -108,7 +97,7 @@ export function WebhookFormContent() {
               </label>
               <ControlledSelect
                 name="deliveryFormat"
-                options={deliveryFormatOptions}
+                options={DELIVERY_FORMAT_OPTIONS}
                 placeholder="Select delivery format"
               />
             </div>
@@ -119,7 +108,7 @@ export function WebhookFormContent() {
               </label>
               <ControlledSelect
                 name="requestMethod"
-                options={requestMethodOptions}
+                options={REQUEST_METHOD_OPTIONS}
                 placeholder="Select request method"
               />
             </div>
