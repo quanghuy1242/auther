@@ -7,6 +7,11 @@ import { Card, CardContent, Button, Icon, Badge, UrlListBuilder, Checkbox, Copya
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { registerClient, type RegisterClientState } from "./actions";
 import { useRouter } from "next/navigation";
+import {
+  GRANT_TYPE_DETAILS,
+  TOKEN_ENDPOINT_AUTH_METHOD_OPTIONS,
+  APPLICATION_TYPE_OPTIONS,
+} from "@/lib/oauth-constants";
 
 const registerClientSchema = z.object({
   name: z.string().min(2, "Client name must be at least 2 characters"),
@@ -16,14 +21,6 @@ const registerClientSchema = z.object({
   grantTypes: z.string().optional(),
   tokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"], "Invalid auth method"),
 });
-
-const GRANT_TYPES = [
-  { value: "authorization_code", label: "Authorization Code", description: "Standard server-side flow" },
-  { value: "refresh_token", label: "Refresh Token", description: "Get new access tokens" },
-  { value: "client_credentials", label: "Client Credentials", description: "Machine-to-machine auth" },
-  { value: "implicit", label: "Implicit", description: "Legacy browser flow (not recommended)" },
-  { value: "password", label: "Password", description: "Resource owner password (not recommended)" },
-];
 
 function GrantTypesSelector() {
   const [selectedGrants, setSelectedGrants] = React.useState<string[]>(["authorization_code", "refresh_token"]);
@@ -44,7 +41,7 @@ function GrantTypesSelector() {
         Grant Types <span className="text-red-400">*</span>
       </label>
       <div className="space-y-3">
-        {GRANT_TYPES.map((grant) => (
+        {GRANT_TYPE_DETAILS.map((grant) => (
           <label
             key={grant.value}
             className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
@@ -183,11 +180,7 @@ export default function RegisterClientPage() {
                 label="Application Type"
                 placeholder="Select application type"
                 required
-                options={[
-                  { value: "web", label: "Web Application - Server-side app with client secret" },
-                  { value: "spa", label: "Single Page App - Browser-based app without secret" },
-                  { value: "native", label: "Native App - Mobile or desktop application" },
-                ]}
+                options={APPLICATION_TYPE_OPTIONS}
               />
 
               <div>
@@ -212,11 +205,7 @@ export default function RegisterClientPage() {
                 label="Token Endpoint Authentication Method"
                 placeholder="Select authentication method"
                 required
-                options={[
-                  { value: "client_secret_basic", label: "Client Secret Basic - HTTP Basic Auth (recommended)" },
-                  { value: "client_secret_post", label: "Client Secret Post - POST body parameters" },
-                  { value: "none", label: "None - Public client (SPA/Native apps)" },
-                ]}
+                options={TOKEN_ENDPOINT_AUTH_METHOD_OPTIONS}
               />
 
               <GrantTypesSelector />

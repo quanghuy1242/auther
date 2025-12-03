@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { formatDate } from "@/lib/utils/date-formatter";
 import type { ClientDetail } from "../actions";
+import type { ClientMetadata } from "../../types";
 import {
   getClientMetadata,
   updateClientAccessPolicy,
@@ -33,16 +34,10 @@ import {
   checkResourceDependencies,
 } from "./actions";
 import { toast } from "@/lib/toast";
+import { permissionsToRows, rowsToPermissions } from "@/lib/utils/permissions";
 
 interface AccessControlClientProps {
   client: ClientDetail;
-}
-
-interface ClientMetadata {
-  accessPolicy: "all_users" | "restricted";
-  allowsApiKeys: boolean;
-  allowedResources: Record<string, string[]> | null;
-  defaultApiKeyPermissions: Record<string, string[]> | null;
 }
 
 interface ClientUser {
@@ -111,13 +106,7 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
         
         // Convert allowedResources from JSON to PermissionRow[] format
         if (metadataResult.allowedResources) {
-          const resourceRows: PermissionRow[] = Object.entries(
-            metadataResult.allowedResources
-          ).map(([resource, actions]) => ({
-            resource,
-            actions: actions.join(", "),
-          }));
-          setAllowedResources(resourceRows);
+          setAllowedResources(permissionsToRows(metadataResult.allowedResources));
         } else {
           setAllowedResources([]);
         }
@@ -196,43 +185,12 @@ export function AccessControlClient({ client }: AccessControlClientProps) {
 
     try {
       // Convert PermissionRow[] to ResourcePermissions JSON format
-      const resourcesJson: Record<string, string[]> = {};
+      const { permissions: resourcesJson, error } = rowsToPermissions(allowedResources);
       
-      for (const row of allowedResources) {
-        const resource = row.resource.trim();
-        const actions = row.actions
-          .split(",")
-          .map((a) => a.trim())
-          .filter((a) => a.length > 0);
-        
-        // Skip empty rows
-        if (!resource || actions.length === 0) {
-          continue;
-        }
-        
-        // Validate resource name
-        if (!/^[a-zA-Z0-9_-]+$/.test(resource)) {
-          toast.error(
-            "Invalid resource name",
-            `Resource "${resource}" contains invalid characters. Use only letters, numbers, hyphens, and underscores.`
-          );
-          setIsSavingResources(false);
-          return;
-        }
-        
-        // Validate actions
-        for (const action of actions) {
-          if (!/^[a-zA-Z0-9_-]+$/.test(action)) {
-            toast.error(
-              "Invalid action name",
-              `Action "${action}" in resource "${resource}" contains invalid characters.`
-            );
-            setIsSavingResources(false);
-            return;
-          }
-        }
-        
-        resourcesJson[resource] = actions;
+      if (error) {
+        toast.error("Invalid resources", error);
+        setIsSavingResources(false);
+        return;
       }
 
       // Check if any API keys would be affected by this change

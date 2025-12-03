@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { formatDate } from "@/lib/utils/date-formatter";
 import type { ClientDetail } from "../actions";
+import type { ClientMetadata } from "../../types";
 import {
   createClientApiKey,
   listClientApiKeys,
@@ -28,6 +29,7 @@ import {
   updateApiKeyPermissions,
 } from "./actions";
 import { getClientMetadata } from "../access/actions";
+import { permissionsToTags, tagsToPermissions } from "@/lib/utils/permissions";
 import type { ResourcePermissions } from "@/lib/utils/permissions";
 import { toast } from "@/lib/toast";
 
@@ -43,13 +45,6 @@ interface ApiKeyListItem {
   expiresAt: Date | null;
   createdAt: Date;
   metadata: Record<string, unknown>;
-}
-
-interface ClientMetadata {
-  accessPolicy: "all_users" | "restricted";
-  allowsApiKeys: boolean;
-  allowedResources: Record<string, string[]> | null;
-  defaultApiKeyPermissions: Record<string, string[]> | null;
 }
 
 export function ApiKeysClient({ client }: ApiKeysClientProps) {
@@ -79,19 +74,10 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
   const availablePermissionsList = React.useMemo(() => {
     if (!metadata?.allowedResources) return [];
     
-    const permissions: Array<{ value: string; label: string }> = [];
-    
-    for (const [resource, actions] of Object.entries(metadata.allowedResources)) {
-      for (const action of actions) {
-        const permString = `${resource}:${action}`;
-        permissions.push({
-          value: permString,
-          label: permString
-        });
-      }
-    }
-    
-    return permissions;
+    return permissionsToTags(metadata.allowedResources).map(tag => ({
+      value: tag,
+      label: tag
+    }));
   }, [metadata?.allowedResources]);
 
   // Load data function wrapped in useCallback
@@ -108,12 +94,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
         
         // Set default permissions from client metadata for form display
         if (metadataResult.defaultApiKeyPermissions) {
-          const defaultPerms: string[] = [];
-          for (const [resource, actions] of Object.entries(metadataResult.defaultApiKeyPermissions)) {
-            for (const action of actions) {
-              defaultPerms.push(`${resource}:${action}`);
-            }
-          }
+          const defaultPerms = permissionsToTags(metadataResult.defaultApiKeyPermissions);
           setDefaultPermissions(defaultPerms);
           setSelectedApiKeyPermissions(defaultPerms);
         } else {
@@ -139,19 +120,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
 
     try {
       // Convert selected permission tags to ResourcePermissions format
-      // From: ["invoices:read", "invoices:write", "payments:read"]
-      // To: { "invoices": ["read", "write"], "payments": ["read"] }
-      const permissions: ResourcePermissions = {};
-      
-      for (const permString of selectedApiKeyPermissions) {
-        const [resource, action] = permString.split(":");
-        if (resource && action) {
-          if (!permissions[resource]) {
-            permissions[resource] = [];
-          }
-          permissions[resource].push(action);
-        }
-      }
+      const permissions = tagsToPermissions(selectedApiKeyPermissions);
       
       // Handle expiration
       let expiresInDays: number | undefined;
@@ -216,17 +185,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
 
     try {
       // Convert selected permission tags to ResourcePermissions format
-      const permissions: ResourcePermissions = {};
-      
-      for (const permString of editSelectedPermissions) {
-        const [resource, action] = permString.split(":");
-        if (resource && action) {
-          if (!permissions[resource]) {
-            permissions[resource] = [];
-          }
-          permissions[resource].push(action);
-        }
-      }
+      const permissions = tagsToPermissions(editSelectedPermissions);
       
       const result = await updateApiKeyPermissions(selectedKey.id, permissions);
 
@@ -251,17 +210,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
 
     try {
       // Convert permission tags to ResourcePermissions format
-      const permissions: ResourcePermissions = {};
-      
-      for (const permString of defaultPermissions) {
-        const [resource, action] = permString.split(":");
-        if (resource && action) {
-          if (!permissions[resource]) {
-            permissions[resource] = [];
-          }
-          permissions[resource].push(action);
-        }
-      }
+      const permissions = tagsToPermissions(defaultPermissions);
 
       // Import updateClientAccessPolicy from access actions
       const { updateClientAccessPolicy } = await import("../access/actions");
@@ -290,12 +239,7 @@ export function ApiKeysClient({ client }: ApiKeysClientProps) {
     setSelectedKey(key);
     
     // Convert ResourcePermissions to permission tags
-    const permTags: string[] = [];
-    for (const [resource, actions] of Object.entries(key.permissions)) {
-      for (const action of actions) {
-        permTags.push(`${resource}:${action}`);
-      }
-    }
+    const permTags = permissionsToTags(key.permissions);
     setEditSelectedPermissions(permTags);
     setShowPermissionsModal(true);
   };

@@ -9,6 +9,7 @@ import { requireAuth } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { randomBytes } from "crypto";
+import { parseRedirectUrls, findInvalidUrl } from "@/lib/client-utils";
 
 export interface ClientDetail {
   id: string;
@@ -106,17 +107,7 @@ export const getClientById = cache(async (clientId: string): Promise<ClientDetai
         let redirectURLs: string[] = [];
         try {
           if (client.redirectURLs) {
-            // Try to parse as JSON first
-            try {
-              const parsed = JSON.parse(client.redirectURLs);
-              redirectURLs = Array.isArray(parsed) ? parsed : [parsed].filter(Boolean);
-            } catch {
-              // If JSON parsing fails, treat as plain text (split by newlines or commas)
-              redirectURLs = client.redirectURLs
-                .split(/[\n,]/)
-                .map((url: string) => url.trim())
-                .filter((url: string) => url.length > 0);
-            }
+            redirectURLs = parseRedirectUrls(client.redirectURLs);
           }
         } catch (error) {
           console.error("Failed to parse redirectURLs:", client.redirectURLs, error);
@@ -192,11 +183,8 @@ export async function updateClient(
 
     const { name, redirectURLs, authMethod, grantTypes } = result.data;
 
-    // Parse redirect URLs (one per line)
-    const redirectUrlsArray = redirectURLs
-      .split("\n")
-      .map((url) => url.trim())
-      .filter((url) => url.length > 0);
+    // Parse redirect URLs
+    const redirectUrlsArray = parseRedirectUrls(redirectURLs);
 
     if (redirectUrlsArray.length === 0) {
       return {
@@ -206,15 +194,12 @@ export async function updateClient(
     }
 
     // Validate URLs
-    for (const url of redirectUrlsArray) {
-      try {
-        new URL(url);
-      } catch {
-        return {
-          success: false,
-          errors: { redirectURLs: `Invalid URL: ${url}` },
-        };
-      }
+    const invalidUrl = findInvalidUrl(redirectUrlsArray);
+    if (invalidUrl) {
+      return {
+        success: false,
+        errors: { redirectURLs: `Invalid URL: ${invalidUrl}` },
+      };
     }
 
     // Parse grant types
@@ -408,25 +393,21 @@ export async function toggleClientStatus(clientId: string, disabled: boolean): P
 }
 
 /**
- * Delete OAuth client (soft delete via disabled flag)
+ * Delete OAuth client (hard delete)
  */
 export async function deleteClient(clientId: string): Promise<{ success: boolean; error?: string }> {
   try {
     await requireAuth();
 
-    // Soft delete by setting disabled flag
-    await db
-      .update(oauthApplication)
-      .set({
-        disabled: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(oauthApplication.clientId, clientId));
-
-    // Revoke all tokens
+    // Revoke all tokens first to ensure referential integrity if cascading isn't set up or to be safe
     await db
       .delete(oauthAccessToken)
       .where(eq(oauthAccessToken.clientId, clientId));
+
+    // Hard delete the client
+    await db
+      .delete(oauthApplication)
+      .where(eq(oauthApplication.clientId, clientId));
 
     revalidatePath("/admin/clients");
 

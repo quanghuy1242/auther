@@ -9,19 +9,20 @@ export interface PermissionValidationResult {
   errors: string[];
 }
 
+export interface PermissionRow {
+  resource: string;
+  actions: string;
+}
+
+export const RESOURCE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+export const ACTION_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+
 /**
  * Validate that requested permissions are allowed
  * 
  * @param permissions - Requested permissions to validate
  * @param allowedResources - Allowed resources and their actions
  * @returns Validation result with errors if any
- * 
- * @example
- * const result = validatePermissions(
- *   { "projects": ["read", "write"] },
- *   { "projects": ["read", "write", "delete"], "users": ["read"] }
- * );
- * // { valid: true, errors: [] }
  */
 export function validatePermissions(
   permissions: ResourcePermissions,
@@ -52,13 +53,6 @@ export function validatePermissions(
  * @param defaults - Default permissions
  * @param custom - Custom permissions to merge
  * @returns Merged permissions
- * 
- * @example
- * mergePermissions(
- *   { "projects": ["read"] },
- *   { "projects": ["write"], "users": ["read"] }
- * );
- * // { "projects": ["read", "write"], "users": ["read"] }
  */
 export function mergePermissions(
   defaults: ResourcePermissions,
@@ -80,13 +74,6 @@ export function mergePermissions(
  * @param requiredResource - Required resource
  * @param requiredAction - Required action
  * @returns True if user has the permission
- * 
- * @example
- * hasPermission(
- *   { "projects": ["read", "write"] },
- *   "projects",
- *   "read"
- * ); // true
  */
 export function hasPermission(
   userPermissions: ResourcePermissions,
@@ -102,10 +89,6 @@ export function hasPermission(
  * 
  * @param json - JSON string to parse
  * @returns Parsed permissions or empty object
- * 
- * @example
- * parsePermissions('{"projects":["read"]}');
- * // { "projects": ["read"] }
  */
 export function parsePermissions(json: string | null): ResourcePermissions {
   if (!json) return {};
@@ -125,10 +108,6 @@ export function parsePermissions(json: string | null): ResourcePermissions {
  * 
  * @param permissions - Permissions to stringify
  * @returns JSON string
- * 
- * @example
- * stringifyPermissions({ "projects": ["read"] });
- * // '{"projects":["read"]}'
  */
 export function stringifyPermissions(permissions: ResourcePermissions): string {
   return JSON.stringify(permissions);
@@ -139,13 +118,95 @@ export function stringifyPermissions(permissions: ResourcePermissions): string {
  * 
  * @param permissions - Permissions to check
  * @returns True if empty
- * 
- * @example
- * isEmptyPermissions({}); // true
- * isEmptyPermissions({ "projects": [] }); // true (no actions)
- * isEmptyPermissions({ "projects": ["read"] }); // false
  */
 export function isEmptyPermissions(permissions: ResourcePermissions): boolean {
   return Object.keys(permissions).length === 0 || 
          Object.values(permissions).every(actions => actions.length === 0);
+}
+
+/**
+ * Convert ResourcePermissions object to array of permission tags ["resource:action"]
+ */
+export function permissionsToTags(permissions: ResourcePermissions): string[] {
+  const tags: string[] = [];
+  for (const [resource, actions] of Object.entries(permissions)) {
+    for (const action of actions) {
+      tags.push(`${resource}:${action}`);
+    }
+  }
+  return tags;
+}
+
+/**
+ * Convert array of permission tags ["resource:action"] to ResourcePermissions object
+ */
+export function tagsToPermissions(tags: string[]): ResourcePermissions {
+  const permissions: ResourcePermissions = {};
+  
+  for (const tag of tags) {
+    const [resource, action] = tag.split(":");
+    if (resource && action) {
+      if (!permissions[resource]) {
+        permissions[resource] = [];
+      }
+      if (!permissions[resource].includes(action)) {
+        permissions[resource].push(action);
+      }
+    }
+  }
+  
+  return permissions;
+}
+
+/**
+ * Convert ResourcePermissions object to array of PermissionRow for UI display
+ */
+export function permissionsToRows(permissions: ResourcePermissions): PermissionRow[] {
+  return Object.entries(permissions).map(([resource, actions]) => ({
+    resource,
+    actions: actions.join(", "),
+  }));
+}
+
+/**
+ * Convert array of PermissionRow to ResourcePermissions object
+ * Includes validation for resource and action names
+ */
+export function rowsToPermissions(rows: PermissionRow[]): {
+  permissions: ResourcePermissions;
+  error?: string;
+} {
+  const permissions: ResourcePermissions = {};
+  
+  for (const row of rows) {
+    const resource = row.resource.trim();
+    const actions = row.actions
+      .split(",")
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+    
+    if (!resource || actions.length === 0) {
+      continue;
+    }
+    
+    if (!RESOURCE_NAME_REGEX.test(resource)) {
+      return { 
+        permissions: {}, 
+        error: `Resource "${resource}" contains invalid characters. Use only letters, numbers, hyphens, and underscores.` 
+      };
+    }
+    
+    for (const action of actions) {
+      if (!ACTION_NAME_REGEX.test(action)) {
+        return { 
+          permissions: {}, 
+          error: `Action "${action}" in resource "${resource}" contains invalid characters.` 
+        };
+      }
+    }
+    
+    permissions[resource] = actions;
+  }
+  
+  return { permissions };
 }

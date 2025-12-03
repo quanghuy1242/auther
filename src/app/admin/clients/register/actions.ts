@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/session";
 import { db } from "@/lib/db";
 import { oauthApplication } from "@/db/schema";
 import { randomBytes } from "crypto";
+import { parseRedirectUrls, findInvalidUrl, parseGrantTypes } from "@/lib/client-utils";
 
 const registerClientSchema = z.object({
   name: z.string().min(2, "Client name must be at least 2 characters"),
@@ -71,11 +72,8 @@ export async function registerClient(
       tokenEndpointAuthMethod,
     } = result.data;
 
-    // Parse redirect URLs (one per line)
-    const redirectUrlsArray = redirectURLs
-      .split("\n")
-      .map((url) => url.trim())
-      .filter((url) => url.length > 0);
+    // Parse redirect URLs
+    const redirectUrlsArray = parseRedirectUrls(redirectURLs);
 
     if (redirectUrlsArray.length === 0) {
       return {
@@ -85,20 +83,17 @@ export async function registerClient(
     }
 
     // Validate URLs
-    for (const url of redirectUrlsArray) {
-      try {
-        new URL(url);
-      } catch {
-        return {
-          success: false,
-          errors: { redirectURLs: `Invalid URL: ${url}` },
-        };
-      }
+    const invalidUrl = findInvalidUrl(redirectUrlsArray);
+    if (invalidUrl) {
+      return {
+        success: false,
+        errors: { redirectURLs: `Invalid URL: ${invalidUrl}` },
+      };
     }
 
     // Parse grant types
     const grantTypesArray = grantTypes
-      ? grantTypes.split(",").map((g) => g.trim()).filter((g) => g.length > 0)
+      ? parseGrantTypes(grantTypes)
       : ["authorization_code", "refresh_token"];
 
     // Generate client credentials

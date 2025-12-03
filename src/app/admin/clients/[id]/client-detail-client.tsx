@@ -27,11 +27,7 @@ import {
   type ClientDetail,
   type UpdateClientState,
 } from "./actions";
-
-// Available auth methods and grant types
-const AUTH_METHODS = ["client_secret_basic", "client_secret_post", "private_key_jwt", "none"] as const;
-const GRANT_TYPES = ["authorization_code", "refresh_token", "client_credentials"] as const;
-type AuthMethod = typeof AUTH_METHODS[number];
+import { AUTH_METHODS, GRANT_TYPES, type AuthMethod } from "@/lib/oauth-constants";
 
 function resolveAuthMethod(client: ClientDetail): AuthMethod {
   const metadata = client.metadata as Record<string, unknown> | undefined;
