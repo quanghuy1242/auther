@@ -112,10 +112,16 @@ Transitioning to ReBAC represents a fundamental shift. We must ensure existing f
         *   **Validation:** `src/schemas/rebac.ts` defines strict Zod schemas for the Authorization Model JSON structure.
         *   **ABAC Support:** The `definition` JSON field supports embedding Lua scripts for attribute-based checks (e.g., `{ "policyEngine": "lua", "policy": "..." }`).
 
-2.  **Core Services**
+2.  **Core Services** (Completed)
     *   Implement `TupleRepository` for low-level DB operations.
     *   Implement `AuthorizationModelService` for managing schema definitions and checking dependencies.
     *   Implement `PermissionService` (The Resolution Engine) handling graph traversal, wildcards, and transitivity.
+    *   **Implementation Details:**
+        *   `TupleRepository`: Handles CRUD for `access_tuples` and includes `countByRelation` for dependency safety. Uses `crypto.randomUUID()` for IDs.
+        *   `AuthorizationModelService`: Manages `authorization_models`. Validates JSON against Zod schema (`authorizationModelSchema`). Implements `checkDependencySafety` to prevent removing relations that are in use.
+        *   `PermissionService`: The central engine.
+            *   **Resolution Logic:** `Direct Match` -> `Wildcard Match` -> `Transitivity` (BFS traversal of relation graph) -> `Hierarchy` (User -> UserGroup -> Nested Group expansion via BFS).
+            *   **ABAC:** Fully implemented using `wasmoon`. Includes `LuaPolicyEngine` with connection pooling to reuse Lua states for performance.
 
 3.  **Admin UI Components**
     *   Develop `ResourcePicker` component (Wildcard vs. Specific ID).
