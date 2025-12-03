@@ -1,17 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardContent, Button, Modal, Badge } from "@/components/ui";
+import { Button, Modal } from "@/components/ui";
 import { revokeUserSession, type UserDetail } from "../actions";
 import { toast } from "@/lib/toast";
-import { formatDate } from "@/lib/utils/date-formatter";
+import { SessionList, type SessionItem } from "@/components/admin/users";
 
 interface UserSessionsTabProps {
   user: UserDetail;
 }
 
 export function UserSessionsTab({ user }: UserSessionsTabProps) {
-  const [sessionToRevoke, setSessionToRevoke] = React.useState<string | null>(null);
+  const [sessionToRevoke, setSessionToRevoke] = React.useState<SessionItem | null>(null);
 
   const handleRevokeSession = async (sessionToken: string) => {
     const result = await revokeUserSession(sessionToken, user.id);
@@ -33,46 +33,10 @@ export function UserSessionsTab({ user }: UserSessionsTabProps) {
           </div>
         </div>
 
-        <div className="space-y-4">
-          {user.sessions.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-400">No active sessions</p>
-            </div>
-          ) : (
-            user.sessions.map((session) => {
-              const isExpired = new Date(session.expiresAt) < new Date();
-
-              return (
-                <Card key={session.id}>
-                  <CardContent>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-base font-semibold text-white">
-                            {session.userAgent || "Unknown Device"}
-                          </h3>
-                          {isExpired && <Badge variant="danger">Expired</Badge>}
-                        </div>
-                        <div className="space-y-1 text-sm text-gray-400">
-                          <p>IP Address: {session.ipAddress || "Unknown"}</p>
-                          <p>Created: {formatDate(session.createdAt)}</p>
-                          <p>Expires: {formatDate(session.expiresAt)}</p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => setSessionToRevoke(session.token)}
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-        </div>
+        <SessionList
+          sessions={user.sessions}
+          onRevoke={setSessionToRevoke}
+        />
       </div>
 
       {/* Revoke Session Modal */}
@@ -90,7 +54,11 @@ export function UserSessionsTab({ user }: UserSessionsTabProps) {
             <Button variant="secondary" size="sm" onClick={() => setSessionToRevoke(null)}>
               Cancel
             </Button>
-            <Button variant="danger" size="sm" onClick={() => handleRevokeSession(sessionToRevoke)}>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => sessionToRevoke?.token && handleRevokeSession(sessionToRevoke.token)}
+            >
               Revoke Session
             </Button>
           </div>

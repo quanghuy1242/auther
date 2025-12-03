@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardContent, Button, Badge, Modal } from "@/components/ui";
+import { Button, Modal } from "@/components/ui";
 import { revokeSession, revokeAllOtherSessions } from "../actions";
 import type { SessionInfo } from "@/lib/session";
-import { formatDate } from "@/lib/utils/date-formatter";
 import { toast } from "@/lib/toast";
+import { SessionList, type SessionItem } from "@/components/admin/users";
 
 interface ProfileSessionsTabProps {
   sessions: SessionInfo[];
@@ -13,7 +13,7 @@ interface ProfileSessionsTabProps {
 }
 
 export function ProfileSessionsTab({ sessions, currentSessionId }: ProfileSessionsTabProps) {
-  const [sessionToRevoke, setSessionToRevoke] = React.useState<string | null>(null);
+  const [sessionToRevoke, setSessionToRevoke] = React.useState<SessionItem | null>(null);
   const [showRevokeAllModal, setShowRevokeAllModal] = React.useState(false);
 
   const handleRevokeSession = async (sessionToken: string) => {
@@ -57,52 +57,11 @@ export function ProfileSessionsTab({ sessions, currentSessionId }: ProfileSessio
         </Button>
       </div>
 
-      <div className="space-y-4">
-        {sessions.map((session) => {
-          const isCurrent = session.id === currentSessionId;
-          const isExpired = new Date(session.expiresAt) < new Date();
-
-          return (
-            <Card key={session.id} className={isCurrent ? "border-primary" : ""}>
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-base font-semibold text-white">
-                        {session.userAgent || "Unknown Device"}
-                      </h3>
-                      {isCurrent && (
-                        <Badge variant="success">Current Session</Badge>
-                      )}
-                      {isExpired && <Badge variant="danger">Expired</Badge>}
-                    </div>
-                    <div className="space-y-1 text-sm text-gray-400">
-                      <p>IP Address: {session.ipAddress || "Unknown"}</p>
-                      <p>Created: {formatDate(session.createdAt)}</p>
-                      <p>Expires: {formatDate(session.expiresAt)}</p>
-                    </div>
-                  </div>
-                  {!isCurrent && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setSessionToRevoke(session.token)}
-                    >
-                      Revoke
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {sessions.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-400">No active sessions found</p>
-        </div>
-      )}
+      <SessionList
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onRevoke={setSessionToRevoke}
+      />
 
       {/* Revoke Session Confirmation Modal */}
       <Modal
@@ -118,7 +77,7 @@ export function ProfileSessionsTab({ sessions, currentSessionId }: ProfileSessio
           <Button
             variant="danger"
             size="sm"
-            onClick={() => sessionToRevoke && handleRevokeSession(sessionToRevoke)}
+            onClick={() => sessionToRevoke?.token && handleRevokeSession(sessionToRevoke.token)}
           >
             Revoke Session
           </Button>
