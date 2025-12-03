@@ -2,6 +2,14 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils/cn";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface Column<T> {
   key: string;
@@ -40,38 +48,41 @@ export function ResponsiveTable<T>({
   return (
     <>
       {/* Desktop Table View */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="min-w-full divide-y divide-border-dark bg-[#1a2632]">
-          <thead className="bg-card">
-            <tr>
+      <div className="hidden md:block">
+        <Table className="min-w-full">
+          <TableHeader className="bg-card">
+            <TableRow className="hover:bg-transparent border-border-dark">
               {columns.map((column) => (
-                <th
+                <TableHead
                   key={column.key}
                   className={cn(
-                    "px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider",
+                    "px-6 py-3 text-gray-400",
                     column.className
                   )}
                 >
                   {column.header}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody className="bg-card divide-y divide-border-dark">
+            </TableRow>
+          </TableHeader>
+          <TableBody className="bg-card">
             {data.map((item) => (
-              <tr key={keyExtractor(item)} className="hover:bg-hover-primary transition-colors">
+              <TableRow
+                key={keyExtractor(item)}
+                className="hover:bg-hover-primary transition-colors border-border-dark"
+              >
                 {columns.map((column) => (
-                  <td
+                  <TableCell
                     key={column.key}
                     className={cn("px-6 py-4 whitespace-nowrap", column.className)}
                   >
                     {column.render(item)}
-                  </td>
+                  </TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Mobile Card View */}
