@@ -102,10 +102,15 @@ Transitioning to ReBAC represents a fundamental shift. We must ensure existing f
 
 ## Implementation Tasks
 
-1.  **Schema & Models**
+1.  **Schema & Models** (Completed)
     *   Create `src/db/rebac-schema.ts` with `access_tuples` and `authorization_models` tables.
     *   Export new tables in `src/db/schema.ts`.
     *   Run database migration.
+    *   **Schema Details:**
+        *   `access_tuples`: Stores `(entityType, entityId, relation, subjectType, subjectId, subjectRelation)`. Supports wildcards (`*`) and Zanzibar-style subject sets.
+        *   `authorization_models`: Stores JSON definitions of entity relations and permissions.
+        *   **Validation:** `src/schemas/rebac.ts` defines strict Zod schemas for the Authorization Model JSON structure.
+        *   **ABAC Support:** The `definition` JSON field supports embedding Lua scripts for attribute-based checks (e.g., `{ "policyEngine": "lua", "policy": "..." }`).
 
 2.  **Core Services**
     *   Implement `TupleRepository` for low-level DB operations.
