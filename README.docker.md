@@ -1,6 +1,6 @@
 # Docker Compose Usage Guide
 
-This project supports running both **development** and **production** modes using the same `docker-compose.yml` file.
+This project supports running both **development** and **production** modes using the same `docker compose.yml` file.
 
 ---
 
@@ -10,10 +10,10 @@ Hot-reload enabled, runs `next dev`:
 
 ```bash
 # Start development environment
-docker-compose up
+docker compose up
 
 # Or with build logs
-docker-compose up --build
+docker compose up --build
 ```
 
 ---
@@ -34,11 +34,11 @@ This creates the optimized production build in `.next/` directory.
 
 ```bash
 # Set NODE_ENV and start
-NODE_ENV=production docker-compose up
+NODE_ENV=production docker compose up
 
 # Or export it first
 export NODE_ENV=production
-docker-compose up
+docker compose up
 ```
 
 ### Step 3: Optional - Use production env file
@@ -53,7 +53,7 @@ cp .env.production.local.example .env.production.local
 Then start with:
 
 ```bash
-docker-compose --env-file .env.production.local up
+docker compose --env-file .env.production.local up
 ```
 
 ---
@@ -62,18 +62,18 @@ docker-compose --env-file .env.production.local up
 
 | Command | Description |
 |---------|-------------|
-| `docker-compose up` | Start in **dev mode** (hot-reload) |
-| `pnpm build && NODE_ENV=production docker-compose up` | Start in **prod mode** |
-| `docker-compose down` | Stop all services |
-| `docker-compose down -v` | Stop and remove volumes (⚠️ deletes DB data) |
-| `docker-compose logs -f app` | View app logs |
-| `docker-compose restart app` | Restart just the app service |
+| `docker compose up` | Start in **dev mode** (hot-reload) |
+| `pnpm build && NODE_ENV=production docker compose up` | Start in **prod mode** |
+| `docker compose down` | Stop all services |
+| `docker compose down -v` | Stop and remove volumes (⚠️ deletes DB data) |
+| `docker compose logs -f app` | View app logs |
+| `docker compose restart app` | Restart just the app service |
 
 ---
 
 ## 🔧 How It Works
 
-The `app` service in `docker-compose.yml`:
+The `app` service in `docker compose.yml`:
 
 - **Checks `NODE_ENV` environment variable**
 - If `development` (default): runs `next dev` with hot-reload
@@ -130,7 +130,7 @@ The `app` service in `docker-compose.yml`:
 # Rebuild Next.js
 rm -rf .next
 pnpm build
-NODE_ENV=production docker-compose up
+NODE_ENV=production docker compose up
 ```
 
 ### Permission errors with .next folder
@@ -142,9 +142,9 @@ sudo chown -R $USER:$USER .next
 ### Database changes not reflected
 ```bash
 # Rebuild migrations
-docker-compose down
-docker-compose up db-migrate
-docker-compose up
+docker compose down
+docker compose up db-migrate
+docker compose up
 ```
 
 ---
