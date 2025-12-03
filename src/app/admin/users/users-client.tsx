@@ -8,6 +8,7 @@ import { Badge, Button, ResponsiveTable, SearchInput, Pagination } from "@/compo
 import { FilterBar } from "@/components/admin";
 import { formatDateShort } from "@/lib/utils/date-formatter";
 import type { GetUsersResult } from "./actions";
+import { getProviderConfig } from "./shared";
 
 interface UsersClientProps {
   initialData: GetUsersResult;
@@ -19,15 +20,6 @@ export function UsersClient({ initialData }: UsersClientProps) {
   const [isPending, startTransition] = React.useTransition();
   
   const filterStatus = (searchParams.get("verified") === "true" ? "verified" : searchParams.get("verified") === "false" ? "unverified" : "all") as "all" | "verified" | "unverified";
-
-  const getProviderIcon = (providerId: string) => {
-    const icons: Record<string, string> = {
-      google: "https://www.google.com/favicon.ico",
-      github: "https://github.com/favicon.ico",
-      credential: "mail",
-    };
-    return icons[providerId] || "key";
-  };
 
   const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -157,7 +149,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
                           <Icon name="mail" className="text-gray-400" />
                         ) : (
                           <Icon
-                            name={getProviderIcon(account.providerId)}
+                            name={getProviderConfig(account.providerId).icon}
                             className="text-gray-400"
                           />
                         )}
@@ -204,7 +196,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
                       user.accounts.map((account, idx) => (
                         <Icon
                           key={idx}
-                          name={account.providerId === "credential" ? "mail" : getProviderIcon(account.providerId)}
+                          name={account.providerId === "credential" ? "mail" : getProviderConfig(account.providerId).icon}
                           className="text-gray-400"
                           size="sm"
                         />
