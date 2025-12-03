@@ -225,6 +225,7 @@ export function UsersClient({ initialData }: UsersClientProps) {
         currentPage={initialData.page}
         pageSize={initialData.pageSize}
         totalItems={initialData.total}
+        totalPages={initialData.totalPages}
         onPageChange={handlePageChange}
         isPending={isPending}
       />

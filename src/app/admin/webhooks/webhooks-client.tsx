@@ -383,6 +383,7 @@ export function WebhooksClient({
           currentPage={pagination.page}
           pageSize={pagination.pageSize}
           totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
           onPageChange={handlePageChange}
           isPending={isPending}
         />

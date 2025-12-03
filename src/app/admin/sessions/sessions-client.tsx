@@ -280,8 +280,9 @@ export function SessionsClient({
       {/* Pagination */}
       <Pagination
         currentPage={initialPage}
-        pageSize={10} // Fixed page size for now
+        pageSize={20}
         totalItems={initialTotal}
+        totalPages={totalPages}
         onPageChange={handlePageChange}
         isPending={isPending}
         className="mt-6"

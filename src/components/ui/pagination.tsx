@@ -8,6 +8,7 @@ export interface PaginationProps {
   currentPage: number;
   pageSize: number;
   totalItems: number;
+  totalPages?: number;
   onPageChange: (page: number) => void;
   isPending?: boolean;
   className?: string;
@@ -17,11 +18,12 @@ export function Pagination({
   currentPage,
   pageSize,
   totalItems,
+  totalPages: explicitTotalPages,
   onPageChange,
   isPending = false,
   className,
 }: PaginationProps) {
-  const totalPages = Math.ceil(totalItems / pageSize);
+  const totalPages = explicitTotalPages ?? Math.ceil(totalItems / pageSize);
   const startItem = totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0;
   const endItem = Math.min(currentPage * pageSize, totalItems);
 

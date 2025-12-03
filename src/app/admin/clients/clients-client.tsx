@@ -247,6 +247,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
         currentPage={initialData.page}
         pageSize={initialData.pageSize}
         totalItems={initialData.total}
+        totalPages={initialData.totalPages}
         onPageChange={handlePageChange}
         isPending={isPending}
         className="items-start sm:items-center"
