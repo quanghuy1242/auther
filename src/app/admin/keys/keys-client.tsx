@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Badge, Modal, Icon } from "@/components/ui";
+import { Button, Badge, Modal, Icon, ResponsiveTable } from "@/components/ui";
 import { rotateKeys, type JwksKey } from "./actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
 import { formatDate, formatAge } from "@/lib/utils/date-formatter";
@@ -75,63 +75,71 @@ export function KeysClient({ initialKeys }: KeysClientProps) {
             </Button>
           </div>
         </div>
-        <div className="p-6">
-          {keys.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Key ID</TableHead>
-                  <TableHead>Algorithm</TableHead>
-                  <TableHead>Age</TableHead>
-                  <TableHead>Created At</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {keys.map((key, index) => (
-                  <TableRow key={key.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs font-mono text-gray-200">{key.id}</code>
-                        {index === 0 && (
-                          <Badge variant="info" className="text-xs">
-                            Latest
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-gray-200">RS256</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-gray-400 text-sm">{formatAge(key.age)}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-gray-400 text-sm">{formatDate(key.createdAt)}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={key.status === "ok" ? "success" : "danger"}>
-                        {key.status === "ok" ? "OK" : "SLA Breached"}
+        
+        {/* Use ResponsiveTable but maintain the card wrapper style */}
+        <div className="border-t-0">
+          <ResponsiveTable
+            columns={[
+              {
+                key: "id",
+                header: "Key ID",
+                render: (key) => (
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono text-gray-200">{key.id}</code>
+                    {keys.indexOf(key) === 0 && (
+                      <Badge variant="info" className="text-xs">
+                        Latest
                       </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-12">
-              <Icon name="key" size="xl" className="text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">No JWKS keys found</p>
-              <Button
-                variant="primary"
-                size="sm"
-                className="mt-4"
-                onClick={() => setShowRotateModal(true)}
-              >
-                Create First Key
-              </Button>
-            </div>
-          )}
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: "algorithm",
+                header: "Algorithm",
+                render: () => <span className="text-gray-200">RS256</span>,
+              },
+              {
+                key: "age",
+                header: "Age",
+                render: (key) => <span className="text-gray-400 text-sm">{formatAge(key.age)}</span>,
+              },
+              {
+                key: "createdAt",
+                header: "Created At",
+                render: (key) => <span className="text-gray-400 text-sm">{formatDate(key.createdAt)}</span>,
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (key) => (
+                  <Badge variant={key.status === "ok" ? "success" : "danger"}>
+                    {key.status === "ok" ? "OK" : "SLA Breached"}
+                  </Badge>
+                ),
+              },
+            ]}
+            data={keys}
+            keyExtractor={(key) => key.id}
+            mobileCardRender={(key) => (
+              <div className="p-4 border-b border-border-dark last:border-0">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono text-gray-200">{key.id.substring(0, 12)}...</code>
+                    {keys.indexOf(key) === 0 && <Badge variant="info" className="text-xs">Latest</Badge>}
+                  </div>
+                  <Badge variant={key.status === "ok" ? "success" : "danger"}>
+                    {key.status === "ok" ? "OK" : "SLA Breached"}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm text-gray-400">
+                  <div>Created: {formatDate(key.createdAt)}</div>
+                  <div>Age: {formatAge(key.age)}</div>
+                </div>
+              </div>
+            )}
+            emptyMessage="No JWKS keys found"
+          />
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Icon, Badge, Checkbox, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, Modal, SearchInput } from "@/components/ui";
+import { Button, Icon, Badge, Checkbox, Modal, SearchInput, ResponsiveTable, Pagination } from "@/components/ui";
 import { revokeSession, revokeExpiredSessions } from "../actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
 import { parseUserAgent } from "@/lib/utils/user-agent";
@@ -153,113 +153,139 @@ export function SessionsClient({
         </div>
       </div>
 
-      <div className="rounded-lg border-0 sm:border sm:border-border-dark">
-        <div className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Device</TableHead>
-                  <TableHead>IP Address</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {initialSessions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-400">
-                      <Icon name="search_off" className="text-4xl mb-2" />
-                      <p>No sessions found</p>
-                    </TableCell>
-                  </TableRow>
+      <div className="rounded-lg border-0 sm:border sm:border-border-dark overflow-hidden">
+        <ResponsiveTable
+          columns={[
+            {
+              key: "user",
+              header: "User",
+              render: (session) => (
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {session.userName || "Unknown"}
+                  </p>
+                  <p className="text-xs text-gray-400">{session.userEmail}</p>
+                </div>
+              ),
+            },
+            {
+              key: "device",
+              header: "Device",
+              render: (session) => (
+                <div className="flex items-center gap-2">
+                  <Icon name="devices" className="text-gray-400" />
+                  <span className="text-sm text-gray-200">{parseUserAgent(session.userAgent)}</span>
+                </div>
+              ),
+            },
+            {
+              key: "ip",
+              header: "IP Address",
+              render: (session) => (
+                <code className="text-xs text-gray-400">
+                  {session.ipAddress || "N/A"}
+                </code>
+              ),
+            },
+            {
+              key: "created",
+              header: "Created",
+              render: (session) => (
+                <span className="text-sm text-gray-400">
+                  {formatTimeAgo(session.createdAt)}
+                </span>
+              ),
+            },
+            {
+              key: "lastActive",
+              header: "Last Active",
+              render: (session) => (
+                <span className="text-sm text-gray-400">
+                  {formatTimeAgo(session.updatedAt)}
+                </span>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (session) => (
+                isExpired(session.expiresAt) ? (
+                  <Badge variant="default">Expired</Badge>
                 ) : (
-                  initialSessions.map((session) => (
-                    <TableRow key={session.id}>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {session.userName || "Unknown"}
-                          </p>
-                          <p className="text-xs text-gray-400">{session.userEmail}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Icon name="devices" className="text-gray-400" />
-                          <span className="text-sm">{parseUserAgent(session.userAgent)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-xs text-gray-400">
-                          {session.ipAddress || "N/A"}
-                        </code>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-400">
-                          {formatTimeAgo(session.createdAt)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-400">
-                          {formatTimeAgo(session.updatedAt)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {isExpired(session.expiresAt) ? (
-                          <Badge variant="default">Expired</Badge>
-                        ) : (
-                          <Badge variant="success">Active</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setRevokeModalSession(session)}
-                          leftIcon="block"
-                        >
-                          Revoke
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <Badge variant="success">Active</Badge>
+                )
+              ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (session) => (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRevokeModalSession(session)}
+                  leftIcon="block"
+                >
+                  Revoke
+                </Button>
+              ),
+            },
+          ]}
+          data={initialSessions}
+          keyExtractor={(session) => session.id}
+          mobileCardRender={(session) => (
+            <div className="p-4 border border-border-dark rounded-lg bg-card space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {session.userName || "Unknown"}
+                  </p>
+                  <p className="text-xs text-gray-400">{session.userEmail}</p>
+                </div>
+                {isExpired(session.expiresAt) ? (
+                  <Badge variant="default">Expired</Badge>
+                ) : (
+                  <Badge variant="success">Active</Badge>
                 )}
-              </TableBody>
-            </Table>
-          </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-gray-400">Device:</div>
+                <div className="text-white text-right">{parseUserAgent(session.userAgent)}</div>
+                
+                <div className="text-gray-400">IP:</div>
+                <div className="text-white text-right">{session.ipAddress || "N/A"}</div>
+                
+                <div className="text-gray-400">Active:</div>
+                <div className="text-white text-right">{formatTimeAgo(session.updatedAt)}</div>
+              </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-border-dark">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handlePageChange(initialPage - 1)}
-                disabled={initialPage === 1 || isPending}
-                leftIcon="chevron_left"
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-400">
-                Page {initialPage} of {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handlePageChange(initialPage + 1)}
-                disabled={initialPage === totalPages || isPending}
-                rightIcon="chevron_right"
-              >
-                Next
-              </Button>
+              <div className="pt-2 border-t border-border-dark">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-red-400 hover:text-red-300"
+                  onClick={() => setRevokeModalSession(session)}
+                  leftIcon="block"
+                >
+                  Revoke Session
+                </Button>
+              </div>
             </div>
           )}
-        </div>
+          emptyMessage="No sessions found"
+        />
       </div>
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={initialPage}
+        pageSize={10} // Fixed page size for now
+        totalItems={initialTotal}
+        onPageChange={handlePageChange}
+        isPending={isPending}
+        className="mt-6"
+      />
 
       {/* Revoke Modal */}
       {revokeModalSession && (
