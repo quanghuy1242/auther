@@ -39,7 +39,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
   return (
     <div className="flex flex-col gap-8">
         {/* Section: Environment Configuration */}
-        <Card className="border border-border-dark bg-card">
+        <Card className="border border-border-dark">
           <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Environment Configuration</CardTitle>
             <p className="text-gray-400 text-sm font-normal mt-1">
@@ -69,7 +69,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: JWT Audiences */}
-        <Card className="border border-border-dark bg-card">
+        <Card className="border border-border-dark">
           <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">JWT Audiences</CardTitle>
             <p className="text-gray-400 text-sm font-normal mt-1">
@@ -88,7 +88,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Feature Flags */}
-        <Card className="border border-border-dark bg-card">
+        <Card className="border border-border-dark">
           <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Feature Flags</CardTitle>
             <p className="text-gray-400 text-sm font-normal mt-1">
@@ -112,7 +112,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Internal API Secrets */}
-        <Card className="border border-border-dark bg-card">
+        <Card className="border border-border-dark">
           <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Internal API Secrets</CardTitle>
             <p className="text-gray-400 text-sm font-normal mt-1">
@@ -129,7 +129,7 @@ export function SettingsClient({ initialData }: SettingsClientProps) {
         </Card>
 
         {/* Section: Webhook Registration */}
-        <Card className="border border-border-dark bg-card">
+        <Card className="border border-border-dark">
           <CardHeader className="border-border-dark">
             <CardTitle className="text-lg font-bold">Webhook Registration (Payload CMS)</CardTitle>
             <p className="text-gray-400 text-sm font-normal mt-1">
