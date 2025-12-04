@@ -33,7 +33,11 @@ const INITIAL_STATE: EmailSignInState = {
 export function EmailSignInForm() {
   const [state, action] = useFormState(emailPasswordSignIn, INITIAL_STATE);
   const searchParams = useSearchParams();
-  const authorizeQuery = searchParams.toString();
+
+  // Only capture as OAuth authorize query if client_id is present (actual OIDC flow)
+  const isOAuthFlow = searchParams.has("client_id");
+  const authorizeQuery = isOAuthFlow ? searchParams.toString() : "";
+
   const callbackUrl =
     searchParams.get("redirectTo") ??
     searchParams.get("callback_url") ??
