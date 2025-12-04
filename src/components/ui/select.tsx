@@ -65,7 +65,7 @@ export function Select({
             <Icon name="expand_more" size="sm" className="text-gray-400 opacity-50" />
           </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
-        
+
         <SelectPrimitive.Portal>
           <SelectPrimitive.Content
             className={cn(
@@ -85,9 +85,9 @@ export function Select({
                     "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-primary focus:text-white data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
                   )}
                 >
-                  <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-                    <SelectPrimitive.ItemIndicator>
-                      <Icon name="check" size="sm" className="h-4 w-4" />
+                  <span className="absolute left-2 flex h-4 w-4 items-center justify-center top-1/2 -translate-y-1/2">
+                    <SelectPrimitive.ItemIndicator className="flex items-center justify-center w-full h-full">
+                      <Icon name="check" size="sm" className="h-4 w-4 leading-none" />
                     </SelectPrimitive.ItemIndicator>
                   </span>
                   <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>

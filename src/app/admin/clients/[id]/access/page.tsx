@@ -1,10 +1,7 @@
 "use client";
 
-import { AccessControlClient } from "./access-control-client";
-import { useClient } from "../client-context";
+import { AccessControl } from "@/components/admin/access-control/access-control";
 
 export default function AccessControlPage() {
-  const client = useClient();
-  
-  return <AccessControlClient client={client} />;
+  return <AccessControl />;
 }

@@ -97,3 +97,34 @@ export type { PaginationProps } from "./pagination";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps } from "./empty-state";
 
+export {
+  Sheet,
+  SheetPortal,
+  SheetOverlay,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+} from "./sheet";
+
+export {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "./popover";
+
+export { SectionHeader } from "./section-header";
+export type { SectionHeaderProps } from "./section-header";
+
+export { SubjectAvatar } from "./subject-avatar";
+export type { SubjectAvatarProps } from "./subject-avatar";
+
+export { SubjectCard } from "./subject-card";
+export type { SubjectCardProps } from "./subject-card";
+
+export { SegmentedControl } from "./segmented-control";
+export type { SegmentedControlProps, SegmentedControlOption } from "./segmented-control";
+

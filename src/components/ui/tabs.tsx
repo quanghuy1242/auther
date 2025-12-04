@@ -16,19 +16,25 @@ export interface TabsProps {
   defaultIndex?: number
   onChange?: (index: number) => void
   className?: string
+  size?: "default" | "sm"
 }
 
 /**
  * Tabs component using Radix UI Tabs
  * Provides accessible tab navigation with keyboard support
  */
-export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps) {
+export function Tabs({ tabs, defaultIndex = 0, onChange, className, size = "default" }: TabsProps) {
   const [selectedIndex, setSelectedIndex] = React.useState(defaultIndex)
 
   const handleValueChange = (value: string) => {
     const index = parseInt(value.replace("tab-", ""), 10)
     setSelectedIndex(index)
     onChange?.(index)
+  }
+
+  const sizeClasses = {
+    default: "px-4 py-3 text-sm",
+    sm: "px-3 py-1.5 text-xs",
   }
 
   return (
@@ -38,7 +44,7 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps)
       onValueChange={handleValueChange}
       className={className}
     >
-      <div className="border-b border-slate-800 mb-6 overflow-auto">
+      <div className={cn("border-b border-slate-800 overflow-auto", size === "sm" ? "mb-3" : "mb-6")}>
         <TabsPrimitive.List className="flex gap-1">
           {tabs.map((tab, index) => (
             <TabsPrimitive.Trigger
@@ -46,7 +52,8 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps)
               value={`tab-${index}`}
               disabled={tab.disabled}
               className={cn(
-                "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative rounded-t-lg group",
+                "flex items-center gap-2 font-medium transition-colors relative rounded-t-lg group",
+                sizeClasses[size],
                 "hover:text-white hover:bg-slate-800/50",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900",
                 "disabled:cursor-not-allowed disabled:opacity-50",
@@ -55,7 +62,7 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className }: TabsProps)
               )}
             >
               {tab.icon && (
-                <span className="material-symbols-outlined text-lg">
+                <span className={cn("material-symbols-outlined", size === "sm" ? "text-base" : "text-lg")}>
                   {tab.icon}
                 </span>
               )}
