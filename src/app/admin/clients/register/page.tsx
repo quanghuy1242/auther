@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { z } from "zod";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, Button, Icon, Badge, UrlListBuilder, Checkbox, CopyableInput } from "@/components/ui";
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
@@ -12,15 +11,7 @@ import {
   TOKEN_ENDPOINT_AUTH_METHOD_OPTIONS,
   APPLICATION_TYPE_OPTIONS,
 } from "@/lib/oauth-constants";
-
-const registerClientSchema = z.object({
-  name: z.string().min(2, "Client name must be at least 2 characters"),
-  type: z.enum(["web", "spa", "native"], "Please select a client type"),
-  redirectURLs: z.string().min(1, "At least one redirect URL is required"),
-  trusted: z.boolean().optional(),
-  grantTypes: z.string().optional(),
-  tokenEndpointAuthMethod: z.enum(["client_secret_basic", "client_secret_post", "none"], "Invalid auth method"),
-});
+import { registerClientSchema } from "@/schemas/clients";
 
 function GrantTypesSelector() {
   const [selectedGrants, setSelectedGrants] = React.useState<string[]>(["authorization_code", "refresh_token"]);

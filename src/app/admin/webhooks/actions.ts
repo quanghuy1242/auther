@@ -18,7 +18,7 @@ import type {
   WebhookRequestMethod,
 } from "@/lib/types";
 import { type WebhookEventType } from "@/lib/constants";
-import { webhookSchema } from "./shared";
+import { webhookSchema } from "@/schemas/webhooks";
 
 // Re-export types for client components
 export type {

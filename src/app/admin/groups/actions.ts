@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/session";
 import { db } from "@/lib/db";
 import { user } from "@/db/schema";
 import { inArray } from "drizzle-orm";
-import { createGroupSchema, updateGroupSchema } from "./shared";
+import { createGroupSchema, updateGroupSchema } from "@/schemas/groups";
 import type { UserGroupEntity } from "@/lib/repositories";
 
 export interface GroupWithMemberCount extends UserGroupEntity {

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/session";
-import { createUserSchema } from "../shared";
+import { createUserSchema } from "@/schemas/users";
 
 export type CreateUserState = {
   success: boolean;

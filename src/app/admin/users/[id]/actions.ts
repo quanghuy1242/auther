@@ -9,7 +9,7 @@ import {
   sessionRepository,
   accountRepository,
 } from "@/lib/repositories";
-import { updateUserSchema } from "../shared";
+import { updateUserSchema } from "@/schemas/users";
 
 export interface UserDetail {
   id: string;

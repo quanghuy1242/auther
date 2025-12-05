@@ -6,7 +6,7 @@ import { Card, CardContent, Button } from "@/components/ui";
 import { FormWrapper, FormField, SubmitButton } from "@/components/forms";
 import { createGroup } from "../actions";
 import { useRouter } from "next/navigation";
-import { createGroupSchema } from "../shared";
+import { createGroupSchema } from "@/schemas/groups";
 
 function CreateGroupForm({ onCancel }: { onCancel: () => void }) {
     return (

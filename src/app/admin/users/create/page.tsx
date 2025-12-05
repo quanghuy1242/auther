@@ -7,7 +7,7 @@ import { Card, CardContent, Button } from "@/components/ui";
 import { FormWrapper, FormField, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { createUser } from "./actions";
 import { useRouter } from "next/navigation";
-import { createUserSchema } from "../shared";
+import { createUserSchema } from "@/schemas/users";
 
 function CreateUserForm({ onCancel }: { onCancel: () => void }) {
   const { watch, setValue } = useFormContext();

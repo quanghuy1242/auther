@@ -10,7 +10,7 @@ import {
 import { PageHeading } from "@/components/layout";
 import { Icon } from "@/components/ui";
 import { createWebhook } from "../actions";
-import { webhookSchema } from "../shared";
+import { webhookSchema } from "@/schemas/webhooks";
 import { WebhookFormContent } from "../[id]/webhook-form-content";
 
 export default function CreateWebhookPage() {

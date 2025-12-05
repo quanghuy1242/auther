@@ -8,7 +8,8 @@ import {
   oauthClientMetadataRepository,
   userGroupRepository,
 } from "@/lib/repositories";
-import { updateClientPolicySchema } from "../../types";
+import { updateClientPolicySchema } from "@/schemas/clients";
+import { createGroupSchema } from "@/schemas/groups";
 
 export interface AssignUserResult {
   success: boolean;
@@ -260,10 +261,7 @@ export async function getClientApiKeys(clientId: string) {
 // User Group Management
 // ============================================================================
 
-const createGroupSchema = z.object({
-  name: z.string().min(2, "Group name must be at least 2 characters"),
-  description: z.string().optional(),
-});
+
 
 /**
  * Create a new user group

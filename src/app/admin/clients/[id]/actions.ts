@@ -7,9 +7,9 @@ import { oauthApplication, oauthAccessToken } from "@/db/schema";
 import { eq, desc, count } from "drizzle-orm";
 import { requireAuth } from "@/lib/session";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { randomBytes } from "crypto";
 import { parseRedirectUrls, findInvalidUrl } from "@/lib/client-utils";
+import { updateClientSchema } from "@/schemas/clients";
 
 export interface ClientDetail {
   id: string;
@@ -32,13 +32,6 @@ export interface ClientDetail {
   lastUsed: Date | null;
   activeTokenCount: number;
 }
-
-const updateClientSchema = z.object({
-  name: z.string().min(2, "Client name must be at least 2 characters"),
-  redirectURLs: z.string().min(1, "At least one redirect URL is required"),
-  authMethod: z.string().optional(),
-  grantTypes: z.string().optional(),
-});
 
 export type UpdateClientState = {
   success: boolean;

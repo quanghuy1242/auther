@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Card, CardContent } from "@/components/ui";
 import { FormWrapper, FormField, SubmitButton } from "@/components/forms";
-import { updateGroupSchema } from "../../shared";
+import { updateGroupSchema } from "@/schemas/groups";
 import { updateGroup } from "../../actions";
 import { toast } from "@/lib/toast";
 
