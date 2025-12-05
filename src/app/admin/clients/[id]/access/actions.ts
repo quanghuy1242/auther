@@ -3,8 +3,13 @@
 import { z } from "zod";
 import { headers } from "next/headers";
 import { requireAuth } from "@/lib/session";
+import { db } from "@/lib/db";
+import { user } from "@/db/auth-schema";
+import { inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import {
+  tupleRepository,
+  authorizationModelRepository,
   oauthClientMetadataRepository,
   userGroupRepository,
 } from "@/lib/repositories";
@@ -396,8 +401,6 @@ export async function getUserGroups(userId: string) {
 // ============================================================================
 
 import {
-  tupleRepository,
-  authorizationModelRepository,
   type Tuple
 } from "@/lib/repositories";
 
@@ -412,6 +415,8 @@ interface PlatformAccessEntry {
   subjectId: string;
   relation: PlatformRelation;
   createdAt: Date;
+  subjectName?: string;
+  subjectEmail?: string;
 }
 
 /**
@@ -423,16 +428,45 @@ export async function getPlatformAccessList(clientId: string): Promise<PlatformA
     await requireAuth();
 
     const tuples = await tupleRepository.findByEntity("oauth_client", clientId);
+    const validTuples = tuples.filter((t) =>
+      ["owner", "admin", "use"].includes(t.relation)
+    );
 
-    return tuples
-      .filter(t => ["owner", "admin", "use"].includes(t.relation))
-      .map(t => ({
-        id: t.id,
-        subjectType: t.subjectType as "user" | "group",
-        subjectId: t.subjectId,
-        relation: t.relation as PlatformRelation,
-        createdAt: t.createdAt,
-      }));
+    // Fetch user details
+    const userIds = validTuples
+      .filter((t) => t.subjectType === "user")
+      .map((t) => t.subjectId);
+
+    const usersMap = new Map<string, { name: string; email: string }>();
+
+    if (userIds.length > 0) {
+      const users = await db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        })
+        .from(user)
+        .where(inArray(user.id, userIds));
+
+      users.forEach((u) => usersMap.set(u.id, u));
+    }
+
+    return validTuples.map((t) => ({
+      id: t.id,
+      subjectType: t.subjectType as "user" | "group",
+      subjectId: t.subjectId,
+      relation: t.relation as PlatformRelation,
+      createdAt: t.createdAt,
+      subjectName:
+        t.subjectType === "user"
+          ? usersMap.get(t.subjectId)?.name
+          : undefined,
+      subjectEmail:
+        t.subjectType === "user"
+          ? usersMap.get(t.subjectId)?.email
+          : undefined,
+    }));
   } catch (error) {
     console.error("getPlatformAccessList error:", error);
     return [];

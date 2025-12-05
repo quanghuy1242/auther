@@ -40,7 +40,8 @@ export function Select({
   disabled,
   className,
   name,
-}: SelectProps) {
+  triggerClassName,
+}: SelectProps & { triggerClassName?: string }) {
   return (
     <div className={cn("space-y-1 rounded-md", className)}>
       {label && <Label required={required}>{label}</Label>}
@@ -57,7 +58,8 @@ export function Select({
             "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
             "disabled:cursor-not-allowed disabled:opacity-50",
             "transition-colors",
-            error ? "border-red-500" : "border-gray-700"
+            error ? "border-red-500" : "border-gray-700",
+            triggerClassName
           )}
         >
           <SelectPrimitive.Value placeholder={placeholder} />

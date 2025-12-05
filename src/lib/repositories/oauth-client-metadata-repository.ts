@@ -70,21 +70,33 @@ export class OAuthClientMetadataRepository {
     const id = `ocm_${generateApiKeyId()}`;
     const now = new Date();
 
-    const [record] = await db
-      .insert(oauthClientMetadata)
-      .values({
+    const values = {
         id,
         clientId: data.clientId,
         allowedResources: data.allowedResources 
           ? stringifyPermissions(data.allowedResources) 
-          : null,
+          : "{}",
         allowsApiKeys: data.allowsApiKeys ?? false,
         defaultApiKeyPermissions: data.defaultApiKeyPermissions 
           ? stringifyPermissions(data.defaultApiKeyPermissions) 
-          : null,
+          : "{}",
         accessPolicy: data.accessPolicy ?? "all_users",
         createdAt: now,
         updatedAt: now,
+    };
+
+    const [record] = await db
+      .insert(oauthClientMetadata)
+      .values(values)
+      .onConflictDoUpdate({
+        target: oauthClientMetadata.clientId,
+        set: {
+          allowedResources: values.allowedResources,
+          allowsApiKeys: values.allowsApiKeys,
+          defaultApiKeyPermissions: values.defaultApiKeyPermissions,
+          accessPolicy: values.accessPolicy,
+          updatedAt: now,
+        },
       })
       .returning();
 
@@ -155,7 +167,7 @@ export class OAuthClientMetadataRepository {
    */
   async findOrCreate(clientId: string): Promise<OAuthClientMetadataEntity> {
     const existing = await this.findByClientId(clientId);
-    
+
     if (existing) {
       return existing;
     }

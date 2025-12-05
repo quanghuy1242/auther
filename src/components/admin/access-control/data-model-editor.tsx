@@ -188,7 +188,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
       if (e.name === entityName) {
         return {
           ...e,
-          relations: [...e.relations, { name: "", subjects: "user | group#member" }]
+          relations: [...e.relations, { name: "", subjects: "" }]
         };
       }
       return e;
@@ -286,13 +286,13 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
       />
 
       {mode === "visual" && (
-        <Alert variant="info" title="Defining Relations">
+        <Alert variant="info" title="Defining Relations & Inheritance">
           <p className="mb-2">
-            Relations define how other entities (Subjects) interact with resources.
+            Relations define roles or actions. You can define inheritance by adding other relations.
           </p>
           <ul className="list-disc list-inside space-y-1 pl-1 text-xs">
-            <li><strong>Name:</strong> The action or role (e.g. <code>viewer</code>, <code>owner</code>).</li>
-            <li><strong>Subjects:</strong> Who can have this relation? Use <code>user</code> for direct assignment or <code>group#member</code> for group members.</li>
+            <li><strong>Name:</strong> The relation name (e.g. <code>viewer</code>).</li>
+            <li><strong>Inherited Relations:</strong> Relations that imply this one. For example, if you add <code>editor</code> to the <code>viewer</code> relation, it means "All Editors are also Viewers".</li>
           </ul>
         </Alert>
       )}
@@ -379,6 +379,13 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
                         key={idx}
                         name={rel.name}
                         subjects={parseSubjects(rel.subjects)}
+                        availableRelations={[
+                          "user",
+                          "group#member",
+                          ...selectedEntity.relations
+                            .map(r => r.name)
+                            .filter(n => n !== rel.name && n.trim().length > 0)
+                        ]}
                         onNameChange={(name) => handleUpdateRelation(selectedEntity.name, idx, "name", name)}
                         onSubjectsChange={(subjects) => handleUpdateRelation(selectedEntity.name, idx, "subjects", buildSubjectsString(subjects))}
                         onRemove={() => handleRemoveRelation(selectedEntity.name, idx)}

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Input, Icon } from "@/components/ui";
+import { Input, Icon, Select } from "@/components/ui";
 
 interface PermissionRowProps {
     name: string;
@@ -43,19 +43,14 @@ export function PermissionRow({
                 <label className="text-[10px] text-gray-500 uppercase tracking-wider">
                     Requires Relation
                 </label>
-                <select
+                <Select
                     value={requiredRelation}
-                    onChange={(e) => onRelationChange(e.target.value)}
-                    className="w-full h-8 text-sm font-mono bg-[#111921] border border-slate-700 rounded-md px-2 text-white focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
+                    onChange={onRelationChange}
+                    options={availableRelations.map(rel => ({ value: rel, label: rel }))}
+                    placeholder="Select a relation..."
+                    triggerClassName="h-8 py-1 text-sm font-mono bg-[#111921] border-slate-700"
                     disabled={disabled}
-                >
-                    <option value="">Select a relation...</option>
-                    {availableRelations.map((rel) => (
-                        <option key={rel} value={rel}>
-                            {rel}
-                        </option>
-                    ))}
-                </select>
+                />
             </div>
 
             {/* Delete Button */}

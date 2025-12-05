@@ -8,6 +8,7 @@ import { AddSubjectPopover } from "./add-subject-popover";
 interface RelationRowProps {
     name: string;
     subjects: Subject[];
+    availableRelations?: string[];
     onNameChange: (name: string) => void;
     onSubjectsChange: (subjects: Subject[]) => void;
     onRemove: () => void;
@@ -17,6 +18,7 @@ interface RelationRowProps {
 export function RelationRow({
     name,
     subjects,
+    availableRelations,
     onNameChange,
     onSubjectsChange,
     onRemove,
@@ -46,10 +48,10 @@ export function RelationRow({
                 />
             </div>
 
-            {/* Allowed Subjects */}
+            {/* Inherited Relations */}
             <div className="flex-[2] space-y-1">
                 <label className="text-[10px] text-gray-500 uppercase tracking-wider">
-                    Allowed Subjects
+                    Inherited Relations (Implied by)
                 </label>
                 <div className="flex flex-wrap items-center gap-2 h-8 px-1.5 rounded-md border border-slate-700 bg-[#111921]">
                     {subjects.map((sub, idx) => (
@@ -60,7 +62,11 @@ export function RelationRow({
                             disabled={disabled}
                         />
                     ))}
-                    <AddSubjectPopover onAdd={handleAddSubject} disabled={disabled} />
+                    <AddSubjectPopover
+                        onAdd={handleAddSubject}
+                        availableRelations={availableRelations}
+                        disabled={disabled}
+                    />
                 </div>
             </div>
 

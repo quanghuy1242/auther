@@ -14,6 +14,7 @@ export interface TabItem {
 export interface TabsProps {
   tabs: TabItem[]
   defaultIndex?: number
+  selectedIndex?: number
   onChange?: (index: number) => void
   className?: string
   size?: "default" | "sm"
@@ -23,12 +24,19 @@ export interface TabsProps {
  * Tabs component using Radix UI Tabs
  * Provides accessible tab navigation with keyboard support
  */
-export function Tabs({ tabs, defaultIndex = 0, onChange, className, size = "default" }: TabsProps) {
-  const [selectedIndex, setSelectedIndex] = React.useState(defaultIndex)
+export function Tabs({ tabs, defaultIndex = 0, selectedIndex, onChange, className, size = "default" }: TabsProps) {
+  // Internal state for uncontrolled mode
+  const [internalIndex, setInternalIndex] = React.useState(defaultIndex)
+
+  // Use controlled index if provided, otherwise use internal state
+  const isControlled = selectedIndex !== undefined
+  const currentIndex = isControlled ? selectedIndex : internalIndex
 
   const handleValueChange = (value: string) => {
     const index = parseInt(value.replace("tab-", ""), 10)
-    setSelectedIndex(index)
+    if (!isControlled) {
+      setInternalIndex(index)
+    }
     onChange?.(index)
   }
 
@@ -40,7 +48,7 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className, size = "defa
   return (
     <TabsPrimitive.Root
       defaultValue={`tab-${defaultIndex}`}
-      value={`tab-${selectedIndex}`}
+      value={`tab-${currentIndex}`}
       onValueChange={handleValueChange}
       className={className}
     >
@@ -68,7 +76,7 @@ export function Tabs({ tabs, defaultIndex = 0, onChange, className, size = "defa
               )}
               {tab.label}
               {/* Active Indicator */}
-              <span 
+              <span
                 className={cn(
                   "absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 transition-opacity duration-200",
                   "opacity-0 group-data-[state=active]:opacity-100"

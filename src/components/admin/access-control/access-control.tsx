@@ -40,21 +40,121 @@ const relationToRole: Record<PlatformRelation, string> = {
   use: "User",
 };
 
-export function AccessControl() {
-  const client = useClient();
-  const clientId = client.id;
+export interface AccessControlInitialData {
+  accessLevel: { canEditModel: boolean; canManageAccess: boolean };
+  metadata: Awaited<ReturnType<typeof getClientMetadata>>;
+  accessList: Awaited<ReturnType<typeof getPlatformAccessList>>;
+  models: { models: any }; // Using any to avoid complex type import from repository
+  scopedPerms: Awaited<ReturnType<typeof getScopedPermissions>>;
+  apiKeys: any[]; // Awaited<ReturnType<typeof getClientApiKeys>>
+}
 
-  // --- State ---
-  const [platformUsers, setPlatformUsers] = React.useState<PlatformUser[]>([]);
-  const [permissions, setPermissions] = React.useState<ScopedPermission[]>([]);
-  const [apiKeys, setApiKeys] = React.useState<ApiKey[]>([]);
-  const [dataModel, setDataModel] = React.useState("{}");
-  const [isLoading, setIsLoading] = React.useState(true);
+interface AccessControlProps {
+  initialData?: AccessControlInitialData;
+}
+
+// --- Transformation Helpers ---
+function transformPlatformUsers(accessList: any[]): PlatformUser[] {
+  return accessList.map(access => ({
+    id: access.id,
+    name: access.subjectName || (access.subjectType === "group" ? `Group ${access.subjectId}` : access.subjectId),
+    email: access.subjectEmail || (access.subjectType === "group" ? "Group" : access.subjectId),
+    role: relationToRole[access.relation as PlatformRelation] as "Owner" | "Admin" | "User",
+    addedOn: access.createdAt.toISOString().split("T")[0],
+    isGroup: access.subjectType === "group",
+  }));
+}
+
+function transformScopedPermissions(scopedPerms: any[]): ScopedPermission[] {
+  return scopedPerms.map(p => ({
+    id: p.id,
+    resourceType: p.entityId.split(":")[0] || p.entityId,
+    resourceId: p.entityId.split(":")[1] || "*",
+    relation: p.relation,
+    subject: {
+      id: p.subjectId,
+      name: p.subjectId,
+      type: (p.subjectType.charAt(0).toUpperCase() + p.subjectType.slice(1)) as "User" | "Group" | "ApiKey",
+      description: p.subjectType,
+    }
+  }));
+}
+
+function transformApiKeys(keys: any[]): ApiKey[] {
+  return keys.map(k => ({
+    id: k.id,
+    keyId: (k.prefix && k.start) ? `${k.prefix}...${k.start}` : (k.name || k.id.substring(0, 8)),
+    owner: k.metadata?.owner as string || "Unknown",
+    created: k.createdAt.toISOString().split("T")[0],
+    expires: k.expiresAt ? k.expiresAt.toISOString().split("T")[0] : "Never",
+    permissions: "Managed via Scoped Permissions",
+    status: "Active"
+  }));
+}
+
+function transformAuthorizationModel(models: any): { dataModel: string; loadedEntityTypes: Set<string> } {
+  const wrappedModel = {
+    schema_version: "1.0",
+    types: {
+      user: {},
+      group: { relations: { member: "user" } },
+      ...models.types,
+    }
+  };
+  return {
+    dataModel: JSON.stringify(wrappedModel, null, 2),
+    loadedEntityTypes: new Set(Object.keys(models.types))
+  };
+}
+
+export function AccessControl({ initialData }: AccessControlProps) {
+  const client = useClient();
+  const clientId = client.clientId;
+
+  // --- State Initialization ---
+  const [platformUsers, setPlatformUsers] = React.useState<PlatformUser[]>(
+    () => initialData ? transformPlatformUsers(initialData.accessList) : []
+  );
+  const [permissions, setPermissions] = React.useState<ScopedPermission[]>(
+    () => initialData ? transformScopedPermissions(initialData.scopedPerms) : []
+  );
+
+  // Initialize metadata/API keys state
+  const [clientMetadata, setClientMetadata] = React.useState<{
+    accessPolicy: "all_users" | "restricted";
+    allowsApiKeys: boolean;
+    allowedResources: Record<string, string[]> | null;
+    defaultApiKeyPermissions: Record<string, string[]> | null;
+  } | null>(
+    () => initialData ? initialData.metadata : null
+  );
+
+  const [apiKeys, setApiKeys] = React.useState<ApiKey[]>(
+    () => (initialData && initialData.metadata.allowsApiKeys)
+      ? transformApiKeys(initialData.apiKeys)
+      : []
+  );
+
+  // Initialize Data Model
+  const [dataModel, setDataModel] = React.useState(() => {
+    if (initialData) {
+      return transformAuthorizationModel(initialData.models.models).dataModel;
+    }
+    return "{}";
+  });
+
+  const [isInitialLoading, setIsInitialLoading] = React.useState(!initialData);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
 
   // Constraint state
-  const [canEditModel, setCanEditModel] = React.useState(false);
-  const [canManageAccess, setCanManageAccess] = React.useState(false);
+  const [canEditModel, setCanEditModel] = React.useState(
+    () => initialData ? initialData.accessLevel.canEditModel : false
+  );
+  const [canManageAccess, setCanManageAccess] = React.useState(
+    () => initialData ? initialData.accessLevel.canManageAccess : false
+  );
 
   // C6 Cascade confirmation modal
   const [cascadeModal, setCascadeModal] = React.useState<{
@@ -64,14 +164,17 @@ export function AccessControl() {
   }>({ open: false, user: null, scopedCount: 0 });
 
   // Track the current entity types from the model (for sync)
-  const loadedEntityTypesRef = React.useRef<Set<string>>(new Set());
-
-  // --- API Key State ---
-  const [allowsApiKeys, setAllowsApiKeys] = React.useState(false);
+  const loadedEntityTypesRef = React.useRef<Set<string>>(
+    initialData
+      ? transformAuthorizationModel(initialData.models.models).loadedEntityTypes
+      : new Set()
+  );
 
   // --- Load Data ---
-  const loadData = React.useCallback(async () => {
-    setIsLoading(true);
+  const loadData = React.useCallback(async (refresh = false) => {
+    if (refresh) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -82,71 +185,26 @@ export function AccessControl() {
 
       // Load client metadata for API keys
       const metadata = await getClientMetadata(clientId);
-      setAllowsApiKeys(metadata.allowsApiKeys);
+      setClientMetadata(metadata);
 
       // Load platform access list
       const accessList = await getPlatformAccessList(clientId);
-
-      // Map to PlatformUser format
-      const users: PlatformUser[] = accessList.map(access => ({
-        id: access.id,
-        name: access.subjectType === "group" ? `Group ${access.subjectId}` : access.subjectId,
-        email: access.subjectType === "group" ? "Group" : access.subjectId,
-        role: relationToRole[access.relation] as "Owner" | "Admin" | "User",
-        addedOn: access.createdAt.toISOString().split("T")[0],
-        isGroup: access.subjectType === "group",
-      }));
-      setPlatformUsers(users);
+      setPlatformUsers(transformPlatformUsers(accessList));
 
       // Load authorization models (all entity types)
       const { models } = await getAuthorizationModels(clientId);
-
-      // Build the wrapped model for DataModelEditor
-      const wrappedModel = {
-        schema_version: "1.0",
-        types: {
-          user: {},
-          group: { relations: { member: "user" } },
-          ...models.types,
-        }
-      };
-      setDataModel(JSON.stringify(wrappedModel, null, 2));
-      loadedEntityTypesRef.current = new Set(Object.keys(models.types));
+      const { dataModel, loadedEntityTypes } = transformAuthorizationModel(models);
+      setDataModel(dataModel);
+      loadedEntityTypesRef.current = loadedEntityTypes;
 
       // Load scoped permissions
       const scopedPerms = await getScopedPermissions(clientId);
-      const mappedPerms: ScopedPermission[] = scopedPerms.map(p => ({
-        id: p.id,
-        resourceType: p.entityId.split(":")[0] || p.entityId,
-        resourceId: p.entityId.split(":")[1] || "*",
-        relation: p.relation,
-        subject: {
-          id: p.subjectId,
-          name: p.subjectId,
-          type: (p.subjectType.charAt(0).toUpperCase() + p.subjectType.slice(1)) as "User" | "Group" | "ApiKey",
-          description: p.subjectType,
-        }
-      }));
-      setPermissions(mappedPerms);
+      setPermissions(transformScopedPermissions(scopedPerms));
 
       // Load API keys
       if (metadata.allowsApiKeys) {
         const keys = await getClientApiKeys(clientId);
-        // Map keys to UI format if needed, for now assume API format implies UI format
-        // but wait, getClientApiKeys returns `ApiKey` entity from BetterAuth?
-        // Let's check getClientApiKeys return type.
-        // It returns keys from `auth.api.listApiKeys`.
-        // I need to map it to local ApiKey type.
-        const mappedKeys: ApiKey[] = keys.map(k => ({
-          id: k.id,
-          keyId: (k.prefix && k.start) ? `${k.prefix}...${k.start}` : (k.name || k.id.substring(0, 8)),
-          owner: k.metadata?.owner as string || "Unknown",
-          created: k.createdAt.toISOString().split("T")[0],
-          expires: k.expiresAt ? k.expiresAt.toISOString().split("T")[0] : "Never",
-          permissions: "Managed via Scoped Permissions",
-          status: "Active" // TODO: Add disabled status check if supported
-        }));
-        setApiKeys(mappedKeys);
+        setApiKeys(transformApiKeys(keys));
       } else {
         setApiKeys([]);
       }
@@ -156,12 +214,15 @@ export function AccessControl() {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
       setIsLoading(false);
+      setIsInitialLoading(false);
     }
   }, [clientId]);
 
   React.useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!initialData) {
+      loadData();
+    }
+  }, [loadData, initialData]);
 
   // --- Derived State ---
   const resourceConfig = React.useMemo(() => {
@@ -197,7 +258,7 @@ export function AccessControl() {
     );
 
     if (result.success) {
-      await loadData();
+      await loadData(true);
     } else {
       console.error("Failed to grant access:", result.error);
     }
@@ -242,7 +303,7 @@ export function AccessControl() {
     );
 
     if (result.success) {
-      await loadData();
+      await loadData(true);
     } else {
       console.error("Failed to revoke access:", result.error);
     }
@@ -259,14 +320,16 @@ export function AccessControl() {
 
     const result = await updateClientAccessPolicy({
       clientId,
-      accessPolicy: "all_users", // Keep default for now or load it
+      accessPolicy: clientMetadata?.accessPolicy || "all_users",
       allowsApiKeys: enabled,
+      allowedResources: clientMetadata?.allowedResources || undefined,
+      defaultApiKeyPermissions: clientMetadata?.defaultApiKeyPermissions || undefined,
     });
 
     if (result.success) {
-      setAllowsApiKeys(enabled);
+      setClientMetadata(prev => prev ? { ...prev, allowsApiKeys: enabled } : null);
       if (enabled) {
-        await loadData();
+        await loadData(true);
       } else {
         setApiKeys([]);
       }
@@ -361,7 +424,8 @@ export function AccessControl() {
         if (!result.success) {
           console.error(`Failed to update entity type ${typeName}:`, result.error);
           setError(`Failed to update entity type ${typeName}: ${result.error}`);
-          await loadData();
+          setError(`Failed to update entity type ${typeName}: ${result.error}`);
+          await loadData(true);
           return;
         }
       }
@@ -378,34 +442,22 @@ export function AccessControl() {
 
       loadedEntityTypesRef.current = newEntityTypes;
       // AccessControl doesn't show success toast, but we can reload to confirm sync
-      await loadData();
+      await loadData(true);
     } catch (e) {
       console.error("Failed to save model:", e);
       setError("Failed to save model: Invalid JSON");
-      setIsLoading(false);
+      setIsLoading(false); // Only set local/sync loading false
     }
   };
 
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <Card>
         <CardContent className="p-6 flex items-center justify-center min-h-[400px]">
           <div className="flex items-center gap-3 text-gray-400">
-            <Icon name="sync" className="animate-spin" />
+            <Icon name="progress_activity" className="animate-spin text-2xl" />
             <span>Loading access control...</span>
           </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <Alert variant="error" title="Error loading access control">
-            {error}
-          </Alert>
         </CardContent>
       </Card>
     );
@@ -414,7 +466,23 @@ export function AccessControl() {
   return (
     <>
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-6 relative">
+          {isLoading && (
+            <div className="absolute inset-0 z-50 bg-background/50 flex items-center justify-center rounded-lg backdrop-blur-sm transition-opacity duration-200">
+              <div className="flex items-center gap-3 px-4 py-2 bg-popover rounded-full shadow-lg border border-border">
+                <Icon name="progress_activity" className="animate-spin text-primary" />
+                <span className="text-sm font-medium">Syncing...</span>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-6">
+              <Alert variant="error" title="Error">
+                {error}
+              </Alert>
+            </div>
+          )}
           <div className="mb-6">
             <h2 className="text-xl font-bold text-white">Access Control</h2>
             <p className="text-sm text-gray-400 mt-1">
@@ -423,6 +491,8 @@ export function AccessControl() {
           </div>
 
           <Tabs
+            selectedIndex={activeTab}
+            onChange={setActiveTab}
             tabs={[
               {
                 label: "Platform Access",
@@ -461,7 +531,7 @@ export function AccessControl() {
                     onSavePermission={handleSavePermission}
                     onRemovePermission={handleRemovePermission}
                     resourceConfig={resourceConfig}
-                    enabled={allowsApiKeys}
+                    enabled={clientMetadata?.allowsApiKeys ?? false}
                     onToggle={handleToggleApiKeys}
                     disabled={!canManageAccess}
                   />

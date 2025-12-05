@@ -63,12 +63,18 @@ export function AccessControlTable({
               <TableCell>
                 <div className="flex items-center gap-3">
                   {entry.type === "user" ? (
-                    <div
-                      className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 shrink-0"
-                      style={{
-                        backgroundImage: `url(${entry.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.name}`})`,
-                      }}
-                    />
+                    entry.avatar ? (
+                      <div
+                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 shrink-0"
+                        style={{
+                          backgroundImage: `url(${entry.avatar})`,
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center rounded-full size-8 bg-white/10 text-gray-400 shrink-0">
+                        <Icon name="person" className="text-lg" />
+                      </div>
+                    )
                   ) : (
                     <div className="flex items-center justify-center rounded-full size-8 bg-white/10 text-gray-400 shrink-0">
                       <Icon name="group" className="text-lg" />
