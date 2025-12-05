@@ -11,7 +11,8 @@ import {
   Button,
   Icon,
   Badge,
-  EmptyState
+  EmptyState,
+  Alert
 } from "@/components/ui";
 import { AddPermissionModal, type ScopedPermission, type ApiKey } from "./add-permission-modal";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -28,6 +29,7 @@ interface ScopedPermissionsProps {
     name: string;
     type: "User" | "Group" | "ApiKey";
   };
+  disabled?: boolean;
 }
 
 const ITEMS_PER_PAGE = 10;
@@ -39,6 +41,7 @@ export function ScopedPermissions({
   resourceConfig,
   apiKeys,
   subjectFilter,
+  disabled,
 }: ScopedPermissionsProps) {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingPermission, setEditingPermission] = React.useState<ScopedPermission | null>(null);
@@ -57,11 +60,13 @@ export function ScopedPermissions({
   );
 
   const handleAdd = () => {
+    if (disabled) return;
     setEditingPermission(null);
     setIsModalOpen(true);
   };
 
   const handleEdit = (perm: ScopedPermission) => {
+    if (disabled) return;
     setEditingPermission(perm);
     setIsModalOpen(true);
   };
@@ -73,17 +78,18 @@ export function ScopedPermissions({
   if (filteredPermissions.length === 0 && !subjectFilter) {
     return (
       <div className="space-y-4">
+        {disabled && <Alert variant="info" title="View Only">You need Admin or Owner role to manage permissions.</Alert>}
         <SectionHeader
           title="Scoped Permissions"
           description="Define fine-grained access rules for specific resources."
-          action={<Button onClick={handleAdd} leftIcon="add">Add Permission</Button>}
+          action={<Button onClick={handleAdd} leftIcon="add" disabled={disabled}>Add Permission</Button>}
         />
         <EmptyState
           icon="lock_person"
           title="No scoped permissions"
           description="Define fine-grained access control rules for specific resources."
           action={
-            <Button onClick={handleAdd} variant="secondary">Add Permission</Button>
+            <Button onClick={handleAdd} variant="secondary" disabled={disabled}>Add Permission</Button>
           }
         />
         <AddPermissionModal
@@ -100,12 +106,13 @@ export function ScopedPermissions({
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="space-y-4">
+      {disabled && <Alert variant="info" title="View Only">You need Admin or Owner role to manage permissions.</Alert>}
       <SectionHeader
         title="Scoped Permissions"
         description="Define fine-grained access rules for specific resources."
         action={
-          <Button onClick={handleAdd} leftIcon="add">
+          <Button onClick={handleAdd} leftIcon="add" disabled={disabled}>
             Add Permission
           </Button>
         }

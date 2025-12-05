@@ -74,7 +74,9 @@ Transitioning to ReBAC represents a fundamental shift. We must ensure existing f
 
 *   **Unified Storage Goal:** The end state must replace scattered access tables with the single Tuple Store.
     *   **API Keys:** Instead of storing a JSON blob of permissions, API Keys will simply have Tuples associated with their ID in the `access_tuples` table.
-    *   **Validation:** When an API Key is used, the system calls `PermissionService.checkPermission('apikey', keyId, ...)` instead of parsing a JSON column.
+    *   **Validation (Verify-then-Check Pattern):** Since `better-auth` does not support custom permission hooks, we decouple the process:
+        1.  **Verify:** Call `auth.api.verifyApiKey` *without* passing a permissions object. This strictly checks key validity and expiration.
+        2.  **Check:** Use the returned `userId` (or `apiKeyId`) to call `PermissionService.checkPermission(...)`, resolving access against the `access_tuples` table.
 *   **Data Mapping:** Existing permissions need to be translated into the new Tuple format `(Entity, Relation, Subject)`.
 *   **Zero Downtime:** Consider a strategy that allows reading from the new system while verifying against the old one (shadow mode).
 *   **Codebase Refactoring:** The repository layer will need significant updates. Identify all "access check" call sites early.

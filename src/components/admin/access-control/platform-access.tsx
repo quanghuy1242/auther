@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, EmptyState, Alert } from "@/components/ui";
 import { AccessControlTable, type AccessControlEntry } from "@/components/admin/access-control-table";
 import { AddMemberModal, type PlatformUser } from "./add-member-modal";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -10,13 +10,15 @@ interface PlatformAccessProps {
   users: PlatformUser[];
   onUpdate: (user: PlatformUser) => void;
   onRemove: (id: string) => void;
+  disabled?: boolean;
 }
 
-export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProps) {
+export function PlatformAccess({ users, onUpdate, onRemove, disabled }: PlatformAccessProps) {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingMember, setEditingMember] = React.useState<PlatformUser | null>(null);
 
   const handleEdit = (id: string) => {
+    if (disabled) return;
     const user = users.find((u) => u.id === id);
     if (user) {
       setEditingMember(user);
@@ -25,6 +27,7 @@ export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProp
   };
 
   const handleAdd = () => {
+    if (disabled) return;
     setEditingMember(null);
     setIsModalOpen(true);
   };
@@ -33,7 +36,6 @@ export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProp
     if (editingMember) {
       onUpdate({ ...editingMember, ...memberData } as PlatformUser);
     } else {
-      // Create new
       const newUser: PlatformUser = {
         id: memberData.id || Math.random().toString(36).substr(2, 9),
         name: memberData.name || "Unknown",
@@ -48,7 +50,6 @@ export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProp
     }
   };
 
-  // Convert PlatformUser to AccessControlEntry for the table
   const tableEntries: AccessControlEntry[] = users.map((u) => ({
     id: u.id,
     name: u.name,
@@ -60,12 +61,13 @@ export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProp
   }));
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="space-y-4">
+      {disabled && <Alert variant="info" title="View Only">You need Admin or Owner role to manage permissions.</Alert>}
       <SectionHeader
         title="Platform Members"
         description="Manage users and groups with high-level roles (Owner, Admin, User)."
         action={
-          <Button onClick={handleAdd} leftIcon="add">
+          <Button onClick={handleAdd} leftIcon="add" disabled={disabled}>
             Add Member
           </Button>
         }
@@ -77,7 +79,7 @@ export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProp
           title="No members found"
           description="Add users or groups to manage access to this client."
           action={
-            <Button onClick={handleAdd} variant="secondary">
+            <Button onClick={handleAdd} variant="secondary" disabled={disabled}>
               Add Member
             </Button>
           }
@@ -85,8 +87,8 @@ export function PlatformAccess({ users, onUpdate, onRemove }: PlatformAccessProp
       ) : (
         <AccessControlTable
           entries={tableEntries}
-          onRemove={onRemove}
-          onEdit={handleEdit}
+          onRemove={disabled ? undefined : onRemove}
+          onEdit={disabled ? undefined : handleEdit}
         />
       )}
 

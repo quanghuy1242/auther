@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
 const AUTH_ROUTES = ["/admin", "/dashboard"];
-const PUBLIC_AUTH_PAGES = ["/sign-in"];
 
 export function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);

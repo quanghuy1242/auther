@@ -23,7 +23,7 @@ export interface AccessControlEntry {
 
 export interface AccessControlTableProps {
   entries: AccessControlEntry[];
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
   onEdit?: (id: string) => void;
 }
 
@@ -103,14 +103,16 @@ export function AccessControlTable({
                       <Icon name="edit" className="text-lg" />
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => onRemove(entry.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors"
-                    title="Remove access"
-                  >
-                    <Icon name="delete" className="text-lg" />
-                  </button>
+                  {onRemove && (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(entry.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors"
+                      title="Remove access"
+                    >
+                      <Icon name="delete" className="text-lg" />
+                    </button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

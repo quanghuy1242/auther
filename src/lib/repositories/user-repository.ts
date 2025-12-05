@@ -42,10 +42,9 @@ export interface GetUsersFilter {
  * Handles all database operations related to users
  * Automatically emits webhook events for user operations
  */
-export class UserRepository 
-  extends WebhookAwareRepository 
-  implements Partial<BaseRepository<UserEntity>> 
-{
+export class UserRepository
+  extends WebhookAwareRepository
+  implements Partial<BaseRepository<UserEntity>> {
   constructor() {
     super({
       entityName: "user",
@@ -73,6 +72,30 @@ export class UserRepository
     } catch (error) {
       console.error("UserRepository.findById error:", error);
       return null;
+    }
+  }
+
+  /**
+   * Find multiple users by IDs
+   */
+  async findByIds(userIds: string[]): Promise<UserEntity[]> {
+    if (userIds.length === 0) return [];
+
+    try {
+      const results = await db
+        .select()
+        .from(user)
+        .where(
+          sql`${user.id} IN (${sql.join(
+            userIds.map((id) => sql`${id}`),
+            sql`, `
+          )})`
+        );
+
+      return results;
+    } catch (error) {
+      console.error("UserRepository.findByIds error:", error);
+      return [];
     }
   }
 
@@ -162,18 +185,18 @@ export class UserRepository
       const accounts =
         userIds.length > 0
           ? await db
-              .select({
-                userId: account.userId,
-                providerId: account.providerId,
-                accountId: account.accountId,
-              })
-              .from(account)
-              .where(
-                sql`${account.userId} IN (${sql.join(
-                  userIds.map((id) => sql`${id}`),
-                  sql`, `
-                )})`
-              )
+            .select({
+              userId: account.userId,
+              providerId: account.providerId,
+              accountId: account.accountId,
+            })
+            .from(account)
+            .where(
+              sql`${account.userId} IN (${sql.join(
+                userIds.map((id) => sql`${id}`),
+                sql`, `
+              )})`
+            )
           : [];
 
       // Combine data

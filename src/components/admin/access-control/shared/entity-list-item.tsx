@@ -8,19 +8,21 @@ interface EntityListItemProps {
     isSelected: boolean;
     onSelect: () => void;
     onDelete: () => void;
+    disabled?: boolean;
 }
 
-export function EntityListItem({ name, isSelected, onSelect, onDelete }: EntityListItemProps) {
+export function EntityListItem({ name, isSelected, onSelect, onDelete, disabled }: EntityListItemProps) {
     return (
         <button
             onClick={onSelect}
+            disabled={disabled && !isSelected}
             className={`w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group ${isSelected
-                    ? "bg-[#243647] text-white"
-                    : "text-gray-400 hover:text-white hover:bg-[#243647]/50"
-                }`}
+                ? "bg-[#243647] text-white"
+                : "text-gray-400 hover:text-white hover:bg-[#243647]/50"
+                } ${disabled && !isSelected ? "opacity-50 cursor-not-allowed" : ""}`}
         >
             <span className="truncate">{name}</span>
-            {isSelected && (
+            {isSelected && !disabled && (
                 <span
                     onClick={(e) => {
                         e.stopPropagation();

@@ -13,20 +13,24 @@ import {
   TableBody,
   TableCell,
   Badge,
-  Icon
+  Icon,
+  Alert
 } from "@/components/ui";
 import { SectionHeader } from "@/components/ui/section-header";
 import { CreateApiKeyModal, type ApiKey } from "./create-api-key-modal";
 import { ScopedPermissions } from "./scoped-permissions";
 import { type ScopedPermission } from "./add-permission-modal";
 
-interface ApiKeyManagementProps {
+export interface ApiKeyManagementProps {
   apiKeys: ApiKey[];
   onChange: (keys: ApiKey[]) => void;
   permissions: ScopedPermission[];
   onSavePermission: (perms: Partial<ScopedPermission>[]) => void;
   onRemovePermission: (id: string) => void;
   resourceConfig: Record<string, string[]>;
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  disabled?: boolean;
 }
 
 export function ApiKeyManagement({
@@ -36,8 +40,10 @@ export function ApiKeyManagement({
   onSavePermission,
   onRemovePermission,
   resourceConfig,
+  enabled,
+  onToggle,
+  disabled = false,
 }: ApiKeyManagementProps) {
-  const [enabled, setEnabled] = React.useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
   const [managingKey, setManagingKey] = React.useState<ApiKey | null>(null);
 
@@ -65,15 +71,18 @@ export function ApiKeyManagement({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Switch
           checked={enabled}
-          onChange={setEnabled}
+          onChange={onToggle}
           label="Enable API Keys"
           description="Allow API keys to authenticate against this client."
+          disabled={disabled}
         />
       </div>
+
+      {disabled && <Alert variant="info" title="View Only">You need Admin or Owner role to manage API keys.</Alert>}
 
       {enabled && (
         <div className="space-y-4">
@@ -81,7 +90,11 @@ export function ApiKeyManagement({
             title="Issued Keys"
             description="Manage lifecycle and access for service accounts."
             action={
-              <Button onClick={() => setIsCreateModalOpen(true)} leftIcon="add">
+              <Button
+                onClick={() => setIsCreateModalOpen(true)}
+                leftIcon="add"
+                disabled={disabled}
+              >
                 Generate Key
               </Button>
             }
@@ -93,7 +106,13 @@ export function ApiKeyManagement({
               title="No API Keys"
               description="Generate an API key to allow external services to access your application."
               action={
-                <Button onClick={() => setIsCreateModalOpen(true)} variant="secondary">Generate Key</Button>
+                <Button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  variant="secondary"
+                  disabled={disabled}
+                >
+                  Generate Key
+                </Button>
               }
             />
           ) : (
@@ -122,7 +141,8 @@ export function ApiKeyManagement({
                         <TableCell>
                           <button
                             onClick={() => setManagingKey(key)}
-                            className="flex items-center gap-2 px-2 py-1 rounded bg-[#243647] hover:bg-slate-700 transition-colors text-xs text-blue-300 border border-transparent hover:border-slate-600"
+                            disabled={disabled}
+                            className="flex items-center gap-2 px-2 py-1 rounded bg-[#243647] hover:bg-slate-700 transition-colors text-xs text-blue-300 border border-transparent hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Icon name="lock_person" size="sm" className="text-blue-400" />
                             {permCount === 0 ? "No Access" : `${permCount} Permission${permCount > 1 ? "s" : ""}`}
@@ -139,7 +159,8 @@ export function ApiKeyManagement({
                           {key.status === "Active" ? (
                             <button
                               onClick={() => handleUpdateKey(key.id, { status: "Revoked" })}
-                              className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors"
+                              disabled={disabled}
+                              className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Revoke
                             </button>

@@ -1,18 +1,21 @@
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import { AuthorizationModelService } from "@/lib/auth/authorization-model-service";
 import { UserGroupRepository } from "@/lib/repositories/user-group-repository";
+import { UserRepository } from "@/lib/repositories/user-repository";
 import { LuaPolicyEngine } from "@/lib/auth/policy-engine";
 
 export class PermissionService {
   private tupleRepo: TupleRepository;
   private modelService: AuthorizationModelService;
   private groupRepo: UserGroupRepository;
+  private userRepo: UserRepository;
   private policyEngine: LuaPolicyEngine;
 
   constructor() {
     this.tupleRepo = new TupleRepository();
     this.modelService = new AuthorizationModelService();
     this.groupRepo = new UserGroupRepository();
+    this.userRepo = new UserRepository();
     this.policyEngine = new LuaPolicyEngine();
   }
 
@@ -35,6 +38,14 @@ export class PermissionService {
     context: Record<string, unknown> = {}
   ): Promise<boolean> {
     try {
+      // 0. Global Admin Bypass
+      if (subjectType === "user") {
+        const user = await this.userRepo.findById(subjectId);
+        if (user && user.role === "admin") {
+          return true;
+        }
+      }
+
       // 1. Get Authorization Model
       const model = await this.modelService.getModel(entityType);
       if (!model) {
@@ -102,7 +113,7 @@ export class PermissionService {
     const subjects = new Map<string, { type: string, id: string }>();
     const queue = [{ type, id }];
     const key = (t: string, i: string) => `${t}:${i}`;
-    
+
     subjects.set(key(type, id), { type, id });
 
     // 1. Add legacy user groups
@@ -120,10 +131,10 @@ export class PermissionService {
     // 2. BFS for nested groups via access_tuples (relation='member')
     while (queue.length > 0) {
       const current = queue.shift()!;
-      
+
       // Query for any group that lists 'current' as a 'member'
       const memberships = await this.tupleRepo.findBySubject(current.type, current.id);
-      
+
       for (const tuple of memberships) {
         // We assume that if a tuple exists on a 'group' entity with relation 'member',
         // it implies membership inheritance.
@@ -138,6 +149,109 @@ export class PermissionService {
     }
 
     return Array.from(subjects.values());
+  }
+
+  /**
+   * Resolve all permissions for a user (including group inheritance).
+   * Returns a map of entityId -> granted permissions.
+   */
+  async resolveAllPermissions(userId: string): Promise<Record<string, string[]>> {
+    try {
+      const permissions: Record<string, string[]> = {};
+
+      // 1. Expand subjects (User + Groups)
+      const subjects = await this.expandSubjects("user", userId);
+
+      // 2. Find all tuples for these subjects
+      const tuples = await this.tupleRepo.findBySubjects(subjects);
+
+      if (tuples.length === 0) {
+        return permissions;
+      }
+
+      // 3. Group tuples by entity type
+      const tuplesByEntityType = new Map<string, typeof tuples>();
+      for (const tuple of tuples) {
+        // Skip group membership tuples
+        if (tuple.entityType === "group" && tuple.relation === "member") continue;
+
+        const existing = tuplesByEntityType.get(tuple.entityType) || [];
+        existing.push(tuple);
+        tuplesByEntityType.set(tuple.entityType, existing);
+      }
+
+      // 4. Resolve permissions for each entity type
+      for (const [entityType, entityTuples] of tuplesByEntityType) {
+        const model = await this.modelService.getModel(entityType);
+
+        for (const tuple of entityTuples) {
+          const entityKey = tuple.entityId === "*"
+            ? entityType
+            : `${entityType}:${tuple.entityId}`;
+
+          if (!permissions[entityKey]) {
+            permissions[entityKey] = [];
+          }
+
+          if (model?.permissions) {
+            // Find all permissions that this relation grants
+            for (const [permName, permDef] of Object.entries(model.permissions)) {
+              if (this.relationGrantsPermission(tuple.relation, permDef.relation, model.relations)) {
+                if (!permissions[entityKey].includes(permName)) {
+                  permissions[entityKey].push(permName);
+                }
+              }
+            }
+          }
+
+          // Always include the raw relation
+          if (!permissions[entityKey].includes(tuple.relation)) {
+            permissions[entityKey].push(tuple.relation);
+          }
+        }
+      }
+
+      return permissions;
+    } catch (error) {
+      console.error("PermissionService.resolveAllPermissions error:", error);
+      return {};
+    }
+  }
+
+  /**
+   * Get the highest platform access level for a user on a client.
+   * Returns: 'owner' | 'admin' | 'use' | null
+   * Supports group inheritance.
+   */
+  async getPlatformAccessLevel(userId: string, clientId: string): Promise<string | null> {
+    try {
+      // 0. Global Admin Check
+      const user = await this.userRepo.findById(userId);
+      if (user && user.role === "admin") {
+        return "owner";
+      }
+
+      // 1. Expand subjects
+      const subjects = await this.expandSubjects("user", userId);
+
+      // 2. Find tuples for this client
+      const tuples = await this.tupleRepo.findByEntity("oauth_client", clientId);
+
+      // 3. Filter tuples matching any of our subjects
+      const relevantTuples = tuples.filter(t =>
+        subjects.some(s => s.type === t.subjectType && s.id === t.subjectId)
+      );
+
+      // 4. Determine highest level
+      if (relevantTuples.some(t => t.relation === "owner")) return "owner";
+      if (relevantTuples.some(t => t.relation === "admin")) return "admin";
+      if (relevantTuples.some(t => t.relation === "use")) return "use";
+
+      return null;
+    } catch (error) {
+      console.error("PermissionService.getPlatformAccessLevel error:", error);
+      return null;
+    }
   }
 
   private getImpliedRelations(
@@ -161,9 +275,36 @@ export class PermissionService {
     return Array.from(result);
   }
 
+  private relationGrantsPermission(
+    grantedRelation: string,
+    requiredRelation: string,
+    relations: Record<string, string[]>
+  ): boolean {
+    // Direct match
+    if (grantedRelation === requiredRelation) return true;
+
+    // Check if grantedRelation implies requiredRelation
+    // Note: The `relations` map is inverted in some definitions (relation -> implied by), 
+    // but here we assume standard ReBAC: key = relation, value = list of relations that imply it.
+    // Actually, looking at `getImpliedRelations`, it seems `relations` maps `target` -> `impliers`.
+    // So `relations[requiredRelation]` gives us relations that imply `requiredRelation`.
+
+    const impliedBy = relations[requiredRelation] || [];
+    if (impliedBy.includes(grantedRelation)) return true;
+
+    // Transitivity
+    for (const implier of impliedBy) {
+      if (this.relationGrantsPermission(grantedRelation, implier, relations)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private async checkPolicy(policy: string | undefined, engineType: "lua" | undefined, context: Record<string, unknown>): Promise<boolean> {
     if (!policy) return true;
-    
+
     if (engineType === "lua") {
       return this.policyEngine.execute(policy, context);
     }

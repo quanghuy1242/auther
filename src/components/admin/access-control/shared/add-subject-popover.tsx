@@ -6,9 +6,10 @@ import type { Subject } from "./subject-badge";
 
 interface AddSubjectPopoverProps {
     onAdd: (subject: Subject) => void;
+    disabled?: boolean;
 }
 
-export function AddSubjectPopover({ onAdd }: AddSubjectPopoverProps) {
+export function AddSubjectPopover({ onAdd, disabled }: AddSubjectPopoverProps) {
     const [type, setType] = React.useState("");
     const [relation, setRelation] = React.useState("");
     const [isOpen, setIsOpen] = React.useState(false);
@@ -32,7 +33,10 @@ export function AddSubjectPopover({ onAdd }: AddSubjectPopoverProps) {
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
-                <button className="text-xs text-primary hover:text-blue-400 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors">
+                <button
+                    disabled={disabled}
+                    className="text-xs text-primary hover:text-blue-400 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                     <Icon name="add" className="text-[14px]" />
                     <span className="font-medium">Add</span>
                 </button>

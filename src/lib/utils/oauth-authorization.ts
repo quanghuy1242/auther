@@ -1,8 +1,10 @@
 /**
  * OAuth authorization utilities for access control
+ * 
+ * Updated to use ReBAC tuples instead of legacy userClientAccess table.
  */
 
-import { userClientAccessRepository, oauthClientMetadataRepository } from "@/lib/repositories";
+import { oauthClientMetadataRepository } from "@/lib/repositories";
 
 /**
  * Check if a user has permission to authorize with a specific OAuth client
@@ -25,22 +27,16 @@ export async function checkOAuthClientAccess(
       return { allowed: true };
     }
 
-    // For restricted clients, check if user has explicit access
+    // For restricted clients, check if user has platform access via ReBAC tuples
     if (metadata.accessPolicy === "restricted") {
-      const access = await userClientAccessRepository.checkAccess(userId, clientId);
-      
-      if (!access.hasAccess) {
+      const { PermissionService } = await import("@/lib/auth/permission-service");
+      const permissionService = new PermissionService();
+      const accessLevel = await permissionService.getPlatformAccessLevel(userId, clientId);
+
+      if (!accessLevel) {
         return {
           allowed: false,
           reason: "This client requires explicit access approval. Please contact an administrator.",
-        };
-      }
-
-      // Check if access has expired
-      if (access.isExpired) {
-        return {
-          allowed: false,
-          reason: "Your access to this client has expired. Please contact an administrator.",
         };
       }
 
