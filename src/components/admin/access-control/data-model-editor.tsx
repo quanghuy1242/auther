@@ -50,7 +50,6 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
   const [entities, setEntities] = React.useState<Entity[]>([]);
   const [selectedEntityName, setSelectedEntityName] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [isDirty, setIsDirty] = React.useState(false);
 
   // Parse JSON into UI Entities
   const parseModel = React.useCallback((json: string) => {
@@ -124,7 +123,6 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
 
       const newModel = JSON.stringify({ ...parsed, types }, null, 2);
       onChange(newModel);
-      setIsDirty(true);
     } catch (e) {
       console.error("Failed to serialize model", e);
     }
@@ -154,7 +152,6 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
 
   const handleSave = () => {
     onSave();
-    setIsDirty(false);
   };
 
   // --- Entity Handlers ---

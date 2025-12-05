@@ -9,7 +9,6 @@ import {
   generateWebhookId,
 } from "@/lib/utils/encryption";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import type {
   WebhookEndpointWithSubscriptions,
   WebhookDeliveryEntity,
@@ -18,7 +17,7 @@ import type {
   WebhookDeliveryFormat,
   WebhookRequestMethod,
 } from "@/lib/types";
-import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from "@/lib/constants";
+import { type WebhookEventType } from "@/lib/constants";
 import { webhookSchema } from "./shared";
 
 // Re-export types for client components

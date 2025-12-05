@@ -331,7 +331,7 @@ export function AddPermissionModal({
             </div>
 
             <div className="pl-8 space-y-4">
-              {rules.map((rule, _idx) => {
+              {rules.map((rule) => {
                 const relations = resourceConfig[rule.resourceType] || [];
                 return (
                   <div key={rule.key} className="flex flex-col gap-4 p-4 rounded-lg border border-slate-700 bg-[#111921]/50 relative group">

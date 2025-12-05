@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PageHeading, PageContainer } from "@/components/layout";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, Badge, Icon } from "@/components/ui";
-import { StatCard, StatCardProps } from "@/components/admin";
+import { StatCard } from "@/components/admin";
 import { getDashboardStats, getRecentSignIns } from "./actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
 

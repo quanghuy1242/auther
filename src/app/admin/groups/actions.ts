@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { userGroupRepository, tupleRepository } from "@/lib/repositories";
-import { requireAuth, requireAdmin } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import { db } from "@/lib/db";
 import { user } from "@/db/schema";
 import { inArray } from "drizzle-orm";

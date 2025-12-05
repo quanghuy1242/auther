@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { userGroup, groupMembership } from "@/db/schema";
-import { eq, desc, inArray, and, like, or, sql, count } from "drizzle-orm";
+import { eq, desc, inArray, and, like, or, count } from "drizzle-orm";
 import { generateApiKeyId } from "@/lib/utils/api-key";
 
 export interface UserGroupEntity {

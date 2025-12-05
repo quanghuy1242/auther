@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ResponsiveTable, Badge } from "@/components/ui";
+import { ResponsiveTable } from "@/components/ui";
 import { formatDateShort } from "@/lib/utils/date-formatter";
 
 interface Permission {

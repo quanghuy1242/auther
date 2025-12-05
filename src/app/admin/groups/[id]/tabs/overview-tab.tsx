@@ -18,7 +18,14 @@ interface GroupOverviewTabProps {
 export function GroupOverviewTab({ group }: GroupOverviewTabProps) {
     const [key, setKey] = React.useState(0); // Force re-mount on successful save to reset dirty state if needed
 
-    const handleSubmit = async (_prevState: any, formData: FormData) => {
+    interface FormState {
+        success: boolean;
+        error?: string;
+        errors?: Record<string, string>;
+        data?: unknown;
+    }
+
+    const handleSubmit = async (_prevState: FormState, formData: FormData) => {
         const name = formData.get("name") as string;
         const description = formData.get("description") as string;
 
@@ -29,7 +36,7 @@ export function GroupOverviewTab({ group }: GroupOverviewTabProps) {
                 description,
             });
             return { success: true };
-        } catch (error) {
+        } catch {
             return { success: false, error: "Failed to update group" };
         }
     };

@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Button, ResponsiveTable, SearchInput, Pagination } from "@/components/ui";
+import { ResponsiveTable, SearchInput, Pagination } from "@/components/ui";
 import { FilterBar } from "@/components/admin";
 import { formatDateShort } from "@/lib/utils/date-formatter";
 import type { GetGroupsResult } from "./actions";

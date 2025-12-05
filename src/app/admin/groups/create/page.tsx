@@ -56,14 +56,21 @@ export default function CreateGroupPage() {
         router.back();
     };
 
-    const handleSubmit = async (_prevState: any, formData: FormData) => {
+    interface FormState {
+        success: boolean;
+        error?: string;
+        errors?: Record<string, string>;
+        data?: unknown;
+    }
+
+    const handleSubmit = async (_prevState: FormState, formData: FormData) => {
         const name = formData.get("name") as string;
         const description = formData.get("description") as string;
 
         try {
             await createGroup({ name, description });
             return { success: true };
-        } catch (e) {
+        } catch {
             return { success: false, error: "Failed to create group" };
         }
     };
