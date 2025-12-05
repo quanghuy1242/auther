@@ -27,7 +27,7 @@ export default async function AccessControlPage({ params }: PageProps) {
   ]);
 
   // Conditional fetch for API keys
-  let apiKeys: any[] = [];
+  let apiKeys: Awaited<ReturnType<typeof getClientApiKeys>> = [];
   if (metadata.allowsApiKeys) {
     apiKeys = await getClientApiKeys(id);
   }

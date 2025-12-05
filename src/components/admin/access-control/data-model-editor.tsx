@@ -292,7 +292,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
           </p>
           <ul className="list-disc list-inside space-y-1 pl-1 text-xs">
             <li><strong>Name:</strong> The relation name (e.g. <code>viewer</code>).</li>
-            <li><strong>Inherited Relations:</strong> Relations that imply this one. For example, if you add <code>editor</code> to the <code>viewer</code> relation, it means "All Editors are also Viewers".</li>
+            <li><strong>Inherited Relations:</strong> Relations that imply this one. For example, if you add <code>editor</code> to the <code>viewer</code> relation, it means &quot;All Editors are also Viewers&quot;.</li>
           </ul>
         </Alert>
       )}

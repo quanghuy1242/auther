@@ -25,6 +25,7 @@ import {
   getClientMetadata,
   getClientApiKeys,
   type PlatformRelation,
+  type ClientAuthorizationModels,
 } from "@/app/admin/clients/[id]/access/actions";
 
 // Map from UI role to ReBAC relation
@@ -44,9 +45,9 @@ export interface AccessControlInitialData {
   accessLevel: { canEditModel: boolean; canManageAccess: boolean };
   metadata: Awaited<ReturnType<typeof getClientMetadata>>;
   accessList: Awaited<ReturnType<typeof getPlatformAccessList>>;
-  models: { models: any }; // Using any to avoid complex type import from repository
+  models: Awaited<ReturnType<typeof getAuthorizationModels>>;
   scopedPerms: Awaited<ReturnType<typeof getScopedPermissions>>;
-  apiKeys: any[]; // Awaited<ReturnType<typeof getClientApiKeys>>
+  apiKeys: Awaited<ReturnType<typeof getClientApiKeys>>;
 }
 
 interface AccessControlProps {
@@ -54,7 +55,7 @@ interface AccessControlProps {
 }
 
 // --- Transformation Helpers ---
-function transformPlatformUsers(accessList: any[]): PlatformUser[] {
+function transformPlatformUsers(accessList: Awaited<ReturnType<typeof getPlatformAccessList>>): PlatformUser[] {
   return accessList.map(access => ({
     id: access.id,
     name: access.subjectName || (access.subjectType === "group" ? `Group ${access.subjectId}` : access.subjectId),
@@ -65,7 +66,7 @@ function transformPlatformUsers(accessList: any[]): PlatformUser[] {
   }));
 }
 
-function transformScopedPermissions(scopedPerms: any[]): ScopedPermission[] {
+function transformScopedPermissions(scopedPerms: Awaited<ReturnType<typeof getScopedPermissions>>): ScopedPermission[] {
   return scopedPerms.map(p => ({
     id: p.id,
     resourceType: p.entityId.split(":")[0] || p.entityId,
@@ -80,7 +81,7 @@ function transformScopedPermissions(scopedPerms: any[]): ScopedPermission[] {
   }));
 }
 
-function transformApiKeys(keys: any[]): ApiKey[] {
+function transformApiKeys(keys: Awaited<ReturnType<typeof getClientApiKeys>>): ApiKey[] {
   return keys.map(k => ({
     id: k.id,
     keyId: (k.prefix && k.start) ? `${k.prefix}...${k.start}` : (k.name || k.id.substring(0, 8)),
@@ -92,7 +93,7 @@ function transformApiKeys(keys: any[]): ApiKey[] {
   }));
 }
 
-function transformAuthorizationModel(models: any): { dataModel: string; loadedEntityTypes: Set<string> } {
+function transformAuthorizationModel(models: ClientAuthorizationModels): { dataModel: string; loadedEntityTypes: Set<string> } {
   const wrappedModel = {
     schema_version: "1.0",
     types: {
