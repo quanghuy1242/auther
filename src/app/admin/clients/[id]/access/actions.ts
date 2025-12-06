@@ -240,11 +240,19 @@ export async function checkResourceDependencies(
 /**
  * Get all API keys for a client
  */
+/*
+ * Get all API keys for a client, enriched with ReBAC permissions
+ */
 export async function getClientApiKeys(clientId: string) {
   try {
     await requireAuth();
     const _headers = await headers();
 
+    // Check access C1/C2 (must be admin/owner to view keys?)
+    // Actually, traditionally view access might be enough, but keys are sensitive.
+    // Let's stick to standard requireAuth for now and filter by client metadata.
+
+    // 1. List keys from Better Auth
     const allKeys = await auth.api.listApiKeys({
       headers: _headers,
     });
@@ -253,12 +261,193 @@ export async function getClientApiKeys(clientId: string) {
       return [];
     }
 
-    return allKeys.filter(
+    // 2. Filter for this client
+    const clientKeys = allKeys.filter(
       (key) => key.metadata?.oauth_client_id === clientId
     );
+
+    // 3. Enrich with permissions from Tuples (Subject: apikey:{id})
+    const enrichedKeys = await Promise.all(
+      clientKeys.map(async (key) => {
+        // Find tuples where subject is this API key
+        // We look for Tuples (Entity, Relation, Subject) -> (client_clientId:resource, action, apikey:keyId)
+        const tuples = await tupleRepository.findBySubject("apikey", key.id);
+
+        // Map tuples back to "permissions" object format: { "resource": ["action1", "action2"] }
+        // Tuple Entity format: "client_{clientId}:{resource}"
+        // We need to parse the resource name from the entity type.
+        const permissions: Record<string, string[]> = {};
+        const prefix = `client_${clientId}:`;
+
+        for (const tuple of tuples) {
+          if (tuple.entityType.startsWith(prefix)) {
+            const resource = tuple.entityType.substring(prefix.length);
+            // If resource is empty (e.g. wildcards), handle appropriately, but usually it's "invoice"
+            if (resource) {
+              if (!permissions[resource]) {
+                permissions[resource] = [];
+              }
+              permissions[resource].push(tuple.relation);
+            }
+          }
+        }
+
+        return {
+          ...key,
+          permissions: permissions, // Override permissions with ReBAC source of truth
+        };
+      })
+    );
+
+    return enrichedKeys;
   } catch (error) {
     console.error("getClientApiKeys error:", error);
     return [];
+  }
+}
+
+/**
+ * Create a new API key for a client with ReBAC permissions
+ */
+const createApiKeySchema = z.object({
+  clientId: z.string().min(1, "Client ID is required"),
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  permissions: z.record(z.string(), z.array(z.string())),
+  expiresInDays: z.number().min(1).max(3650).optional(),
+});
+
+export interface ApiKeyResult {
+  success: boolean;
+  error?: string;
+  apiKey?: {
+    id: string;
+    key: string;
+    name: string;
+    expiresAt: Date | null;
+  };
+}
+
+export async function createClientApiKey(
+  data: z.infer<typeof createApiKeySchema>
+): Promise<ApiKeyResult> {
+  try {
+    const session = await requireAuth();
+    const validated = createApiKeySchema.parse(data);
+
+    // 1. Verify caller is admin/owner (C2)
+    const { level, canManageAccess } = await getCurrentUserAccessLevel(validated.clientId);
+    if (!canManageAccess) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to create API keys",
+      };
+    }
+
+    // 2. Create API key using Better Auth
+    // IMPORTANT: Pass empty permissions to Better Auth so it doesn't do its own internal checks.
+    // We rely on Tuples for permission storage.
+    const expiresIn = validated.expiresInDays
+      ? validated.expiresInDays * 24 * 60 * 60
+      : null;
+
+    const result = await auth.api.createApiKey({
+      body: {
+        name: validated.name,
+        permissions: {}, // Intentionally empty - using Tuples instead
+        expiresIn,
+        userId: session.user.id,
+        metadata: {
+          oauth_client_id: validated.clientId,
+          access_level: level,
+        },
+      },
+    });
+
+    if (!result) {
+      return {
+        success: false,
+        error: "Failed to create API key",
+      };
+    }
+
+    // 3. Create Tuples for requested permissions
+    // permissions format: { "invoice": ["read", "write"] }
+    // Tuple: (Entity="client_{id}:invoice", Relation="read", Subject="apikey:{keyId}")
+    const promises: Promise<unknown>[] = [];
+
+    for (const [resource, actions] of Object.entries(validated.permissions)) {
+      const entityType = `client_${validated.clientId}:${resource}`;
+
+      for (const action of actions) {
+        promises.push(
+          tupleRepository.create({
+            entityType,
+            entityId: "*", // Or specific ID if we supported specific resource grants here (usually wildcard for keys)
+            relation: action,
+            subjectType: "apikey",
+            subjectId: result.id,
+          })
+        );
+      }
+    }
+
+    await Promise.all(promises);
+
+    return {
+      success: true,
+      apiKey: {
+        id: result.id,
+        key: result.key,
+        name: result.name ?? "Unnamed Key",
+        expiresAt: result.expiresAt ? new Date(result.expiresAt) : null,
+      },
+    };
+  } catch (error) {
+    console.error("createClientApiKey error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create API key",
+    };
+  }
+}
+
+/**
+ * Revoke an API key and clean up permissions
+ */
+export async function revokeClientApiKey(keyId: string): Promise<AssignUserResult> {
+  try {
+    await requireAuth();
+
+    // 1. Revoke in Better Auth (sets status to disabled/revoked?)
+    // Better Auth's revokeApiKey usually deletes or disables.
+    const _headers = await headers();
+
+    // 1. Revoke in Better Auth (sets status to disabled/revoked?)
+    // Better Auth's revokeApiKey usually deletes or disables.
+    const result = await auth.api.deleteApiKey({
+      body: {
+        keyId: keyId
+      },
+      headers: _headers,
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: "Failed to revoke API key in auth provider"
+      };
+    }
+
+    // 2. Cleanup Tuples
+    await tupleRepository.deleteBySubject("apikey", keyId);
+
+    return { success: true };
+  } catch (error) {
+    console.error("revokeClientApiKey error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to revoke API key",
+    };
   }
 }
 

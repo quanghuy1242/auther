@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Modal, ModalFooter, Button, Input, Select, Alert, Icon } from "@/components/ui";
+import { type ApiKeyResult } from "@/app/admin/clients/[id]/access/actions";
 
 export interface ApiKey {
   id: string;
@@ -13,11 +14,13 @@ export interface ApiKey {
   status: "Active" | "Revoked";
 }
 
+
 interface CreateApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (key: Partial<ApiKey>) => ApiKey;
+  onSave: (key: { name: string; expiresInDays?: number; permissions?: Record<string, string[]> }) => Promise<ApiKeyResult>;
   onAssignPermissions: (key: ApiKey) => void;
+  clientId: string;
 }
 
 export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions }: CreateApiKeyModalProps) {
@@ -27,6 +30,8 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
   const [generatedKey, setGeneratedKey] = React.useState("");
   const [createdKeyObject, setCreatedKeyObject] = React.useState<ApiKey | null>(null);
   const [copied, setCopied] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     if (isOpen && step === "result") {
@@ -40,26 +45,57 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
         setGeneratedKey("");
         setCreatedKeyObject(null);
         setCopied(false);
+        setError("");
+        setIsLoading(false);
       }, 300);
     }
   }, [isOpen, step]);
 
-  const handleGenerate = (e: React.FormEvent) => {
+  const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newKeyString = `sk_live_${Math.random().toString(36).substr(2, 24)}`;
-    setGeneratedKey(newKeyString);
+    setIsLoading(true);
+    setError("");
 
-    const newKey = onSave({
-      owner: name,
-      expires: expiry,
-      created: new Date().toISOString().split("T")[0],
-      status: "Active",
-      permissions: "",
-      keyId: `key_...${newKeyString.substr(-4)}`
-    });
+    try {
+      // Map expiry to days
+      let days = undefined;
+      if (expiry === "30 Days") days = 30;
+      if (expiry === "90 Days") days = 90;
+      if (expiry === "1 Year") days = 365;
 
-    setCreatedKeyObject(newKey);
-    setStep("result");
+      const result = await onSave({
+        name,
+        expiresInDays: days,
+        permissions: {}, // Permissions handled via separate flow/update
+      });
+
+      if (!result.success || !result.apiKey) {
+        setError(result.error || "Failed to generate key");
+        setIsLoading(false);
+        return;
+      }
+
+      const newKey = result.apiKey;
+
+      setGeneratedKey(newKey.key); // The raw key string
+
+      setCreatedKeyObject({
+        id: newKey.id,
+        keyId: newKey.id.substring(0, 8) + "...", // truncated ID for display
+        owner: newKey.name,
+        created: new Date().toISOString().split("T")[0],
+        expires: newKey.expiresAt ? newKey.expiresAt.toISOString().split("T")[0] : "Never",
+        permissions: "", // Initial perms are empty
+        status: "Active"
+      });
+
+      setStep("result");
+    } catch (err) {
+      console.error(err);
+      setError("An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCopy = async () => {
@@ -91,6 +127,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
             onChange={(e) => setName(e.target.value)}
             required
             autoFocus
+            disabled={isLoading}
           />
 
           <Select
@@ -103,15 +140,20 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
               { value: "1 Year", label: "1 Year" },
               { value: "Never", label: "Never expire" },
             ]}
+            disabled={isLoading}
           />
 
           <Alert variant="info">
             Permissions for this key are managed in the Access Control tab. By default, new keys have no access.
           </Alert>
 
+          {error && <Alert variant="error">{error}</Alert>}
+
           <ModalFooter>
-            <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" type="submit" disabled={!name}>Generate Key</Button>
+            <Button variant="ghost" type="button" onClick={onClose} disabled={isLoading}>Cancel</Button>
+            <Button variant="primary" type="submit" disabled={!name || isLoading}>
+              {isLoading ? "Generating..." : "Generate Key"}
+            </Button>
           </ModalFooter>
         </form>
       ) : (

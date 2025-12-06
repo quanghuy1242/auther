@@ -20,6 +20,9 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { CreateApiKeyModal, type ApiKey } from "./create-api-key-modal";
 import { ScopedPermissions } from "./scoped-permissions";
 import { type ScopedPermission } from "./add-permission-modal";
+import { createClientApiKey, revokeClientApiKey, getClientApiKeys, type ApiKeyResult } from "@/app/admin/clients/[id]/access/actions";
+import { toast } from "sonner";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 
 export interface ApiKeyManagementProps {
   apiKeys: ApiKey[];
@@ -43,27 +46,72 @@ export function ApiKeyManagement({
   enabled,
   onToggle,
   disabled = false,
-}: ApiKeyManagementProps) {
+  clientId,
+}: ApiKeyManagementProps & { clientId: string }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
   const [managingKey, setManagingKey] = React.useState<ApiKey | null>(null);
 
-  const handleCreateKey = (newKey: Partial<ApiKey>) => {
-    // In a real app, this is handled by the backend
-    const key: ApiKey = {
-      id: Math.random().toString(36).substr(2, 9),
-      keyId: newKey.keyId || "",
-      owner: newKey.owner || "",
-      created: newKey.created || "",
-      expires: newKey.expires || "",
-      permissions: "",
-      status: "Active"
-    };
-    onChange([key, ...apiKeys]);
-    return key;
+  // Confirmation state
+  const [revokeKeyId, setRevokeKeyId] = React.useState<string | null>(null);
+  const [isRevoking, setIsRevoking] = React.useState(false);
+
+  // Helper to refresh keys without full page reload
+  const refreshKeys = async () => {
+    try {
+      const keys = await getClientApiKeys(clientId);
+      const transformedKeys: ApiKey[] = keys.map(k => ({
+        id: k.id,
+        keyId: (k.prefix && k.start) ? `${k.prefix}...${k.start}` : (k.name || k.id.substring(0, 8)),
+        owner: k.name || k.metadata?.owner as string || "Unknown",
+        created: k.createdAt.toISOString().split("T")[0],
+        expires: k.expiresAt ? k.expiresAt.toISOString().split("T")[0] : "Never",
+        permissions: "Managed via Scoped Permissions",
+        status: "Active"
+      }));
+      onChange(transformedKeys);
+    } catch (error) {
+      console.error("Failed to refresh keys:", error);
+    }
   };
 
-  const handleUpdateKey = (id: string, updates: Partial<ApiKey>) => {
-    onChange(apiKeys.map(k => k.id === id ? { ...k, ...updates } : k));
+  const handleCreateKey = async (newKey: { name: string; expiresInDays?: number; permissions?: Record<string, string[]> }): Promise<ApiKeyResult> => {
+    // Call server action
+    const result = await createClientApiKey({
+      clientId,
+      name: newKey.name,
+      expiresInDays: newKey.expiresInDays,
+      permissions: newKey.permissions || {},
+    });
+
+    if (result.success) {
+      toast.success("API Key created successfully");
+      await refreshKeys();
+    } else {
+      toast.error(result.error || "Failed to create API key");
+    }
+
+    return result;
+  };
+
+  const handleRevokeKey = async (id: string) => {
+    setIsRevoking(true);
+    try {
+      const result = await revokeClientApiKey(id);
+
+      if (result.success) {
+        toast.success("API Key revoked");
+        await refreshKeys();
+        setRevokeKeyId(null);
+      } else {
+        toast.error(result.error || "Failed to revoke API key");
+      }
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
+  const confirmRevoke = (id: string) => {
+    setRevokeKeyId(id);
   };
 
   const getPermissionCount = (key: ApiKey) => {
@@ -158,7 +206,7 @@ export function ApiKeyManagement({
                         <TableCell>
                           {key.status === "Active" ? (
                             <button
-                              onClick={() => handleUpdateKey(key.id, { status: "Revoked" })}
+                              onClick={() => confirmRevoke(key.id)}
                               disabled={disabled}
                               className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -183,6 +231,18 @@ export function ApiKeyManagement({
         onClose={() => setIsCreateModalOpen(false)}
         onSave={handleCreateKey}
         onAssignPermissions={(key) => setManagingKey(key)}
+        clientId={clientId}
+      />
+
+      {/* Confirmation Modal for Revoke */}
+      <ConfirmationModal
+        isOpen={!!revokeKeyId}
+        onClose={() => setRevokeKeyId(null)}
+        onConfirm={() => revokeKeyId && handleRevokeKey(revokeKeyId)}
+        title="Revoke API Key"
+        description="Are you sure you want to revoke this API key? Applications using this key will immediately lose access."
+        confirmText="Revoke Key"
+        loading={isRevoking}
       />
 
       {/* Manage Access Modal (Replaces Drawer) */}

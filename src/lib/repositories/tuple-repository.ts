@@ -356,4 +356,26 @@ export class TupleRepository {
       return 0;
     }
   }
+
+  /**
+   * Delete all tuples for a specific subject (Revoke all access for a user/api key)
+   */
+  async deleteBySubject(subjectType: string, subjectId: string): Promise<number> {
+    try {
+      const result = await db
+        .delete(accessTuples)
+        .where(
+          and(
+            eq(accessTuples.subjectType, subjectType),
+            eq(accessTuples.subjectId, subjectId)
+          )
+        )
+        .returning({ id: accessTuples.id });
+
+      return result.length;
+    } catch (error) {
+      console.error("TupleRepository.deleteBySubject error:", error);
+      return 0;
+    }
+  }
 }

@@ -15,7 +15,11 @@
     "auth:test": "tsx scripts/test-auth-flow.ts",
     "clients:seed": "tsx scripts/seed-clients.ts",
     "local:build": "dotenv -e .env.local -- pnpm build",
-    "local:start": "dotenv -e .env.local -- pnpm start"
+    "local:start": "dotenv -e .env.local -- pnpm start",
+    "d:up": "pnpm run local:build && NODE_ENV=production docker compose up",
+    "d:restart": "pnpm run local:build && docker compose restart app",
+    "d:down": "docker compose down",
+    "d:down:rm": "docker compose down -v"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

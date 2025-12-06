@@ -17,6 +17,7 @@ import {
 import { AddPermissionModal, type ScopedPermission, type ApiKey } from "./add-permission-modal";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SubjectAvatar } from "@/components/ui/subject-avatar";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 
 interface ScopedPermissionsProps {
   permissions: ScopedPermission[];
@@ -46,6 +47,8 @@ export function ScopedPermissions({
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [editingPermission, setEditingPermission] = React.useState<ScopedPermission | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [removingPermissionId, setRemovingPermissionId] = React.useState<string | null>(null);
+
 
   const filteredPermissions = subjectFilter
     ? permissions.filter(
@@ -189,7 +192,7 @@ export function ScopedPermissions({
                       <Icon name="edit" size="sm" />
                     </button>
                     <button
-                      onClick={() => onRemove(perm.id)}
+                      onClick={() => setRemovingPermissionId(perm.id)}
                       className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-[#243647] transition-colors"
                     >
                       <Icon name="delete" size="sm" />
@@ -240,6 +243,20 @@ export function ScopedPermissions({
         resourceConfig={resourceConfig}
         apiKeys={apiKeys}
         fixedSubject={subjectFilter}
+      />
+
+      <ConfirmationModal
+        isOpen={!!removingPermissionId}
+        onClose={() => setRemovingPermissionId(null)}
+        onConfirm={() => {
+          if (removingPermissionId) {
+            onRemove(removingPermissionId);
+            setRemovingPermissionId(null);
+          }
+        }}
+        title="Remove Permission"
+        description="Are you sure you want to remove this scoped permission? This may affect user access immediately."
+        confirmText="Remove"
       />
     </div>
   );

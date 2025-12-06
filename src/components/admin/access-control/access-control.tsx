@@ -85,7 +85,7 @@ function transformApiKeys(keys: Awaited<ReturnType<typeof getClientApiKeys>>): A
   return keys.map(k => ({
     id: k.id,
     keyId: (k.prefix && k.start) ? `${k.prefix}...${k.start}` : (k.name || k.id.substring(0, 8)),
-    owner: k.metadata?.owner as string || "Unknown",
+    owner: k.name || k.metadata?.owner as string || "Unknown",
     created: k.createdAt.toISOString().split("T")[0],
     expires: k.expiresAt ? k.expiresAt.toISOString().split("T")[0] : "Never",
     permissions: "Managed via Scoped Permissions",
@@ -219,11 +219,26 @@ export function AccessControl({ initialData }: AccessControlProps) {
     }
   }, [clientId]);
 
+  // Sync state with initialData when it updates (e.g. after router.refresh())
   React.useEffect(() => {
-    if (!initialData) {
+    if (initialData) {
+      setPlatformUsers(transformPlatformUsers(initialData.accessList));
+      setPermissions(transformScopedPermissions(initialData.scopedPerms));
+      setClientMetadata(initialData.metadata);
+      setApiKeys(
+        initialData.metadata.allowsApiKeys
+          ? transformApiKeys(initialData.apiKeys)
+          : []
+      );
+      setDataModel(transformAuthorizationModel(initialData.models.models).dataModel);
+      loadedEntityTypesRef.current = transformAuthorizationModel(initialData.models.models).loadedEntityTypes;
+
+      setCanEditModel(initialData.accessLevel.canEditModel);
+      setCanManageAccess(initialData.accessLevel.canManageAccess);
+    } else {
       loadData();
     }
-  }, [loadData, initialData]);
+  }, [initialData, loadData]);
 
   // --- Derived State ---
   const resourceConfig = React.useMemo(() => {
@@ -283,11 +298,11 @@ export function AccessControl({ initialData }: AccessControlProps) {
     );
 
     if (count > 0) {
-      // Show confirmation modal
+      // Show confirmation modal with cascade warning
       setCascadeModal({ open: true, user, scopedCount: count });
     } else {
-      // No scoped permissions, revoke directly
-      await executeRevoke(user, false);
+      // Show standard confirmation modal
+      setCascadeModal({ open: true, user, scopedCount: 0 });
     }
   };
 
@@ -381,7 +396,6 @@ export function AccessControl({ initialData }: AccessControlProps) {
   };
 
   // --- Data Model Handler ---
-  // --- Data Model Handler ---
   // Just update local state
   const handleLocalModelChange = (newModel: string) => {
     setDataModel(newModel);
@@ -424,7 +438,6 @@ export function AccessControl({ initialData }: AccessControlProps) {
 
         if (!result.success) {
           console.error(`Failed to update entity type ${typeName}:`, result.error);
-          setError(`Failed to update entity type ${typeName}: ${result.error}`);
           setError(`Failed to update entity type ${typeName}: ${result.error}`);
           await loadData(true);
           return;
@@ -535,6 +548,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
                     enabled={clientMetadata?.allowsApiKeys ?? false}
                     onToggle={handleToggleApiKeys}
                     disabled={!canManageAccess}
+                    clientId={clientId}
                   />
                 )
               },
@@ -555,21 +569,29 @@ export function AccessControl({ initialData }: AccessControlProps) {
         </CardContent>
       </Card>
 
-      {/* C6 Cascade Confirmation Modal */}
+      {/* C6 Cascade/Remove Confirmation Modal */}
       <Modal
         isOpen={cascadeModal.open}
         onClose={() => setCascadeModal({ open: false, user: null, scopedCount: 0 })}
-        title="Confirm Access Removal"
+        title={cascadeModal.scopedCount > 0 ? "Confirm Access Removal (Cascade)" : "Confirm Access Removal"}
         size="md"
       >
         <div className="space-y-4">
-          <p className="text-gray-300">
-            <strong>{cascadeModal.user?.name}</strong> has <strong>{cascadeModal.scopedCount}</strong> scoped
-            permission{cascadeModal.scopedCount !== 1 ? "s" : ""} in this client.
-          </p>
-          <Alert variant="warning" title="Cascade Warning">
-            Removing platform access will also revoke all scoped permissions for this user.
-          </Alert>
+          {cascadeModal.scopedCount > 0 ? (
+            <>
+              <p className="text-gray-300">
+                <strong>{cascadeModal.user?.name}</strong> has <strong>{cascadeModal.scopedCount}</strong> scoped
+                permission{cascadeModal.scopedCount !== 1 ? "s" : ""} in this client.
+              </p>
+              <Alert variant="warning" title="Cascade Warning">
+                Removing platform access will also revoke all scoped permissions for this user.
+              </Alert>
+            </>
+          ) : (
+            <p className="text-gray-300">
+              Are you sure you want to remove access for <strong>{cascadeModal.user?.name}</strong>?
+            </p>
+          )}
         </div>
         <ModalFooter>
           <Button
@@ -582,7 +604,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
             variant="danger"
             onClick={() => cascadeModal.user && executeRevoke(cascadeModal.user, true)}
           >
-            Remove & Revoke All
+            {cascadeModal.scopedCount > 0 ? "Remove & Revoke All" : "Remove User"}
           </Button>
         </ModalFooter>
       </Modal>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button, Textarea, Alert, Icon, EmptyState } from "@/components/ui";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EntityListItem, RelationRow, PermissionRow, type Subject } from "./shared";
 
@@ -50,6 +51,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
   const [entities, setEntities] = React.useState<Entity[]>([]);
   const [selectedEntityName, setSelectedEntityName] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [entityToDelete, setEntityToDelete] = React.useState<string | null>(null);
 
   // Parse JSON into UI Entities
   const parseModel = React.useCallback((json: string) => {
@@ -278,6 +280,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
               disabled={disabled}
               leftIcon="save"
               variant="primary"
+              className="h-[38px]"
             >
               Save Changes
             </Button>
@@ -334,11 +337,26 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
                   name={ent.name}
                   isSelected={selectedEntityName === ent.name}
                   onSelect={() => setSelectedEntityName(ent.name)}
-                  onDelete={() => handleDeleteEntity(ent.name)}
+                  onDelete={() => setEntityToDelete(ent.name)}
                   disabled={disabled}
                 />
               ))}
             </div>
+
+            {/* Confirmation Modal */}
+            <ConfirmationModal
+              isOpen={!!entityToDelete}
+              onClose={() => setEntityToDelete(null)}
+              onConfirm={() => {
+                if (entityToDelete) {
+                  handleDeleteEntity(entityToDelete);
+                  setEntityToDelete(null);
+                }
+              }}
+              title="Delete Entity Type"
+              description={`Are you sure you want to delete the "${entityToDelete}" entity type? This will remove all its relations and permissions.`}
+              confirmText="Delete"
+            />
           </div>
 
           {/* Main Panel: Entity Editor */}
