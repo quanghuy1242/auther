@@ -11,6 +11,7 @@ export class LuaPolicyEngine {
   private factory: LuaFactory;
   private pool: PooledEngine[] = [];
   private maxPoolSize = 10;
+  private creatingCount = 0;
   private ttlMs = 1000 * 60 * 5; // 5 minutes
 
   constructor() {
@@ -94,15 +95,21 @@ export class LuaPolicyEngine {
     // Let's stick to soft limit: if < max, create new. If >= max, create non-pooled one?
     // Better: Create a new one and add to pool if space, else just use and dispose.
 
-    if (this.pool.length < this.maxPoolSize) {
-      const engine = await this.factory.createEngine();
-      const pooled: PooledEngine = {
-        engine,
-        inUse: true,
-        createdAt: Date.now(),
-      };
-      this.pool.push(pooled);
-      return pooled;
+    // Check against pool size AND pending creations
+    if (this.pool.length + this.creatingCount < this.maxPoolSize) {
+      this.creatingCount++;
+      try {
+        const engine = await this.factory.createEngine();
+        const pooled: PooledEngine = {
+          engine,
+          inUse: true,
+          createdAt: Date.now(),
+        };
+        this.pool.push(pooled);
+        return pooled;
+      } finally {
+        this.creatingCount--;
+      }
     }
 
     // Pool is full, force create a temp one (burst)
