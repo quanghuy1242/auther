@@ -18,11 +18,6 @@ export function ClientDetailTabs({ clientId }: ClientDetailTabsProps) {
       href: `/admin/clients/${clientId}/access`,
       icon: "security",
     },
-    {
-      label: "API Keys",
-      href: `/admin/clients/${clientId}/api-keys`,
-      icon: "key",
-    },
   ];
 
   return <NavTabs tabs={tabs} />;

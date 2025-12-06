@@ -6,6 +6,7 @@ import { symmetricDecrypt } from "better-auth/crypto";
 import { auth } from "@/lib/auth";
 import { env } from "@/env";
 import { jwksRepository } from "@/lib/repositories";
+import { apiKeyPermissionResolver } from "@/lib/services";
 
 /**
  * JWT expiration time in seconds (15 minutes)
@@ -17,7 +18,7 @@ const JWT_EXPIRATION_SECONDS = 900;
  */
 interface ExchangeRequest {
   apiKey: string;
-  permissions?: Record<string, string[]>;
+  // Note: Permissions are resolved from ReBAC tuples, not from request body
 }
 
 /**
@@ -43,14 +44,13 @@ interface ErrorResponse {
  * 
  * Exchange a valid API key for a short-lived JWT token.
  * 
- * This endpoint verifies the API key, fetches the latest JWKS signing key,
- * decrypts the private key, and signs a JWT with the user's information
- * and permissions from the API key.
+ * This endpoint verifies the API key, resolves permissions from ReBAC tuples,
+ * and signs a JWT with the user's information and resolved permissions.
  * 
  * @security
  * - No caching of decrypted private keys
  * - Short-lived JWTs (15 minutes)
- * - API key verification with permissions
+ * - Permissions resolved from ReBAC tuples (not from request)
  * - Audit logging of all requests
  */
 export async function POST(request: NextRequest): Promise<NextResponse<ExchangeResponse | ErrorResponse>> {
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       );
     }
 
-    const { apiKey, permissions: requestedPermissions } = body;
+    const { apiKey } = body;
 
     // Validate API key presence
     if (!apiKey || typeof apiKey !== "string" || apiKey.trim() === "") {
@@ -82,12 +82,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       );
     }
 
-    // Step 1: Verify API key using better-auth
+    // Step 1: Verify API key using better-auth (validates key is active)
+    // Note: We do NOT pass permissions here - ReBAC is our permission source
     const verificationResult = await auth.api.verifyApiKey({
-      body: {
-        key: apiKey,
-        ...(requestedPermissions && { permissions: requestedPermissions }),
-      },
+      body: { key: apiKey },
       headers: await headers(),
     });
 
@@ -101,7 +99,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       return NextResponse.json(
         {
           error: "invalid_api_key",
-          message: "The provided API key is invalid, expired, or lacks required permissions",
+          message: "The provided API key is invalid or expired",
         },
         { status: 401 }
       );
@@ -123,9 +121,36 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
     }
 
     const userId = apiKeyRecord.userId;
-    const permissions = apiKeyRecord.permissions || {};
 
-    // Step 2: Fetch latest JWKS key from database
+    // Step 2: Resolve permissions from ReBAC tuples with ABAC metadata
+    // The abac_required field tells consuming services which permissions need
+    // runtime ABAC evaluation via POST /api/auth/check-permission
+    let permissions: Record<string, string[]> = {};
+    let abac_required: Record<string, string[]> = {};
+    try {
+      const result = await apiKeyPermissionResolver.resolvePermissionsWithABACInfo(apiKeyRecord.id);
+      permissions = result.permissions;
+      abac_required = result.abac_required;
+      console.info("[api-key-exchange] ReBAC permissions resolved", {
+        apiKeyId: apiKeyRecord.id,
+        permissionCount: Object.keys(permissions).length,
+        abacRequiredCount: Object.keys(abac_required).length,
+      });
+    } catch (error) {
+      console.error("[api-key-exchange] Failed to resolve ReBAC permissions", {
+        apiKeyId: apiKeyRecord.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return NextResponse.json(
+        {
+          error: "internal_error",
+          message: "Failed to resolve permissions for API key",
+        },
+        { status: 500 }
+      );
+    }
+
+    // Step 3: Fetch latest JWKS key from database
     const latestKey = await jwksRepository.findLatest();
 
     if (!latestKey) {
@@ -187,6 +212,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
         // Custom claims
         scope: "api_key_exchange",
         permissions: permissions || {},
+        // ABAC metadata: permissions listed here require runtime ABAC evaluation
+        // Consuming services MUST call POST /api/auth/check-permission for these
+        // with the actual resource context (e.g., invoice.amount) to get access decision
+        abac_required: Object.keys(abac_required).length > 0 ? abac_required : undefined,
         apiKeyId: apiKeyRecord?.id,
       })
         .setProtectedHeader({

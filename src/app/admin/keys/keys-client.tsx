@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button, Badge, Modal, Icon, ResponsiveTable } from "@/components/ui";
+import { Button, Badge, Modal, ResponsiveTable } from "@/components/ui";
 import { rotateKeys, type JwksKey } from "./actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
 import { formatDate, formatAge } from "@/lib/utils/date-formatter";

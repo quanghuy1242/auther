@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useFormContext } from "react-hook-form";
 import { Card, CardContent, Button, WebhookSecretField } from "@/components/ui";
 import {
   FormWrapper,
@@ -11,7 +10,7 @@ import {
 import { PageHeading } from "@/components/layout";
 import { Icon } from "@/components/ui";
 import { createWebhook } from "../actions";
-import { webhookSchema } from "../shared";
+import { webhookSchema } from "@/schemas/webhooks";
 import { WebhookFormContent } from "../[id]/webhook-form-content";
 
 export default function CreateWebhookPage() {

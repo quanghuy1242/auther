@@ -4,13 +4,12 @@ import { requireAdmin } from "@/lib/session";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import {
   userRepository,
   sessionRepository,
   accountRepository,
 } from "@/lib/repositories";
-import { updateUserSchema } from "../shared";
+import { updateUserSchema } from "@/schemas/users";
 
 export interface UserDetail {
   id: string;

@@ -13,13 +13,13 @@ import { db } from "@/lib/db";
 import { DEFAULT_LOCAL_BASE_URL, OAUTH_AUTHORIZE_PATH } from "@/lib/constants";
 import { createWildcardRegexes, partitionWildcardPatterns } from "@/lib/utils/wildcard";
 import { collectOrigins, resolveRelativePath } from "@/lib/utils/url";
-import { 
-  registerPreviewRedirect, 
-  type TrustedClientConfig 
+import {
+  registerPreviewRedirect,
+  type TrustedClientConfig
 } from "@/lib/utils/oauth-client";
-import { 
-  createRestrictedSignupPaths, 
-  validateInternalSignupAccess 
+import {
+  createRestrictedSignupPaths,
+  validateInternalSignupAccess
 } from "@/lib/utils/auth-middleware";
 import { checkOAuthClientAccess } from "@/lib/utils/oauth-authorization";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
@@ -120,9 +120,9 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
   const relativePath = resolveRelativePath(requestUrl, ctx.context.baseURL);
 
   validateInternalSignupAccess(
-    request, 
-    relativePath, 
-    restrictedSignupPaths, 
+    request,
+    relativePath,
+    restrictedSignupPaths,
     env.PAYLOAD_CLIENT_SECRET
   );
 
@@ -140,13 +140,13 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
 
     if (clientId && userId) {
       const accessCheck = await checkOAuthClientAccess(userId, clientId);
-      
+
       if (!accessCheck.allowed) {
         // Return an OAuth error response
         const errorUrl = new URL(requestUrl.searchParams.get("redirect_uri") || "/");
         errorUrl.searchParams.set("error", "access_denied");
         errorUrl.searchParams.set("error_description", accessCheck.reason || "Access denied");
-        
+
         const state = requestUrl.searchParams.get("state");
         if (state) {
           errorUrl.searchParams.set("state", state);
@@ -223,6 +223,39 @@ export const auth = betterAuth({
     }),
     nextCookies(),
   ],
+  callbacks: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async jwt({ token, user }: { token: any, user: any }) {
+      if (user) {
+        try {
+          const { PermissionService } = await import("@/lib/auth/permission-service");
+          const permissionService = new PermissionService();
+          // Use ABAC-aware method so consuming services know which permissions
+          // require runtime ABAC evaluation via POST /api/auth/check-permission
+          const { permissions, abac_required } = await permissionService.resolveAllPermissionsWithABACInfo(user.id);
+          token.permissions = permissions;
+          // Only include abac_required if there are any ABAC policies
+          if (Object.keys(abac_required).length > 0) {
+            token.abac_required = abac_required;
+          }
+        } catch (error) {
+          console.error("Failed to inject permissions into JWT:", error);
+        }
+      }
+      return token;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async session({ session, token }: { session: any, token: any }) {
+      if (token && token.permissions) {
+        session.user.permissions = token.permissions;
+      }
+      // Also pass abac_required to session so client knows which permissions need ABAC
+      if (token && token.abac_required) {
+        session.user.abac_required = token.abac_required;
+      }
+      return session;
+    },
+  },
 });
 
 export type Auth = typeof auth;

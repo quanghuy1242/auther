@@ -14,7 +14,7 @@ import {
   RETRY_POLICY_OPTIONS, 
   DELIVERY_FORMAT_OPTIONS, 
   REQUEST_METHOD_OPTIONS 
-} from "../shared";
+} from "@/schemas/webhooks";
 
 export function WebhookFormContent() {
   const form = useFormContext();

@@ -11,6 +11,7 @@ import { UserProfileTab } from "./tabs/profile-tab";
 import { UserAccountsTab } from "./tabs/accounts-tab";
 import { UserSessionsTab } from "./tabs/sessions-tab";
 import { UserSecurityTab } from "./tabs/security-tab";
+import { UserGroupsTab } from "./tabs/groups-tab";
 
 interface UserDetailClientProps {
   user: UserDetail;
@@ -32,8 +33,8 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
   const handleToggleEmailVerification = async () => {
     const result = await toggleEmailVerification(user.id, !user.emailVerified);
     if (result?.success) {
-      const message = user.emailVerified 
-        ? "Email verification status removed" 
+      const message = user.emailVerified
+        ? "Email verification status removed"
         : "Email marked as verified";
       toast.success("Status updated", message);
       router.refresh();
@@ -101,6 +102,10 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Profile",
             content: <UserProfileTab user={user} />,
+          },
+          {
+            label: "Groups",
+            content: <UserGroupsTab userId={user.id} />,
           },
           {
             label: "Linked Accounts",

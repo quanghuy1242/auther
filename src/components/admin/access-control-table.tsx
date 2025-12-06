@@ -23,7 +23,7 @@ export interface AccessControlEntry {
 
 export interface AccessControlTableProps {
   entries: AccessControlEntry[];
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
   onEdit?: (id: string) => void;
 }
 
@@ -63,12 +63,18 @@ export function AccessControlTable({
               <TableCell>
                 <div className="flex items-center gap-3">
                   {entry.type === "user" ? (
-                    <div
-                      className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 shrink-0"
-                      style={{
-                        backgroundImage: `url(${entry.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${entry.name}`})`,
-                      }}
-                    />
+                    entry.avatar ? (
+                      <div
+                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 shrink-0"
+                        style={{
+                          backgroundImage: `url(${entry.avatar})`,
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center rounded-full size-8 bg-white/10 text-gray-400 shrink-0">
+                        <Icon name="person" className="text-lg" />
+                      </div>
+                    )
                   ) : (
                     <div className="flex items-center justify-center rounded-full size-8 bg-white/10 text-gray-400 shrink-0">
                       <Icon name="group" className="text-lg" />
@@ -103,14 +109,16 @@ export function AccessControlTable({
                       <Icon name="edit" className="text-lg" />
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => onRemove(entry.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors"
-                    title="Remove access"
-                  >
-                    <Icon name="delete" className="text-lg" />
-                  </button>
+                  {onRemove && (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(entry.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-hover-primary hover:text-red-500 transition-colors"
+                      title="Remove access"
+                    >
+                      <Icon name="delete" className="text-lg" />
+                    </button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

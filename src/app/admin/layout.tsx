@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: "dashboard" },
   { label: "Users", href: "/admin/users", icon: "group" },
+  { label: "Groups", href: "/admin/groups", icon: "groups" },
   { label: "OAuth Clients", href: "/admin/clients", icon: "apps" },
   { label: "Sessions", href: "/admin/sessions", icon: "schedule" },
   { label: "JWKS Keys", href: "/admin/keys", icon: "key" },
@@ -32,7 +33,7 @@ export default async function AdminLayout({
 }) {
   // Get session and redirect if not authenticated
   const session = await getSession();
-  
+
   if (!session) {
     redirect("/sign-in");
   }

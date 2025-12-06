@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { userGroup, groupMembership } from "@/db/schema";
-import { eq, desc, inArray, and } from "drizzle-orm";
+import { eq, desc, inArray, and, like, or, count } from "drizzle-orm";
 import { generateApiKeyId } from "@/lib/utils/api-key";
 
 export interface UserGroupEntity {
@@ -71,7 +71,74 @@ export class UserGroupRepository {
   }
 
   /**
-   * Find all groups
+   * Find paginated groups
+   */
+  async findMany(
+    page: number,
+    pageSize: number,
+    filters?: { search?: string }
+  ): Promise<{
+    items: UserGroupEntity[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    try {
+      const offset = (page - 1) * pageSize;
+      const conditions = [];
+
+      if (filters?.search) {
+        const searchPattern = `%${filters.search}%`;
+        conditions.push(
+          or(
+            like(userGroup.name, searchPattern),
+            like(userGroup.description, searchPattern)
+          )
+        );
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Get total count
+      const [totalResult] = await db
+        .select({ count: count() })
+        .from(userGroup)
+        .where(whereClause);
+
+      const total = totalResult.count;
+      const totalPages = Math.ceil(total / pageSize);
+
+      // Get items
+      const items = await db
+        .select()
+        .from(userGroup)
+        .where(whereClause)
+        .limit(pageSize)
+        .offset(offset)
+        .orderBy(desc(userGroup.createdAt));
+
+      return {
+        items: items.map(item => this.toEntity(item)),
+        total,
+        page,
+        pageSize,
+        totalPages,
+      };
+    } catch (error) {
+      console.error("UserGroupRepository.findMany error:", error);
+      return {
+        items: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
+    }
+  }
+
+  /**
+   * Find all groups (for selectors)
    */
   async findAll(): Promise<UserGroupEntity[]> {
     try {

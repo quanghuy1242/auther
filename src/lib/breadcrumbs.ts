@@ -4,6 +4,7 @@ const routeLabels: Record<string, string> = {
   "/admin": "Dashboard",
   "/admin/users": "Users",
   "/admin/users/create": "Create User",
+  "/admin/groups": "Groups",
   "/admin/clients": "OAuth Clients",
   "/admin/clients/register": "Register Client",
   "/admin/sessions": "Sessions",
@@ -21,11 +22,11 @@ const routeLabels: Record<string, string> = {
  */
 export function generateBreadcrumbs(pathname: string, dynamicLabels?: Record<string, string>): BreadcrumbItem[] {
   const items: BreadcrumbItem[] = [];
-  
+
   // Always start with Admin for admin routes
   if (pathname.startsWith("/admin")) {
     items.push({ label: "Admin", href: "/admin" });
-    
+
     // If not just /admin, process the path
     if (pathname !== "/admin") {
       const segments = pathname.split("/").filter(Boolean);
@@ -40,7 +41,7 @@ export function generateBreadcrumbs(pathname: string, dynamicLabels?: Record<str
 
         // Check if this is a dynamic segment (UUID pattern or "edit")
         const isDynamic = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segments[i]);
-        
+
         if (isDynamic) {
           const relativeKey = relativePath.startsWith("/")
             ? relativePath
@@ -74,7 +75,7 @@ export function generateBreadcrumbs(pathname: string, dynamicLabels?: Record<str
     const label = routeLabels[pathname] || "Home";
     items.push({ label });
   }
-  
+
   return items;
 }
 

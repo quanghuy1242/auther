@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { z } from "zod";
 import { useFormContext } from "react-hook-form";
 import { PageHeading } from "@/components/layout/page-heading";
 import { Card, CardContent, Button } from "@/components/ui";
 import { FormWrapper, FormField, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { createUser } from "./actions";
 import { useRouter } from "next/navigation";
-import { createUserSchema } from "../shared";
+import { createUserSchema } from "@/schemas/users";
 
 function CreateUserForm({ onCancel }: { onCancel: () => void }) {
   const { watch, setValue } = useFormContext();

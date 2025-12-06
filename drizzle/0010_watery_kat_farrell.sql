@@ -1,0 +1,1 @@
+ALTER TABLE `access_tuples` ADD `entity_type_id` text;

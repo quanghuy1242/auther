@@ -33,8 +33,13 @@ const INITIAL_STATE: EmailSignInState = {
 export function EmailSignInForm() {
   const [state, action] = useFormState(emailPasswordSignIn, INITIAL_STATE);
   const searchParams = useSearchParams();
-  const authorizeQuery = searchParams.toString();
+
+  // Only capture as OAuth authorize query if client_id is present (actual OIDC flow)
+  const isOAuthFlow = searchParams.has("client_id");
+  const authorizeQuery = isOAuthFlow ? searchParams.toString() : "";
+
   const callbackUrl =
+    searchParams.get("redirectTo") ??
     searchParams.get("callback_url") ??
     searchParams.get("callbackURL") ??
     searchParams.get("redirect") ??
@@ -45,8 +50,8 @@ export function EmailSignInForm() {
     undefined;
 
   const errorParam = searchParams.get("error");
-  const errorMessage = errorParam === "forbidden" 
-    ? "Access denied. You don't have permission to access the admin dashboard." 
+  const errorMessage = errorParam === "forbidden"
+    ? "Access denied. You don't have permission to access the admin dashboard."
     : null;
 
   useEffect(() => {
@@ -69,7 +74,7 @@ export function EmailSignInForm() {
     <form action={action} className="space-y-4">
       <input type="hidden" name="authorizeQuery" value={authorizeQuery} />
       <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
-      
+
       <Input
         id="email"
         name="email"
@@ -79,7 +84,7 @@ export function EmailSignInForm() {
         autoComplete="email"
         required
       />
-      
+
       <Input
         id="password"
         name="password"
@@ -89,7 +94,7 @@ export function EmailSignInForm() {
         autoComplete="current-password"
         required
       />
-      
+
       <SubmitButton />
     </form>
   );

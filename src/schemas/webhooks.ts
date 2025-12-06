@@ -2,30 +2,6 @@ import { z } from "zod";
 import { booleanField } from "@/lib/utils/validation";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
 
-// ============================================================================
-// Constants for UI Options
-// ============================================================================
-
-export const RETRY_POLICY_OPTIONS = [
-  { value: "none", label: "No Retries" },
-  { value: "standard", label: "Standard (3 retries)" },
-  { value: "aggressive", label: "Aggressive (5 retries)" },
-];
-
-export const DELIVERY_FORMAT_OPTIONS = [
-  { value: "json", label: "JSON" },
-  { value: "form-encoded", label: "Form-encoded" },
-];
-
-export const REQUEST_METHOD_OPTIONS = [
-  { value: "POST", label: "POST" },
-  { value: "PUT", label: "PUT" },
-];
-
-// ============================================================================
-// Validation Schema
-// ============================================================================
-
 export const webhookSchema = z.object({
   displayName: z
     .string()
@@ -61,3 +37,20 @@ export const webhookSchema = z.object({
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
   requestMethod: z.enum(["POST", "PUT"]).default("POST"),
 });
+
+// UI Constants related to the schema
+export const RETRY_POLICY_OPTIONS = [
+  { value: "none", label: "No Retries" },
+  { value: "standard", label: "Standard (3 retries)" },
+  { value: "aggressive", label: "Aggressive (5 retries)" },
+];
+
+export const DELIVERY_FORMAT_OPTIONS = [
+  { value: "json", label: "JSON" },
+  { value: "form-encoded", label: "Form-encoded" },
+];
+
+export const REQUEST_METHOD_OPTIONS = [
+  { value: "POST", label: "POST" },
+  { value: "PUT", label: "PUT" },
+];

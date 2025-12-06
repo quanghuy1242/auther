@@ -36,7 +36,7 @@ import {
 import type { WebhookEndpointWithSubscriptions, WebhookDeliveryEntity } from "@/lib/types";
 import { WebhookFormContent } from "./webhook-form-content";
 import { toast } from "@/lib/toast";
-import { webhookSchema } from "../shared";
+import { webhookSchema } from "@/schemas/webhooks";
 
 interface EditWebhookClientProps {
   webhook: WebhookEndpointWithSubscriptions;
