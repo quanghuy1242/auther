@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 export interface Tuple {
   id: string;
   entityType: string;
+  entityTypeId?: string | null;  // FK to authorization_models.id - set for scoped perms, null for platform
   entityId: string;
   relation: string;
   subjectType: string;
@@ -249,6 +250,22 @@ export class TupleRepository {
   }
 
   /**
+   * Find all tuples for entity types matching a prefix
+   * (e.g., find all "client_abc123:*" entity types)
+   */
+  async findByEntityTypePrefix(entityTypePrefix: string): Promise<Tuple[]> {
+    try {
+      return await db
+        .select()
+        .from(accessTuples)
+        .where(sql`${accessTuples.entityType} LIKE ${entityTypePrefix + '%'}`);
+    } catch (error) {
+      console.error("TupleRepository.findByEntityTypePrefix error:", error);
+      return [];
+    }
+  }
+
+  /**
    * Create a tuple if it doesn't already exist (idempotent)
    * Returns the tuple and whether it was newly created
    */
@@ -376,6 +393,28 @@ export class TupleRepository {
       return result.length;
     } catch (error) {
       console.error("TupleRepository.deleteBySubject error:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Update the entity_type string for all tuples with a given entity_type_id.
+   * Used for keeping the denormalized display name in sync after renames.
+   */
+  async updateEntityTypeString(entityTypeId: string, newEntityType: string): Promise<number> {
+    try {
+      const result = await db
+        .update(accessTuples)
+        .set({
+          entityType: newEntityType,
+          updatedAt: new Date(),
+        })
+        .where(eq(accessTuples.entityTypeId, entityTypeId))
+        .returning({ id: accessTuples.id });
+
+      return result.length;
+    } catch (error) {
+      console.error("TupleRepository.updateEntityTypeString error:", error);
       return 0;
     }
   }

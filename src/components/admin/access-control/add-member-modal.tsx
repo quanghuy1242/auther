@@ -6,6 +6,8 @@ import { type User, type Group } from "@/components/ui/user-group-picker";
 
 export interface PlatformUser {
   id: string;
+  // Optional tuple identifier from the platform access tuple, used for display only
+  tupleId?: string;
   name: string;
   email: string;
   role: "Owner" | "Admin" | "User";
@@ -65,6 +67,7 @@ export function AddMemberModal({ isOpen, onClose, onSave, initialData }: AddMemb
 
     onSave({
       id: selectedSubject.id,
+      tupleId: initialData?.tupleId,
       name: selectedSubject.name || "",
       email: email,
       role,

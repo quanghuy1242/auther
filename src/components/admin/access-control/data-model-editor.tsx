@@ -441,13 +441,9 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
                         key={idx}
                         name={rel.name}
                         subjects={parseSubjects(rel.subjects)}
-                        availableRelations={[
-                          "user",
-                          "group#member",
-                          ...selectedEntity.relations
-                            .map(r => r.name)
-                            .filter(n => n !== rel.name && n.trim().length > 0)
-                        ]}
+                        availableRelations={selectedEntity.relations
+                          .map(r => r.name)
+                          .filter(n => n !== rel.name && n.trim().length > 0)}
                         onNameChange={(name) => handleUpdateRelation(selectedEntity.name, idx, "name", name)}
                         onSubjectsChange={(subjects) => handleUpdateRelation(selectedEntity.name, idx, "subjects", buildSubjectsString(subjects))}
                         isHierarchy={rel.isHierarchy}

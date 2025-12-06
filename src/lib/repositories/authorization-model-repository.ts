@@ -271,4 +271,25 @@ export class AuthorizationModelRepository {
             return { deleted: false, error: "Failed to delete model" };
         }
     }
+
+    /**
+     * Update an authorization model's entity_type by its ID.
+     * Used for renaming entity types.
+     */
+    async updateEntityType(id: string, newEntityType: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            await db
+                .update(authorizationModels)
+                .set({
+                    entityType: newEntityType,
+                    updatedAt: new Date(),
+                })
+                .where(eq(authorizationModels.id, id));
+
+            return { success: true };
+        } catch (error) {
+            console.error("AuthorizationModelRepository.updateEntityType error:", error);
+            return { success: false, error: "Failed to update entity type" };
+        }
+    }
 }

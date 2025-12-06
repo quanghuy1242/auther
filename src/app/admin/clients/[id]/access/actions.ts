@@ -5,7 +5,9 @@ import { headers } from "next/headers";
 import { requireAuth } from "@/lib/session";
 import { db } from "@/lib/db";
 import { user } from "@/db/auth-schema";
-import { inArray } from "drizzle-orm";
+import { userGroup } from "@/db/app-schema";
+import { accessTuples, authorizationModels } from "@/db/rebac-schema";
+import { inArray, eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import {
   tupleRepository,
@@ -716,6 +718,19 @@ export async function grantPlatformAccess(
       };
     }
 
+    // Ensure a single platform relation per subject: remove other relations before creating
+    const platformRelations: PlatformRelation[] = ["owner", "admin", "use"];
+    for (const rel of platformRelations) {
+      if (rel === relation) continue;
+      await tupleRepository.delete({
+        entityType: "oauth_client",
+        entityId: clientId,
+        relation: rel,
+        subjectType,
+        subjectId,
+      });
+    }
+
     const { created } = await tupleRepository.createIfNotExists({
       entityType: "oauth_client",
       entityId: clientId,
@@ -894,7 +909,7 @@ export async function getAuthorizationModels(
 export async function updateEntityTypeModel(
   clientId: string,
   entityTypeName: string,
-  relations: Record<string, string>,
+  relations: Record<string, unknown>,
   permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>
 ): Promise<AssignUserResult & { warnings?: string[] }> {
   try {
@@ -909,12 +924,46 @@ export async function updateEntityTypeModel(
       };
     }
 
+    // Convert UI format (strings, arrays, or { union, subjectParams }) to DB format
+    const normalizeRelationSubjects = (
+      value: unknown
+    ): AuthorizationModelDefinition["relations"][string] => {
+      if (typeof value === "string") {
+        return value
+          .split("|")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
+      if (Array.isArray(value)) {
+        return value.map((v) => String(v).trim()).filter(Boolean);
+      }
+
+      if (value && typeof value === "object") {
+        const obj = value as { union?: unknown; subjectParams?: { hierarchy?: unknown } };
+        const union = Array.isArray(obj.union)
+          ? obj.union.map((v) => String(v).trim()).filter(Boolean)
+          : [];
+
+        const subjectParams = obj.subjectParams && typeof obj.subjectParams === "object"
+          ? { hierarchy: Boolean(obj.subjectParams.hierarchy) }
+          : undefined;
+
+        if (subjectParams || union.length > 0) {
+          return subjectParams ? { union, subjectParams } : { union };
+        }
+      }
+
+      // Fallback: empty relation list
+      return [];
+    };
+
     // Convert UI format to DB format
     const definition: AuthorizationModelDefinition = {
       relations: Object.fromEntries(
         Object.entries(relations).map(([rel, subjects]) => [
           rel,
-          subjects.split("|").map(s => s.trim()).filter(Boolean)
+          normalizeRelationSubjects(subjects)
         ])
       ),
       permissions: Object.fromEntries(
@@ -1023,6 +1072,66 @@ export async function deleteEntityTypeModel(
   }
 }
 
+/**
+ * Rename an entity type for a client.
+ * Since tuples now reference entity types by ID (entity_type_id), renaming
+ * only requires updating the authorization_models.entity_type column.
+ * The tuples automatically follow via the FK relationship.
+ */
+export async function renameEntityType(
+  clientId: string,
+  oldName: string,
+  newName: string
+): Promise<AssignUserResult> {
+  try {
+    await requireAuth();
+
+    const oldFullType = `client_${clientId}:${oldName}`;
+    const newFullType = `client_${clientId}:${newName}`;
+
+    // Check if old entity type exists
+    const oldModel = await authorizationModelRepository.findByEntityType(oldFullType);
+    if (!oldModel) {
+      return {
+        success: false,
+        error: `Entity type '${oldName}' not found.`,
+      };
+    }
+
+    // Check if new name already exists
+    const existingNew = await authorizationModelRepository.findByEntityType(newFullType);
+    if (existingNew) {
+      return {
+        success: false,
+        error: `Entity type '${newName}' already exists.`,
+      };
+    }
+
+    // Update the authorization model's entity_type
+    // Tuples reference by entity_type_id (FK), so they automatically follow!
+    const result = await authorizationModelRepository.updateEntityType(oldModel.id, newFullType);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to rename entity type",
+      };
+    }
+
+    // Also update the entity_type string in tuples for display purposes
+    // (This is denormalized but helpful for debugging/queries)
+    await tupleRepository.updateEntityTypeString(oldModel.id, newFullType);
+
+    return { success: true };
+  } catch (error) {
+    console.error("renameEntityType error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to rename entity type",
+    };
+  }
+}
+
 // Keep legacy getAuthorizationModel for backward compatibility
 export async function getAuthorizationModel(
   clientId: string
@@ -1075,10 +1184,13 @@ export async function updateAuthorizationModel(
 
 interface ScopedPermissionEntry {
   id: string;
-  entityId: string; // e.g., "invoices:*" or "invoices:123"
+  entityTypeName: string; // e.g., "invoice", "report" (extracted from entity_type)
+  entityId: string; // e.g., "*" or "123"
   relation: string;
   subjectType: "user" | "group" | "apikey";
   subjectId: string;
+  subjectName?: string;
+  subjectEmail?: string;
   condition?: string;
   createdAt: Date;
 }
@@ -1086,23 +1198,98 @@ interface ScopedPermissionEntry {
 /**
  * Get scoped permissions for a client
  * These are permissions within the client's application (Layer B)
+ * Uses JOIN to get real-time entity type names from authorization_models
  */
 export async function getScopedPermissions(clientId: string): Promise<ScopedPermissionEntry[]> {
   try {
     await requireAuth();
 
-    const scopedEntityType = `client_${clientId}`;
-    const tuples = await tupleRepository.findByEntityType(scopedEntityType);
+    // Use prefix match to find all entity types for this client (e.g., client_abc123:invoice, client_abc123:report)
+    const scopedEntityTypePrefix = `client_${clientId}:`;
 
-    return tuples.map(t => ({
-      id: t.id,
-      entityId: t.entityId,
-      relation: t.relation,
-      subjectType: t.subjectType as "user" | "group" | "apikey",
-      subjectId: t.subjectId,
-      condition: t.condition ?? undefined,
-      createdAt: t.createdAt,
-    }));
+    // Single query: JOIN tuples with authorization_models to get entity type names
+    // This avoids N+1 and gets real-time names even after rename
+    const tuplesWithModels = await db
+      .select({
+        id: accessTuples.id,
+        entityType: authorizationModels.entityType, // Get fresh name from auth model
+        entityId: accessTuples.entityId,
+        relation: accessTuples.relation,
+        subjectType: accessTuples.subjectType,
+        subjectId: accessTuples.subjectId,
+        condition: accessTuples.condition,
+        createdAt: accessTuples.createdAt,
+      })
+      .from(accessTuples)
+      .innerJoin(
+        authorizationModels,
+        eq(accessTuples.entityTypeId, authorizationModels.id)
+      )
+      .where(sql`${authorizationModels.entityType} LIKE ${scopedEntityTypePrefix + '%'}`);
+
+    // Collect user and group IDs for lookup
+    const userIds = tuplesWithModels
+      .filter((t) => t.subjectType === "user")
+      .map((t) => t.subjectId);
+    const groupIds = tuplesWithModels
+      .filter((t) => t.subjectType === "group")
+      .map((t) => t.subjectId);
+
+    // Lookup user details
+    const usersMap = new Map<string, { name: string | null; email: string }>();
+    if (userIds.length > 0) {
+      const users = await db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        })
+        .from(user)
+        .where(inArray(user.id, userIds));
+
+      users.forEach((u) => usersMap.set(u.id, { name: u.name, email: u.email }));
+    }
+
+    // Lookup group details
+    const groupsMap = new Map<string, { name: string }>();
+    if (groupIds.length > 0) {
+      const groups = await db
+        .select({
+          id: userGroup.id,
+          name: userGroup.name,
+        })
+        .from(userGroup)
+        .where(inArray(userGroup.id, groupIds));
+
+      groups.forEach((g) => groupsMap.set(g.id, { name: g.name }));
+    }
+
+    return tuplesWithModels.map(t => {
+      // Extract entity type name from full entity_type (e.g., "client_xxx:entity_1" -> "entity_1")
+      const entityTypeParts = t.entityType.split(":");
+      const entityTypeName = entityTypeParts.length > 1 ? entityTypeParts[1] : entityTypeParts[0];
+
+      return {
+        id: t.id,
+        entityTypeName,
+        entityId: t.entityId,
+        relation: t.relation,
+        subjectType: t.subjectType as "user" | "group" | "apikey",
+        subjectId: t.subjectId,
+        subjectName:
+          t.subjectType === "user"
+            ? usersMap.get(t.subjectId)?.name ?? undefined
+            : t.subjectType === "group"
+              ? groupsMap.get(t.subjectId)?.name ?? undefined
+              : undefined,
+        subjectEmail:
+          t.subjectType === "user"
+            ? usersMap.get(t.subjectId)?.email
+            : undefined,
+        condition: t.condition ?? undefined,
+        createdAt: t.createdAt,
+      };
+    });
   } catch (error) {
     console.error("getScopedPermissions error:", error);
     return [];
@@ -1169,6 +1356,7 @@ export async function grantScopedPermission(
 
     const { created, tuple } = await tupleRepository.createIfNotExists({
       entityType: fullEntityType,
+      entityTypeId: model.id,  // FK to authorization_models for rename support
       entityId,
       relation,
       subjectType,

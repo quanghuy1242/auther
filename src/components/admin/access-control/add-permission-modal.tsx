@@ -49,7 +49,8 @@ interface AddPermissionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (permissions: Partial<ScopedPermission>[]) => void;
-  initialData?: ScopedPermission | null;
+  /** Array of permissions to edit (all for same subject) */
+  initialPermissions?: ScopedPermission[];
   fixedSubject?: {
     id: string;
     name: string;
@@ -75,7 +76,7 @@ export function AddPermissionModal({
   isOpen,
   onClose,
   onSave,
-  initialData,
+  initialPermissions,
   fixedSubject,
   resourceConfig = {},
   apiKeys = [],
@@ -118,34 +119,40 @@ export function AddPermissionModal({
 
   // --- Initialization ---
   React.useEffect(() => {
-    if (initialData) {
-      // Edit Mode
-      setSubjectType(initialData.subject.type);
+    if (initialPermissions && initialPermissions.length > 0) {
+      // Edit Mode - load all permissions for this subject
+      const firstPerm = initialPermissions[0];
+      setSubjectType(firstPerm.subject.type);
       setSelectedSubject({
-        id: initialData.subject.id,
-        name: initialData.subject.name,
-        description: initialData.subject.description,
-        avatarUrl: initialData.subject.avatarUrl,
-        type: initialData.subject.type
+        id: firstPerm.subject.id,
+        name: firstPerm.subject.name,
+        description: firstPerm.subject.description,
+        avatarUrl: firstPerm.subject.avatarUrl,
+        type: firstPerm.subject.type
       });
 
-      let scope: ScopeType = "global";
-      let content = "";
-      if (initialData.condition) {
-        scope = "script";
-        content = initialData.condition;
-      } else if (initialData.resourceId !== "*") {
-        scope = "specific";
-        content = initialData.resourceId;
-      }
+      // Convert each permission to a rule
+      const loadedRules: PermissionRule[] = initialPermissions.map((perm, idx) => {
+        let scope: ScopeType = "global";
+        let content = "";
+        if (perm.condition) {
+          scope = "script";
+          content = perm.condition;
+        } else if (perm.resourceId !== "*") {
+          scope = "specific";
+          content = perm.resourceId;
+        }
 
-      setRules([{
-        key: "init",
-        resourceType: initialData.resourceType,
-        scopeType: scope,
-        resourceId: content,
-        relation: initialData.relation
-      }]);
+        return {
+          key: `loaded-${idx}`,
+          resourceType: perm.resourceType,
+          scopeType: scope,
+          resourceId: content,
+          relation: perm.relation
+        };
+      });
+
+      setRules(loadedRules);
     } else {
       // Create Mode
       if (fixedSubject) {
@@ -157,7 +164,7 @@ export function AddPermissionModal({
       }
       setRules([createEmptyRule()]);
     }
-  }, [initialData, isOpen, fixedSubject, createEmptyRule]);
+  }, [initialPermissions, isOpen, fixedSubject, createEmptyRule]);
 
   // --- Handlers ---
   const handleAddRule = () => {
@@ -195,7 +202,9 @@ export function AddPermissionModal({
     const payload: Partial<ScopedPermission>[] = [];
 
     rules.forEach((rule, index) => {
-      const isEditingOriginal = initialData && index === 0 && rules.length === 1;
+      // Try to preserve the permission ID if editing the same index
+      const originalPerm = initialPermissions?.[index];
+      const isEditing = !!initialPermissions && initialPermissions.length > 0;
 
       const commonSubject = {
         id: selectedSubject.id,
@@ -208,7 +217,7 @@ export function AddPermissionModal({
       if (rule.scopeType === "script") {
         if (!rule.resourceId.trim()) return;
         payload.push({
-          id: isEditingOriginal ? initialData.id : undefined,
+          id: originalPerm?.id,
           resourceType: rule.resourceType,
           resourceId: "*",
           relation: rule.relation,
@@ -220,9 +229,10 @@ export function AddPermissionModal({
         if (ids.length === 0) return;
 
         ids.forEach((id, idIndex) => {
-          const preserveId = isEditingOriginal && idIndex === 0;
+          // Only preserve ID for the first ID if single rule edit
+          const preserveId = idIndex === 0 && originalPerm;
           payload.push({
-            id: preserveId ? initialData.id : undefined,
+            id: preserveId ? originalPerm?.id : undefined,
             resourceType: rule.resourceType,
             resourceId: id,
             relation: rule.relation,
@@ -232,7 +242,7 @@ export function AddPermissionModal({
       } else {
         // Global
         payload.push({
-          id: isEditingOriginal ? initialData.id : undefined,
+          id: originalPerm?.id,
           resourceType: rule.resourceType,
           resourceId: "*",
           relation: rule.relation,
@@ -284,7 +294,7 @@ export function AddPermissionModal({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={initialData ? "Edit Permission" : "Add Permission"}
+        title={initialPermissions && initialPermissions.length > 0 ? "Edit Permissions" : "Add Permission"}
         size="xl"
         className="max-h-[85vh] flex flex-col"
       >
@@ -479,7 +489,7 @@ export function AddPermissionModal({
         <ModalFooter>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={handleSubmit} disabled={!isFormValid}>
-            {initialData ? "Save Changes" : "Assign Permissions"}
+            {initialPermissions && initialPermissions.length > 0 ? "Save Changes" : "Assign Permissions"}
           </Button>
         </ModalFooter>
       </Modal>

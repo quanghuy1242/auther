@@ -6,7 +6,8 @@ export const accessTuples = sqliteTable(
   {
     id: text("id").primaryKey(),
     // Entity (The object being accessed)
-    entityType: text("entity_type").notNull(), // e.g., 'oauth_client', 'invoice', 'webhook'
+    entityType: text("entity_type").notNull(), // e.g., 'client_xxx' or 'client_xxx:entity_1'
+    entityTypeId: text("entity_type_id"), // FK to authorization_models.id - set for scoped perms, null for platform
     entityId: text("entity_id").notNull(), // Can be specific ID (e.g., 'client_123') or "*" for wildcard
 
     // Relation (The access level/role)

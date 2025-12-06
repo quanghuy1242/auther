@@ -17,6 +17,7 @@ import {
   getAuthorizationModels,
   updateEntityTypeModel,
   deleteEntityTypeModel,
+  renameEntityType,
   getScopedPermissions,
   grantScopedPermission,
   revokeScopedPermission,
@@ -58,7 +59,8 @@ interface AccessControlProps {
 // --- Transformation Helpers ---
 function transformPlatformUsers(accessList: Awaited<ReturnType<typeof getPlatformAccessList>>): PlatformUser[] {
   return accessList.map(access => ({
-    id: access.id,
+    id: access.subjectId,
+    tupleId: access.id,
     name: access.subjectName || (access.subjectType === "group" ? `Group ${access.subjectId}` : access.subjectId),
     email: access.subjectEmail || (access.subjectType === "group" ? "Group" : access.subjectId),
     role: relationToRole[access.relation as PlatformRelation] as "Owner" | "Admin" | "User",
@@ -70,14 +72,14 @@ function transformPlatformUsers(accessList: Awaited<ReturnType<typeof getPlatfor
 function transformScopedPermissions(scopedPerms: Awaited<ReturnType<typeof getScopedPermissions>>): ScopedPermission[] {
   return scopedPerms.map(p => ({
     id: p.id,
-    resourceType: p.entityId.split(":")[0] || p.entityId,
-    resourceId: p.entityId.split(":")[1] || "*",
+    resourceType: p.entityTypeName,
+    resourceId: p.entityId,
     relation: p.relation,
     subject: {
       id: p.subjectId,
-      name: p.subjectId,
+      name: p.subjectName || p.subjectId,
       type: (p.subjectType.charAt(0).toUpperCase() + p.subjectType.slice(1)) as "User" | "Group" | "ApiKey",
-      description: p.subjectType,
+      description: p.subjectEmail || p.subjectType,
     }
   }));
 }
@@ -97,11 +99,7 @@ function transformApiKeys(keys: Awaited<ReturnType<typeof getClientApiKeys>>): A
 function transformAuthorizationModel(models: ClientAuthorizationModels): { dataModel: string; loadedEntityTypes: Set<string> } {
   const wrappedModel = {
     schema_version: "1.0",
-    types: {
-      user: {},
-      group: { relations: { member: "user" } },
-      ...models.types,
-    }
+    types: models.types
   };
   return {
     dataModel: JSON.stringify(wrappedModel, null, 2),
@@ -142,7 +140,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
     if (initialData) {
       return transformAuthorizationModel(initialData.models.models).dataModel;
     }
-    return "{}";
+    return JSON.stringify({ schema_version: "1.0", types: {} }, null, 2);
   });
 
   const [isInitialLoading, setIsInitialLoading] = React.useState(!initialData);
@@ -265,14 +263,35 @@ export function AccessControl({ initialData }: AccessControlProps) {
       return;
     }
 
-    const relation = roleToRelation[user.role];
-    if (!relation) return;
+    const newRelation = roleToRelation[user.role];
+    if (!newRelation) return;
 
+    const subjectType = user.isGroup ? "group" : "user";
+
+    // Ensure only one platform relation per subject by removing other relations first
+    const platformRelations: PlatformRelation[] = ["owner", "admin", "use"];
+    for (const rel of platformRelations) {
+      if (rel === newRelation) continue;
+      const revokeResult = await revokePlatformAccess(
+        clientId,
+        subjectType,
+        user.id,
+        rel,
+        false
+      );
+
+      // Ignore not-found errors; log other issues for debugging
+      if (!revokeResult.success && revokeResult.error && revokeResult.error !== "Access record not found") {
+        console.warn(`Failed to clean up relation ${rel} for ${subjectType}:${user.id}:`, revokeResult.error);
+      }
+    }
+
+    // Grant / upsert the requested relation
     const result = await grantPlatformAccess(
       clientId,
-      user.isGroup ? "group" : "user",
+      subjectType,
       user.id,
-      relation
+      newRelation
     );
 
     if (result.success) {
@@ -364,6 +383,22 @@ export function AccessControl({ initialData }: AccessControlProps) {
       return;
     }
 
+    // If editing existing permissions, revoke the originals before re-creating
+    const idsToRevoke = Array.from(
+      new Set(
+        permData
+          .map((p) => p.id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    for (const id of idsToRevoke) {
+      const revokeResult = await revokeScopedPermission(id);
+      if (!revokeResult.success && revokeResult.error && revokeResult.error !== "Permission not found") {
+        console.warn(`Failed to revoke existing scoped permission ${id}:`, revokeResult.error);
+      }
+    }
+
     for (const pData of permData) {
       if (!pData.subject || !pData.relation || !pData.resourceType || !pData.resourceId) continue;
 
@@ -419,14 +454,37 @@ export function AccessControl({ initialData }: AccessControlProps) {
         return;
       }
 
-      const newEntityTypes = new Set<string>();
-      const baseTypes = new Set(["user", "group"]);
+      const newEntityTypes = new Set<string>(Object.keys(parsed.types));
+      const oldEntityTypes = new Set<string>(loadedEntityTypesRef.current);
 
+      // Detect renames: types that disappeared and new types that appeared
+      const removedTypes = [...oldEntityTypes].filter(t => !newEntityTypes.has(t));
+      const addedTypes = [...newEntityTypes].filter(t => !oldEntityTypes.has(t));
+
+      // Try to match renames (when one removed, one added)
+      // This is a simple heuristic - if exactly one type was removed and one added,
+      // treat it as a rename
+      const renameMap = new Map<string, string>(); // oldName -> newName
+      if (removedTypes.length === 1 && addedTypes.length === 1) {
+        renameMap.set(removedTypes[0], addedTypes[0]);
+      }
+
+      // First, process renames to preserve entity type IDs
+      for (const [oldName, newName] of renameMap) {
+        console.log(`Renaming entity type: ${oldName} -> ${newName}`);
+        const result = await renameEntityType(clientId, oldName, newName);
+        if (result.success) {
+          // Rename succeeded - update our tracking
+          removedTypes.splice(removedTypes.indexOf(oldName), 1);
+          addedTypes.splice(addedTypes.indexOf(newName), 1);
+        } else {
+          console.error(`Failed to rename entity type:`, result.error);
+          // If rename failed, we'll try create+delete as fallback
+        }
+      }
+
+      // Now update/create all entity types
       for (const [typeName, typeDef] of Object.entries(parsed.types)) {
-        if (baseTypes.has(typeName)) continue;
-
-        newEntityTypes.add(typeName);
-
         const def = typeDef as {
           relations?: Record<string, string>;
           permissions?: Record<string, { relation: string }>
@@ -447,12 +505,15 @@ export function AccessControl({ initialData }: AccessControlProps) {
         }
       }
 
+      // Delete orphaned types (those not renamed and no longer in the model)
       for (const oldType of loadedEntityTypesRef.current) {
         if (!newEntityTypes.has(oldType)) {
           console.log(`Deleting orphaned entity type: ${oldType}`);
           const result = await deleteEntityTypeModel(clientId, oldType);
           if (!result.success) {
             console.error(`Failed to delete entity type ${oldType}:`, result.error);
+            // Show error if deletion failed (likely has scoped permissions)
+            setError(`Cannot delete '${oldType}': ${result.error}. Remove scoped permissions first.`);
           }
         }
       }
