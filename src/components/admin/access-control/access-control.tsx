@@ -6,6 +6,7 @@ import { PlatformAccess } from "./platform-access";
 import { ScopedPermissions } from "./scoped-permissions";
 import { ApiKeyManagement } from "./api-key-management";
 import { DataModelEditor } from "./data-model-editor";
+import { AccessControlGuideModal } from "./access-control-guide-modal";
 import { useClient } from "@/app/admin/clients/[id]/client-context";
 import type { PlatformUser } from "./add-member-modal";
 import type { ScopedPermission, ApiKey } from "./add-permission-modal";
@@ -148,6 +149,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
+  const [isGuideOpen, setIsGuideOpen] = React.useState(false);
 
   // Constraint state
   const [canEditModel, setCanEditModel] = React.useState(
@@ -480,6 +482,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
 
   return (
     <>
+      <AccessControlGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
       <Card>
         <CardContent className="p-6 relative">
           {isLoading && (
@@ -498,11 +501,16 @@ export function AccessControl({ initialData }: AccessControlProps) {
               </Alert>
             </div>
           )}
-          <div className="mb-6">
-            <h2 className="text-xl font-bold text-white">Access Control</h2>
-            <p className="text-sm text-gray-400 mt-1">
-              Manage platform access, fine-grained permissions, and API keys.
-            </p>
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-white">Access Control</h2>
+              <p className="text-sm text-gray-400 mt-1">
+                Manage platform access, fine-grained permissions, and API keys.
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" className="w-8 px-0" onClick={() => setIsGuideOpen(true)} title="Documentation & API Guide">
+              <Icon name="help" className="text-gray-400 hover:text-white transition-colors" />
+            </Button>
           </div>
 
           <Tabs

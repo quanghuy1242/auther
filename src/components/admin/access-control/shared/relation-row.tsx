@@ -1,16 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Input, Icon } from "@/components/ui";
+import { Input, Icon, Switch } from "@/components/ui";
 import { SubjectBadge, type Subject } from "./subject-badge";
 import { AddSubjectPopover } from "./add-subject-popover";
 
 interface RelationRowProps {
     name: string;
     subjects: Subject[];
+    isHierarchy?: boolean;
     availableRelations?: string[];
     onNameChange: (name: string) => void;
     onSubjectsChange: (subjects: Subject[]) => void;
+    onToggleHierarchy?: (isHierarchy: boolean) => void;
     onRemove: () => void;
     disabled?: boolean;
 }
@@ -18,9 +20,11 @@ interface RelationRowProps {
 export function RelationRow({
     name,
     subjects,
+    isHierarchy = false,
     availableRelations,
     onNameChange,
     onSubjectsChange,
+    onToggleHierarchy,
     onRemove,
     disabled,
 }: RelationRowProps) {
@@ -66,6 +70,21 @@ export function RelationRow({
                         onAdd={handleAddSubject}
                         availableRelations={availableRelations}
                         disabled={disabled}
+                    />
+                </div>
+            </div>
+
+            {/* Hierarchy Toggle */}
+            <div className="flex flex-col items-center space-y-1">
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider text-center w-full cursor-help" title="Allows subjects to be nested (e.g. group hierarchies)">
+                    Recursive?
+                </label>
+                <div className="h-8 flex items-center justify-center">
+                    <Switch
+                        checked={isHierarchy}
+                        onChange={(val) => !disabled && onToggleHierarchy?.(val)}
+                        disabled={disabled}
+                        className="scale-90"
                     />
                 </div>
             </div>

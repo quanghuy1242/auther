@@ -341,7 +341,7 @@ export class ApiKeyPermissionResolver {
     private relationGrantsPermission(
         grantedRelation: string,
         requiredRelation: string,
-        relations: Record<string, string[]>
+        relations: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>
     ): boolean {
         // Direct match
         if (grantedRelation === requiredRelation) {
@@ -349,8 +349,16 @@ export class ApiKeyPermissionResolver {
         }
 
         // Check if grantedRelation implies requiredRelation
-        // relations[requiredRelation] = array of relations that imply it
-        const impliedBy = relations[requiredRelation] || [];
+        // relations[requiredRelation] = definition of relations that imply it
+        const def = relations[requiredRelation];
+        let impliedBy: string[] = [];
+
+        if (Array.isArray(def)) {
+            impliedBy = def;
+        } else if (def && typeof def === "object" && def.union) {
+            impliedBy = def.union;
+        }
+
         if (impliedBy.includes(grantedRelation)) {
             return true;
         }

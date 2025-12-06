@@ -6,6 +6,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EntityListItem, RelationRow, PermissionRow, type Subject } from "./shared";
+import { DataModelGuideModal } from "./data-model-guide-modal";
 
 interface DataModelEditorProps {
   model: string;
@@ -17,6 +18,7 @@ interface DataModelEditorProps {
 interface Relation {
   name: string;
   subjects: string;
+  isHierarchy?: boolean;
 }
 
 interface Permission {
@@ -54,6 +56,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
   const [selectedEntityName, setSelectedEntityName] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [entityToDelete, setEntityToDelete] = React.useState<string | null>(null);
+  const [isGuideOpen, setIsGuideOpen] = React.useState(false);
 
   // Parse JSON into UI Entities
   const parseModel = React.useCallback((json: string) => {
@@ -63,15 +66,27 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
 
       if (parsed.types) {
         Object.entries(parsed.types as Record<string, {
-          relations?: Record<string, string>;
-          permissions?: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>;
+          relations: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>;
+          permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>;
         }>).forEach(([name, def]) => {
           const relations: Relation[] = [];
           const permissions: Permission[] = [];
 
           if (def.relations) {
-            Object.entries(def.relations).forEach(([relName, subjects]) => {
-              relations.push({ name: relName, subjects: String(subjects) });
+            Object.entries(def.relations).forEach(([relName, relDef]) => {
+              let subjectsStr = "";
+              let isHierarchy = false;
+
+              if (Array.isArray(relDef)) {
+                subjectsStr = relDef.join(" | ");
+              } else if (typeof relDef === "object" && relDef !== null) {
+                // Handle new object format
+                const typedDef = relDef as { union?: string[]; subjectParams?: { hierarchy?: boolean } };
+                if (typedDef.union) subjectsStr = typedDef.union.join(" | ");
+                if (typedDef.subjectParams?.hierarchy) isHierarchy = true;
+              }
+
+              relations.push({ name: relName, subjects: subjectsStr, isHierarchy });
             });
           }
 
@@ -107,17 +122,30 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
     try {
       const parsed = JSON.parse(model || "{}");
       const types: Record<string, {
-        relations: Record<string, string>;
+        relations: Record<string, string[] | { union: string[]; subjectParams?: { hierarchy: boolean } }>;
         permissions: Record<string, { relation: string }>;
       }> = {};
 
       newEntities.forEach(ent => {
-        const relations: Record<string, string> = {};
+        const relations: Record<string, string[] | { union: string[]; subjectParams?: { hierarchy: boolean } }> = {};
         const permissions: Record<string, { relation: string }> = {};
 
         ent.relations.forEach(rel => {
           if (rel.name.trim()) {
-            relations[rel.name] = rel.subjects;
+            const subjectsList = rel.subjects
+              ? rel.subjects.split("|").map(s => s.trim()).filter(Boolean)
+              : [];
+
+            if (rel.isHierarchy) {
+              // Save as object with hierarchy flag
+              relations[rel.name] = {
+                union: subjectsList,
+                subjectParams: { hierarchy: true }
+              };
+            } else {
+              // Save as simple array (legacy/default)
+              relations[rel.name] = subjectsList;
+            }
           }
         });
 
@@ -211,7 +239,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
     }));
   };
 
-  const handleUpdateRelation = (entityName: string, index: number, field: keyof Relation, value: string) => {
+  const handleUpdateRelation = (entityName: string, index: number, field: keyof Relation, value: string | boolean) => {
     updateEntities(prev => prev.map(e => {
       if (e.name === entityName) {
         const newRelations = [...e.relations];
@@ -289,6 +317,15 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
               value={mode}
               onChange={setMode}
             />
+            <div className="h-6 w-px bg-slate-700 mx-2" />
+            <Button
+              variant="secondary"
+              onClick={() => setIsGuideOpen(true)}
+              leftIcon="info"
+              className="h-8"
+            >
+              Guide
+            </Button>
             <Button
               onClick={handleSave}
               disabled={disabled}
@@ -302,17 +339,10 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
         }
       />
 
-      {mode === "visual" && (
-        <Alert variant="info" title="Defining Relations & Inheritance">
-          <p className="mb-2">
-            Relations define roles or actions. You can define inheritance by adding other relations.
-          </p>
-          <ul className="list-disc list-inside space-y-1 pl-1 text-xs">
-            <li><strong>Name:</strong> The relation name (e.g. <code>viewer</code>).</li>
-            <li><strong>Inherited Relations:</strong> Relations that imply this one. For example, if you add <code>editor</code> to the <code>viewer</code> relation, it means &quot;All Editors are also Viewers&quot;.</li>
-          </ul>
-        </Alert>
-      )}
+      <DataModelGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+      />
 
       {error && (
         <Alert variant="error" title="Parsing Error">
@@ -420,6 +450,8 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
                         ]}
                         onNameChange={(name) => handleUpdateRelation(selectedEntity.name, idx, "name", name)}
                         onSubjectsChange={(subjects) => handleUpdateRelation(selectedEntity.name, idx, "subjects", buildSubjectsString(subjects))}
+                        isHierarchy={rel.isHierarchy}
+                        onToggleHierarchy={(val) => handleUpdateRelation(selectedEntity.name, idx, "isHierarchy", val)}
                         onRemove={() => handleRemoveRelation(selectedEntity.name, idx)}
                         disabled={disabled}
                       />

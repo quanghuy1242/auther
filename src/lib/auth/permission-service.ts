@@ -121,9 +121,13 @@ export class PermissionService {
   }
 
   /**
-   * Recursively finds all subjects that the given subject "belongs to".
-   * e.g. User -> UserGroups -> ParentGroups
-   */
+  * Recursively finds all subjects that the given subject "belongs to".
+  * e.g. User -> UserGroups -> ParentGroups
+  * 
+  * NOW SUPPORTS DYNAMIC HIERARCHIES:
+  * Any relation marked with `subjectParams: { hierarchy: true }` in the
+  * authorization model will be traversed.
+  */
   private async expandSubjects(type: string, id: string): Promise<Array<{ type: string, id: string }>> {
     const subjects = new Map<string, { type: string, id: string }>();
     const queue = [{ type, id }];
@@ -131,7 +135,7 @@ export class PermissionService {
 
     subjects.set(key(type, id), { type, id });
 
-    // 1. Add legacy user groups
+    // 1. Add legacy user groups (for backward compatibility)
     if (type === "user") {
       const legacyGroups = await this.groupRepo.getUserGroups(id);
       for (const g of legacyGroups) {
@@ -143,21 +147,40 @@ export class PermissionService {
       }
     }
 
-    // 2. BFS for nested groups via access_tuples (relation='member')
+    // 2. BFS for nested membership
     while (queue.length > 0) {
       const current = queue.shift()!;
 
-      // Query for any group that lists 'current' as a 'member'
+      // Find all tuples where 'current' is the subject
       const memberships = await this.tupleRepo.findBySubject(current.type, current.id);
 
       for (const tuple of memberships) {
-        // We assume that if a tuple exists on a 'group' entity with relation 'member',
-        // it implies membership inheritance.
-        if (tuple.entityType === "group" && tuple.relation === "member") {
-          const k = key("group", tuple.entityId);
+        // Load model for the container entity (e.g., the group, team, or org)
+        const model = await this.modelService.getModel(tuple.entityType);
+
+        if (!model) continue;
+
+        // Check if the relation is hierarchical
+        const relDef = model.relations[tuple.relation];
+        let isHierarchy = false;
+
+        if (relDef && !Array.isArray(relDef) && typeof relDef === "object") {
+          if (relDef.subjectParams?.hierarchy) {
+            isHierarchy = true;
+          }
+        } else {
+          // Legacy fallback: hardcoded 'group:member' check for backward compatibility
+          // if the model hasn't been migrated to use the hierarchy flag yet.
+          if (tuple.entityType === "group" && tuple.relation === "member") {
+            isHierarchy = true;
+          }
+        }
+
+        if (isHierarchy) {
+          const k = key(tuple.entityType, tuple.entityId);
           if (!subjects.has(k)) {
-            subjects.set(k, { type: "group", id: tuple.entityId });
-            queue.push({ type: "group", id: tuple.entityId });
+            subjects.set(k, { type: tuple.entityType, id: tuple.entityId });
+            queue.push({ type: tuple.entityType, id: tuple.entityId });
           }
         }
       }
@@ -371,7 +394,7 @@ export class PermissionService {
   }
 
   private getImpliedRelations(
-    relationMap: Record<string, string[]>,
+    relationMap: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>,
     target: string
   ): string[] {
     const result = new Set<string>();
@@ -380,7 +403,16 @@ export class PermissionService {
 
     while (queue.length > 0) {
       const current = queue.shift()!;
-      const impliers = relationMap[current] || [];
+      // Find all relations that imply 'current'
+      const def = relationMap[current];
+      let impliers: string[] = [];
+
+      if (Array.isArray(def)) {
+        impliers = def;
+      } else if (def && typeof def === "object" && def.union) {
+        impliers = def.union;
+      }
+
       for (const implier of impliers) {
         if (!result.has(implier)) {
           result.add(implier);
@@ -394,18 +426,21 @@ export class PermissionService {
   private relationGrantsPermission(
     grantedRelation: string,
     requiredRelation: string,
-    relations: Record<string, string[]>
+    relations: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>
   ): boolean {
     // Direct match
     if (grantedRelation === requiredRelation) return true;
 
     // Check if grantedRelation implies requiredRelation
-    // Note: The `relations` map is inverted in some definitions (relation -> implied by), 
-    // but here we assume standard ReBAC: key = relation, value = list of relations that imply it.
-    // Actually, looking at `getImpliedRelations`, it seems `relations` maps `target` -> `impliers`.
-    // So `relations[requiredRelation]` gives us relations that imply `requiredRelation`.
+    const def = relations[requiredRelation];
+    let impliedBy: string[] = [];
 
-    const impliedBy = relations[requiredRelation] || [];
+    if (Array.isArray(def)) {
+      impliedBy = def;
+    } else if (def && typeof def === "object" && def.union) {
+      impliedBy = def.union;
+    }
+
     if (impliedBy.includes(grantedRelation)) return true;
 
     // Transitivity

@@ -7,7 +7,7 @@ import { z } from "zod";
 export const permissionSchema = z.object({
   relation: z.string().describe("The relation required to have this permission (e.g., 'viewer')"),
   description: z.string().optional().describe("Human-readable description of the permission"),
-  
+
   // ABAC Policy configuration
   policyEngine: z.enum(["lua"]).optional().describe("The policy engine to use for attribute-based checks"),
   policy: z.string().optional().describe("The source code of the policy script"),
@@ -27,15 +27,24 @@ export const permissionSchema = z.object({
  */
 export const authorizationModelSchema = z.object({
   relations: z.record(
-    z.string(), 
-    z.array(z.string())
-  ).describe("Map of relations to the list of relations that imply them (inheritance)"),
-  
+    z.string(),
+    z.union([
+      z.array(z.string()), // Legacy: Simple list of implied relations
+      z.object({
+        union: z.array(z.string()).optional(), // List of implied relations
+        subjectParams: z.object({
+          hierarchy: z.boolean().optional().describe("If true, this relation creates a parent-child hierarchy for recursive subject expansion")
+        }).optional()
+      })
+    ])
+  ).describe("Map of relations to their definition (simple array or object with metadata)"),
+
   permissions: z.record(
-    z.string(), 
+    z.string(),
     permissionSchema
   ).describe("Map of permission names to their definitions"),
 });
 
 export type PermissionDefinition = z.infer<typeof permissionSchema>;
 export type AuthorizationModelDefinition = z.infer<typeof authorizationModelSchema>;
+export type RelationDefinition = AuthorizationModelDefinition["relations"][string];
