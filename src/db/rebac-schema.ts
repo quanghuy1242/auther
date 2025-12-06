@@ -8,17 +8,20 @@ export const accessTuples = sqliteTable(
     // Entity (The object being accessed)
     entityType: text("entity_type").notNull(), // e.g., 'oauth_client', 'invoice', 'webhook'
     entityId: text("entity_id").notNull(), // Can be specific ID (e.g., 'client_123') or "*" for wildcard
-    
+
     // Relation (The access level/role)
     relation: text("relation").notNull(), // e.g., 'owner', 'admin', 'viewer', 'edit'
-    
+
     // Subject (The actor requesting access)
     subjectType: text("subject_type").notNull(), // 'user', 'group', 'apikey'
     subjectId: text("subject_id").notNull(), // The ID of the user, group, or api key
-    
+
     // Optional: if the subject is a set (e.g. 'group:admins#member') - standard Zanzibar pattern
     subjectRelation: text("subject_relation"),
-    
+
+    // Optional: Lua script for per-grant ABAC conditions
+    condition: text("condition"),
+
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -30,10 +33,10 @@ export const accessTuples = sqliteTable(
     // Optimize for common lookups:
     // 1. "Can Subject S perform Action R on Entity E?" -> (entity, relation, subject)
     index("access_tuples_entity_relation_subject_idx").on(
-      table.entityType, 
-      table.entityId, 
-      table.relation, 
-      table.subjectType, 
+      table.entityType,
+      table.entityId,
+      table.relation,
+      table.subjectType,
       table.subjectId
     ),
     // 2. "What permissions does Subject S have?" -> (subject)
@@ -72,14 +75,14 @@ export const accessTuples = sqliteTable(
  * }
  */
 export const authorizationModels = sqliteTable(
-  "authorization_models", 
+  "authorization_models",
   {
     id: text("id").primaryKey(),
     // The entity type this model describes (e.g., "oauth_client", "invoice")
     entityType: text("entity_type").notNull().unique(),
     // JSON definition of relations and permissions
     definition: text("definition", { mode: "json" }).notNull(),
-    
+
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

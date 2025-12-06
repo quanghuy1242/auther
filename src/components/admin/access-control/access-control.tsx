@@ -371,7 +371,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
         pData.resourceId === "*" ? "*" : pData.resourceId,
         pData.relation,
         pData.subject.type.toLowerCase() as "user" | "group" | "apikey",
-        pData.subject.id
+        pData.subject.id,
+        pData.condition // Optional Lua script for per-grant ABAC
       );
 
       if (!result.success) {

@@ -15,6 +15,7 @@ import {
 } from "@/lib/repositories";
 import { updateClientPolicySchema } from "@/schemas/clients";
 import { createGroupSchema } from "@/schemas/groups";
+import { validateLuaSyntax, analyzeLuaPolicy, testLuaPolicy } from "@/lib/auth/lua-validator";
 
 export interface AssignUserResult {
   success: boolean;
@@ -835,7 +836,7 @@ import type { AuthorizationModelDefinition } from "@/schemas/rebac";
 export interface ClientAuthorizationModels {
   types: Record<string, {
     relations: Record<string, string>;
-    permissions: Record<string, { relation: string }>;
+    permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>;
   }>;
 }
 
@@ -863,10 +864,14 @@ export async function getAuthorizationModels(
           ])
         ),
         permissions: Object.fromEntries(
-          Object.entries(def.permissions || {}).map(([perm, permDef]) => [
-            perm,
-            { relation: permDef.relation }
-          ])
+          Object.entries(def.permissions || {}).map(([perm, permDef]) => {
+            const result: { relation: string; policyEngine?: "lua"; policy?: string } = {
+              relation: permDef.relation
+            };
+            if (permDef.policyEngine) result.policyEngine = permDef.policyEngine;
+            if (permDef.policy) result.policy = permDef.policy;
+            return [perm, result];
+          })
         ),
       };
     }
@@ -890,7 +895,7 @@ export async function updateEntityTypeModel(
   clientId: string,
   entityTypeName: string,
   relations: Record<string, string>,
-  permissions: Record<string, { relation: string }>
+  permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>
 ): Promise<AssignUserResult & { warnings?: string[] }> {
   try {
     await requireAuth();
@@ -913,14 +918,34 @@ export async function updateEntityTypeModel(
         ])
       ),
       permissions: Object.fromEntries(
-        Object.entries(permissions).map(([perm, def]) => [
-          perm,
-          { relation: def.relation }
-        ])
+        Object.entries(permissions).map(([perm, def]) => {
+          const permDef: { relation: string; policyEngine?: "lua"; policy?: string } = {
+            relation: def.relation
+          };
+          if (def.policyEngine && def.policy) {
+            permDef.policyEngine = def.policyEngine;
+            permDef.policy = def.policy;
+          }
+          return [perm, permDef];
+        })
       ),
     };
 
     const fullEntityType = `client_${clientId}:${entityTypeName}`;
+
+    // Validate all Lua policies before saving
+    // This is a server-side safety check - even if UI validation fails or is bypassed
+    for (const [permName, permDef] of Object.entries(permissions)) {
+      if (permDef.policy && permDef.policyEngine === "lua") {
+        const syntaxResult = await validateLuaSyntax(permDef.policy);
+        if (!syntaxResult.valid) {
+          return {
+            success: false,
+            error: `Invalid Lua policy for permission "${permName}": ${syntaxResult.error}`,
+          };
+        }
+      }
+    }
 
     // Pre-validate (C3 check)
     const validation = await authorizationModelRepository.preValidateUpdate(
@@ -941,6 +966,20 @@ export async function updateEntityTypeModel(
       entityTypeName,
       definition
     );
+
+    // Save policy versions for tracking
+    const { abacRepository } = await import("@/lib/repositories/abac-repository");
+    for (const [permName, permDef] of Object.entries(permissions)) {
+      if (permDef.policy && permDef.policyEngine === "lua") {
+        abacRepository.savePolicyVersion({
+          entityType: fullEntityType,
+          permissionName: permName,
+          policyLevel: "permission",
+          policyScript: permDef.policy,
+          changedByType: "user",
+        }).catch(err => console.error("Failed to save policy version:", err));
+      }
+    }
 
     return {
       success: true,
@@ -1040,6 +1079,7 @@ interface ScopedPermissionEntry {
   relation: string;
   subjectType: "user" | "group" | "apikey";
   subjectId: string;
+  condition?: string;
   createdAt: Date;
 }
 
@@ -1060,6 +1100,7 @@ export async function getScopedPermissions(clientId: string): Promise<ScopedPerm
       relation: t.relation,
       subjectType: t.subjectType as "user" | "group" | "apikey",
       subjectId: t.subjectId,
+      condition: t.condition ?? undefined,
       createdAt: t.createdAt,
     }));
   } catch (error) {
@@ -1079,7 +1120,8 @@ export async function grantScopedPermission(
   entityId: string, // e.g., "*" for wildcard or specific ID
   relation: string,
   subjectType: "user" | "group" | "apikey",
-  subjectId: string
+  subjectId: string,
+  condition?: string // Optional Lua script for per-grant ABAC
 ): Promise<AssignUserResult> {
   try {
     await requireAuth();
@@ -1113,12 +1155,25 @@ export async function grantScopedPermission(
       };
     }
 
-    const { created } = await tupleRepository.createIfNotExists({
+    // Validate Lua condition before saving
+    // Server-side safety check - prevents invalid scripts from being stored
+    if (condition) {
+      const syntaxResult = await validateLuaSyntax(condition);
+      if (!syntaxResult.valid) {
+        return {
+          success: false,
+          error: `Invalid Lua condition: ${syntaxResult.error}`,
+        };
+      }
+    }
+
+    const { created, tuple } = await tupleRepository.createIfNotExists({
       entityType: fullEntityType,
       entityId,
       relation,
       subjectType,
       subjectId,
+      condition: condition || undefined,
     });
 
     if (!created) {
@@ -1126,6 +1181,19 @@ export async function grantScopedPermission(
         success: true,
         error: "Permission already exists",
       };
+    }
+
+    // Save tuple-level policy version for tracking
+    if (condition && tuple) {
+      const { abacRepository } = await import("@/lib/repositories/abac-repository");
+      abacRepository.savePolicyVersion({
+        entityType: fullEntityType,
+        permissionName: relation,
+        policyLevel: "tuple",
+        tupleId: tuple.id,
+        policyScript: condition,
+        changedByType: "user",
+      }).catch(err => console.error("Failed to save policy version:", err));
     }
 
     return { success: true };
@@ -1320,5 +1388,63 @@ export async function checkScopedPermissionsForUser(
   } catch (error) {
     console.error("checkScopedPermissionsForUser error:", error);
     return { count: 0, permissions: [] };
+  }
+}
+
+// ============================================================================
+// ABAC Policy Validation & Testing
+// ============================================================================
+
+/**
+ * Validate Lua policy syntax without executing.
+ */
+export async function validatePolicyScript(
+  script: string
+): Promise<{ valid: boolean; error?: string; warnings?: string[]; suggestions?: string[] }> {
+  try {
+    const syntaxResult = await validateLuaSyntax(script);
+    const analysis = analyzeLuaPolicy(script);
+
+    if (!syntaxResult.valid) {
+      return {
+        valid: false,
+        error: syntaxResult.error,
+        warnings: analysis.warnings,
+        suggestions: analysis.suggestions,
+      };
+    }
+
+    return {
+      valid: true,
+      warnings: analysis.warnings.length > 0 ? analysis.warnings : undefined,
+      suggestions: analysis.suggestions.length > 0 ? analysis.suggestions : undefined,
+    };
+  } catch (error) {
+    console.error("validatePolicyScript error:", error);
+    return {
+      valid: false,
+      error: error instanceof Error ? error.message : "Validation failed",
+    };
+  }
+}
+
+/**
+ * Test a Lua policy with sample context.
+ */
+export async function testPolicyScript(
+  script: string,
+  context: Record<string, unknown>
+): Promise<{ result: boolean; executionTimeMs: number; error?: string }> {
+  try {
+    await requireAuth();
+
+    return await testLuaPolicy(script, context);
+  } catch (error) {
+    console.error("testPolicyScript error:", error);
+    return {
+      result: false,
+      executionTimeMs: 0,
+      error: error instanceof Error ? error.message : "Test failed",
+    };
   }
 }

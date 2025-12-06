@@ -3,6 +3,7 @@ import { AuthorizationModelService } from "@/lib/auth/authorization-model-servic
 import { UserGroupRepository } from "@/lib/repositories/user-group-repository";
 import { UserRepository } from "@/lib/repositories/user-repository";
 import { LuaPolicyEngine } from "@/lib/auth/policy-engine";
+import { abacRepository } from "@/lib/repositories/abac-repository";
 
 export class PermissionService {
   private tupleRepo: TupleRepository;
@@ -80,7 +81,14 @@ export class PermissionService {
           });
 
           if (direct) {
-            return await this.checkPolicy(permDef.policy, permDef.policyEngine, context);
+            // Priority: tuple-level condition > permission-level policy
+            return await this.evaluatePolicy(direct.condition, permDef, context, {
+              entityType,
+              entityId,
+              permission,
+              subjectType,
+              subjectId,
+            });
           }
 
           // B. Wildcard Match
@@ -93,7 +101,14 @@ export class PermissionService {
           });
 
           if (wildcard) {
-            return await this.checkPolicy(permDef.policy, permDef.policyEngine, context);
+            // Priority: tuple-level condition > permission-level policy
+            return await this.evaluatePolicy(wildcard.condition, permDef, context, {
+              entityType,
+              entityId,
+              permission,
+              subjectType,
+              subjectId,
+            });
           }
         }
       }
@@ -219,6 +234,107 @@ export class PermissionService {
   }
 
   /**
+   * Resolve all permissions for a user WITH ABAC metadata.
+   * Returns permissions AND which ones require runtime ABAC evaluation.
+   * 
+   * USE THIS FOR JWT GENERATION so consuming services know when to
+   * call POST /api/auth/check-permission vs using JWT permissions directly.
+   * 
+   * A permission requires ABAC evaluation if:
+   * 1. The permission has a policy in the authorization model (permission-level ABAC)
+   * 2. The tuple granting it has a condition attached (tuple-level ABAC)
+   * 
+   * @param userId - The user ID to resolve permissions for
+   * @returns {permissions, abac_required} for JWT payload
+   */
+  async resolveAllPermissionsWithABACInfo(userId: string): Promise<{
+    permissions: Record<string, string[]>;
+    abac_required: Record<string, string[]>;
+  }> {
+    try {
+      const permissions: Record<string, string[]> = {};
+      const abac_required: Record<string, string[]> = {};
+
+      // 1. Expand subjects (User + Groups)
+      const subjects = await this.expandSubjects("user", userId);
+
+      // 2. Find all tuples for these subjects
+      const tuples = await this.tupleRepo.findBySubjects(subjects);
+
+      if (tuples.length === 0) {
+        return { permissions, abac_required };
+      }
+
+      // 3. Group tuples by entity type
+      const tuplesByEntityType = new Map<string, typeof tuples>();
+      for (const tuple of tuples) {
+        if (tuple.entityType === "group" && tuple.relation === "member") continue;
+        const existing = tuplesByEntityType.get(tuple.entityType) || [];
+        existing.push(tuple);
+        tuplesByEntityType.set(tuple.entityType, existing);
+      }
+
+      // 4. Resolve permissions with ABAC info
+      for (const [entityType, entityTuples] of tuplesByEntityType) {
+        const model = await this.modelService.getModel(entityType);
+
+        for (const tuple of entityTuples) {
+          const entityKey = tuple.entityId === "*"
+            ? entityType
+            : `${entityType}:${tuple.entityId}`;
+
+          if (!permissions[entityKey]) {
+            permissions[entityKey] = [];
+          }
+          if (!abac_required[entityKey]) {
+            abac_required[entityKey] = [];
+          }
+
+          // Check if tuple has a condition (tuple-level ABAC)
+          const tupleHasCondition = !!tuple.condition;
+
+          if (model?.permissions) {
+            for (const [permName, permDef] of Object.entries(model.permissions)) {
+              if (this.relationGrantsPermission(tuple.relation, permDef.relation, model.relations)) {
+                if (!permissions[entityKey].includes(permName)) {
+                  permissions[entityKey].push(permName);
+
+                  // Check if permission has ABAC policy (permission-level ABAC)
+                  const permissionHasPolicy = !!permDef.policy && permDef.policyEngine === "lua";
+
+                  if ((permissionHasPolicy || tupleHasCondition) && !abac_required[entityKey].includes(permName)) {
+                    abac_required[entityKey].push(permName);
+                  }
+                }
+              }
+            }
+          }
+
+          // Include raw relation
+          if (!permissions[entityKey].includes(tuple.relation)) {
+            permissions[entityKey].push(tuple.relation);
+            if (tupleHasCondition && !abac_required[entityKey].includes(tuple.relation)) {
+              abac_required[entityKey].push(tuple.relation);
+            }
+          }
+        }
+      }
+
+      // Clean up empty entries
+      for (const key of Object.keys(abac_required)) {
+        if (abac_required[key].length === 0) {
+          delete abac_required[key];
+        }
+      }
+
+      return { permissions, abac_required };
+    } catch (error) {
+      console.error("PermissionService.resolveAllPermissionsWithABACInfo error:", error);
+      return { permissions: {}, abac_required: {} };
+    }
+  }
+
+  /**
    * Get the highest platform access level for a user on a client.
    * Returns: 'owner' | 'admin' | 'use' | null
    * Supports group inheritance.
@@ -301,14 +417,74 @@ export class PermissionService {
 
     return false;
   }
+  /**
+   * Evaluate ABAC policy with priority: tuple-level condition > permission-level policy.
+   * Logs all policy evaluations to audit log.
+   * 
+   * @param tupleCondition - The Lua script from the tuple (if any)
+   * @param permDef - The permission definition from the authorization model
+   * @param context - Runtime context for ABAC evaluation
+   * @param auditInfo - Info for audit logging
+   */
+  private async evaluatePolicy(
+    tupleCondition: string | null | undefined,
+    permDef: { policy?: string; policyEngine?: "lua" },
+    context: Record<string, unknown>,
+    auditInfo?: {
+      entityType: string;
+      entityId: string;
+      permission: string;
+      subjectType: string;
+      subjectId: string;
+    }
+  ): Promise<boolean> {
+    const startTime = performance.now();
+    let policySource: "tuple" | "permission" | null = null;
+    let policyScript: string | undefined;
+    let result: boolean;
+    let errorMessage: string | undefined;
 
-  private async checkPolicy(policy: string | undefined, engineType: "lua" | undefined, context: Record<string, unknown>): Promise<boolean> {
-    if (!policy) return true;
-
-    if (engineType === "lua") {
-      return this.policyEngine.execute(policy, context);
+    try {
+      // Priority 1: Use tuple-level condition if present
+      if (tupleCondition) {
+        policySource = "tuple";
+        policyScript = tupleCondition;
+        result = await this.policyEngine.execute(tupleCondition, context);
+      }
+      // Priority 2: Fall back to permission-level policy
+      else if (permDef.policy && permDef.policyEngine === "lua") {
+        policySource = "permission";
+        policyScript = permDef.policy;
+        result = await this.policyEngine.execute(permDef.policy, context);
+      }
+      // No policy defined - allow access
+      else {
+        result = true;
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+      result = false;
     }
 
-    return true;
+    const executionTimeMs = Math.round(performance.now() - startTime);
+
+    // Log to audit if a policy was actually evaluated
+    if (policySource && auditInfo) {
+      abacRepository.logPolicyEvaluation({
+        entityType: auditInfo.entityType,
+        entityId: auditInfo.entityId,
+        permission: auditInfo.permission,
+        subjectType: auditInfo.subjectType,
+        subjectId: auditInfo.subjectId,
+        policySource,
+        policyScript,
+        result: errorMessage ? "error" : result ? "allowed" : "denied",
+        errorMessage,
+        context,
+        executionTimeMs,
+      }).catch(err => console.error("Failed to log ABAC audit:", err));
+    }
+
+    return result;
   }
 }

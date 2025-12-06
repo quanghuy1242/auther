@@ -122,13 +122,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
 
     const userId = apiKeyRecord.userId;
 
-    // Step 2: Resolve permissions from ReBAC tuples (this is our ONLY permission source)
+    // Step 2: Resolve permissions from ReBAC tuples with ABAC metadata
+    // The abac_required field tells consuming services which permissions need
+    // runtime ABAC evaluation via POST /api/auth/check-permission
     let permissions: Record<string, string[]> = {};
+    let abac_required: Record<string, string[]> = {};
     try {
-      permissions = await apiKeyPermissionResolver.resolvePermissions(apiKeyRecord.id);
+      const result = await apiKeyPermissionResolver.resolvePermissionsWithABACInfo(apiKeyRecord.id);
+      permissions = result.permissions;
+      abac_required = result.abac_required;
       console.info("[api-key-exchange] ReBAC permissions resolved", {
         apiKeyId: apiKeyRecord.id,
         permissionCount: Object.keys(permissions).length,
+        abacRequiredCount: Object.keys(abac_required).length,
       });
     } catch (error) {
       console.error("[api-key-exchange] Failed to resolve ReBAC permissions", {
@@ -206,6 +212,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
         // Custom claims
         scope: "api_key_exchange",
         permissions: permissions || {},
+        // ABAC metadata: permissions listed here require runtime ABAC evaluation
+        // Consuming services MUST call POST /api/auth/check-permission for these
+        // with the actual resource context (e.g., invoice.amount) to get access decision
+        abac_required: Object.keys(abac_required).length > 0 ? abac_required : undefined,
         apiKeyId: apiKeyRecord?.id,
       })
         .setProtectedHeader({

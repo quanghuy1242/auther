@@ -230,8 +230,14 @@ export const auth = betterAuth({
         try {
           const { PermissionService } = await import("@/lib/auth/permission-service");
           const permissionService = new PermissionService();
-          const permissions = await permissionService.resolveAllPermissions(user.id);
+          // Use ABAC-aware method so consuming services know which permissions
+          // require runtime ABAC evaluation via POST /api/auth/check-permission
+          const { permissions, abac_required } = await permissionService.resolveAllPermissionsWithABACInfo(user.id);
           token.permissions = permissions;
+          // Only include abac_required if there are any ABAC policies
+          if (Object.keys(abac_required).length > 0) {
+            token.abac_required = abac_required;
+          }
         } catch (error) {
           console.error("Failed to inject permissions into JWT:", error);
         }
@@ -242,6 +248,10 @@ export const auth = betterAuth({
     async session({ session, token }: { session: any, token: any }) {
       if (token && token.permissions) {
         session.user.permissions = token.permissions;
+      }
+      // Also pass abac_required to session so client knows which permissions need ABAC
+      if (token && token.abac_required) {
+        session.user.abac_required = token.abac_required;
       }
       return session;
     },

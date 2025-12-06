@@ -140,3 +140,15 @@ Transitioning to ReBAC represents a fundamental shift. We must ensure existing f
     *   Write script to migrate `userClientAccess`, `groupClientAccess`, and `allowedResources` to Tuples.
     *   Verify data integrity.
     *   Drop legacy tables/columns.
+
+## TODO: Remaining ABAC UI Features
+
+The following features have backend support but lack UI components:
+
+1.  **Audit Logs Viewer**
+    *   Create a server action `getAuditLogs()` to query `abac_audit_logs` table.
+    *   Build an admin UI component to display policy evaluation history (entity, permission, result, execution time, context snapshot).
+
+2.  **Policy Version History**
+    *   Create a server action `getPolicyVersions()` to query `policy_versions` table.
+    *   Build an admin UI component to view historical policy versions with diffs.

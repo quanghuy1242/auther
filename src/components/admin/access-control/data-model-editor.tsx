@@ -22,6 +22,8 @@ interface Relation {
 interface Permission {
   name: string;
   requiredRelation: string;
+  policyEngine?: "lua";
+  policy?: string;
 }
 
 interface Entity {
@@ -62,7 +64,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
       if (parsed.types) {
         Object.entries(parsed.types as Record<string, {
           relations?: Record<string, string>;
-          permissions?: Record<string, { relation: string }>;
+          permissions?: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>;
         }>).forEach(([name, def]) => {
           const relations: Relation[] = [];
           const permissions: Permission[] = [];
@@ -75,7 +77,12 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
 
           if (def.permissions) {
             Object.entries(def.permissions).forEach(([permName, permDef]) => {
-              permissions.push({ name: permName, requiredRelation: permDef.relation || "" });
+              permissions.push({
+                name: permName,
+                requiredRelation: permDef.relation || "",
+                policyEngine: permDef.policyEngine,
+                policy: permDef.policy,
+              });
             });
           }
 
@@ -116,7 +123,14 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
 
         ent.permissions.forEach(perm => {
           if (perm.name.trim()) {
-            permissions[perm.name] = { relation: perm.requiredRelation };
+            const permDef: { relation: string; policyEngine?: "lua"; policy?: string } = {
+              relation: perm.requiredRelation
+            };
+            if (perm.policyEngine && perm.policy) {
+              permDef.policyEngine = perm.policyEngine;
+              permDef.policy = perm.policy;
+            }
+            permissions[perm.name] = permDef;
           }
         });
 
@@ -235,7 +249,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
     entityName: string,
     index: number,
     field: keyof Permission,
-    value: string
+    value: string | undefined
   ) => {
     updateEntities(prev => prev.map(e => {
       if (e.name === entityName) {
@@ -280,7 +294,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
               disabled={disabled}
               leftIcon="save"
               variant="primary"
-              className="h-[38px]"
+              className="h-8"
             >
               Save Changes
             </Button>
@@ -432,9 +446,13 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
                           key={idx}
                           name={perm.name}
                           requiredRelation={perm.requiredRelation}
+                          policyEnabled={!!perm.policyEngine}
+                          policy={perm.policy || ""}
                           availableRelations={selectedEntity.relations.map(r => r.name).filter(n => n.trim())}
                           onNameChange={(name) => handleUpdatePermission(selectedEntity.name, idx, "name", name)}
                           onRelationChange={(relation) => handleUpdatePermission(selectedEntity.name, idx, "requiredRelation", relation)}
+                          onPolicyEnabledChange={(enabled) => handleUpdatePermission(selectedEntity.name, idx, "policyEngine", enabled ? "lua" : undefined)}
+                          onPolicyChange={(policy) => handleUpdatePermission(selectedEntity.name, idx, "policy", policy)}
                           onRemove={() => handleRemovePermission(selectedEntity.name, idx)}
                           disabled={disabled}
                         />

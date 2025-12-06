@@ -10,11 +10,14 @@ import {
   Textarea,
   Icon,
   Tabs,
-  Badge
+  Badge,
+  Alert
 } from "@/components/ui";
 import { UserGroupPicker } from "@/components/ui/user-group-picker";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SubjectCard } from "@/components/ui/subject-card";
+import { validatePolicyScript } from "@/app/admin/clients/[id]/access/actions";
+import { TestPolicyModal } from "./shared/test-policy-modal";
 
 // Types matching the system
 export interface ScopedPermission {
@@ -90,6 +93,14 @@ export function AddPermissionModal({
 
   // Picker State
   const [isUserGroupPickerOpen, setIsUserGroupPickerOpen] = React.useState(false);
+
+  // Script validation state
+  const [scriptErrors, setScriptErrors] = React.useState<Record<string, string | null>>({});
+  const [isValidatingScript, setIsValidatingScript] = React.useState<string | null>(null);
+  const scriptValidationTimeouts = React.useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Test modal state - just track which rule is being tested
+  const [testModalKey, setTestModalKey] = React.useState<string | null>(null);
 
   const availableResourceTypes = React.useMemo(() => Object.keys(resourceConfig), [resourceConfig]);
 
@@ -239,9 +250,34 @@ export function AddPermissionModal({
   const isFormValid = selectedSubject && rules.every(r => {
     if (r.scopeType === "global") return !!r.relation;
     if (r.scopeType === "specific") return !!r.relation && !!r.resourceId;
-    if (r.scopeType === "script") return !!r.relation && !!r.resourceId;
+    if (r.scopeType === "script") return !!r.relation && !!r.resourceId && !scriptErrors[r.key];
     return false;
   });
+
+  // Debounced script validation
+  const validateScript = React.useCallback((ruleKey: string, script: string) => {
+    // Clear existing timeout
+    if (scriptValidationTimeouts.current[ruleKey]) {
+      clearTimeout(scriptValidationTimeouts.current[ruleKey]);
+    }
+
+    if (!script.trim()) {
+      setScriptErrors(prev => ({ ...prev, [ruleKey]: null }));
+      return;
+    }
+
+    scriptValidationTimeouts.current[ruleKey] = setTimeout(async () => {
+      setIsValidatingScript(ruleKey);
+      try {
+        const result = await validatePolicyScript(script);
+        setScriptErrors(prev => ({ ...prev, [ruleKey]: result.valid ? null : (result.error ?? "Invalid script") }));
+      } catch {
+        setScriptErrors(prev => ({ ...prev, [ruleKey]: "Validation failed" }));
+      } finally {
+        setIsValidatingScript(null);
+      }
+    }, 500);
+  }, []);
 
   return (
     <>
@@ -388,12 +424,37 @@ export function AddPermissionModal({
                             content: (
                               <div className="pt-2 space-y-2 min-h-[120px]">
                                 <Textarea
-                                  placeholder="return resource.amount < 1000"
+                                  placeholder="return context.resource.amount < 1000"
                                   value={rule.scopeType === "script" ? rule.resourceId : ""}
-                                  onChange={(e) => updateRule(rule.key, { resourceId: e.target.value })}
-                                  className="font-mono text-xs h-20"
+                                  onChange={(e) => {
+                                    updateRule(rule.key, { resourceId: e.target.value });
+                                    validateScript(rule.key, e.target.value);
+                                  }}
+                                  className={`font-mono text-xs h-20 ${scriptErrors[rule.key] ? 'border-red-500' : ''}`}
                                 />
-                                <p className="text-[10px] text-gray-500">Lua script. Available context: <code className="bg-slate-800 px-1 rounded">resource</code>, <code className="bg-slate-800 px-1 rounded">user</code>.</p>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    {isValidatingScript === rule.key && (
+                                      <p className="text-[10px] text-gray-500 animate-pulse">Validating...</p>
+                                    )}
+                                    {scriptErrors[rule.key] && (
+                                      <Alert variant="error" className="py-1 px-2 text-[10px]">
+                                        {scriptErrors[rule.key]}
+                                      </Alert>
+                                    )}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-[10px] h-6 px-2 ml-2"
+                                    onClick={() => setTestModalKey(rule.key)}
+                                    disabled={!rule.resourceId.trim() || !!scriptErrors[rule.key]}
+                                  >
+                                    <Icon name="play_arrow" size="sm" className="mr-1" />
+                                    Test
+                                  </Button>
+                                </div>
+                                <p className="text-[10px] text-gray-500">Lua script. Available: <code className="bg-slate-800 px-1 rounded">context.resource</code>, <code className="bg-slate-800 px-1 rounded">context.user</code>. Return <code className="bg-slate-800 px-1 rounded">true</code> to allow.</p>
                               </div>
                             )
                           }
@@ -435,6 +496,13 @@ export function AddPermissionModal({
             avatarUrl: 'image' in item ? item.image || undefined : undefined,
           });
         }}
+      />
+
+      {/* Test Script Modal */}
+      <TestPolicyModal
+        isOpen={!!testModalKey}
+        onClose={() => setTestModalKey(null)}
+        script={testModalKey ? (rules.find(r => r.key === testModalKey)?.resourceId ?? "") : ""}
       />
     </>
   );

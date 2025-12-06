@@ -10,6 +10,7 @@ export interface Tuple {
   subjectType: string;
   subjectId: string;
   subjectRelation?: string | null;
+  condition?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

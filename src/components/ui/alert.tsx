@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils/cn"
 import { Icon } from "./icon"
 
 const alertVariants = cva(
-  "relative w-full rounded-lg border px-4 py-4 text-sm flex gap-3",
+  "relative w-full rounded-lg border px-4 py-4 text-sm flex gap-3 items-center",
   {
     variants: {
       variant: {
@@ -42,12 +42,12 @@ const Alert = React.forwardRef<
     className={cn(alertVariants({ variant }), className)}
     {...props}
   >
-    <div className="flex-shrink-0 mt-0.5">
+    <div className="flex-shrink-0 mt-1">
       <Icon name={iconMap[variant || "default"] || "info"} size="sm" className="h-5 w-5" />
     </div>
     <div className="flex-1">
-        {title && <h5 className="mb-1 font-medium leading-none tracking-tight">{title}</h5>}
-        <div className="text-sm [&_p]:leading-relaxed">{children}</div>
+      {title && <h5 className="mb-1 font-medium leading-none tracking-tight">{title}</h5>}
+      <div className="text-sm [&_p]:leading-relaxed">{children}</div>
     </div>
     {onClose && (
       <button
