@@ -205,3 +205,41 @@ stack traceback:
   Status: ✅ PASS
 
 --- DEMO 10 Complete ---
+========================================
+11. TRACING TEST
+========================================
+✓ Created test scripts: 0de2a789-e4cb-46ff-9c23-8d4d7894b182, 1138532a-95bb-4dbf-a158-2d04bbba863f
+
+--- Test 1: Success Path Tracing ---
+✓ Pipeline executed successfully with traced data
+✓ Trace created: dce8e2fb-0ee4-4abb-b12c-ece926e2e2ba
+  Status: success
+  Duration: 28ms
+  User ID: user_123
+  Request IP: 127.0.0.1
+✓ Span created: Tracing Success (success)
+  Script ID: 0de2a789-e4cb-46ff-9c23-8d4d7894b182
+  Duration: 21ms
+
+--- Test 2: Blocked Path Tracing ---
+✓ Pipeline correctly blocked
+✓ Blocked trace created: a2bd48d8-4301-40b5-8339-d03a20fba05f
+  Status: blocked
+  Status Message: Blocked for tracing test
+✓ Blocked span: Tracing Blocker (blocked)
+
+--- Test 3: Multi-Layer DAG Tracing ---
+✓ DAG pipeline executed successfully
+✓ DAG trace: 65de624c-a11e-42d0-9478-1fc139d8b6a4
+  Total spans: 2
+  - Layer 0: DAG Layer 1 (success)
+  - Layer 1: DAG Layer 2 (success)
+✓ Both layers traced correctly
+
+--- Cleanup ---
+✓ Test scripts cleaned up
+
+========================================
+✓ ALL TRACING TESTS PASSED
+========================================
+

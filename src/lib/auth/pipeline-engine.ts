@@ -34,12 +34,17 @@ export class PipelineEngine {
      */
     async executeTrigger(
         triggerEvent: string,
-        context: Record<string, unknown>
+        context: Record<string, unknown>,
+        metadata?: { userId?: string; requestIp?: string }
     ): Promise<PipelineResult> {
+        // === TRACING: Start trace ===
+        const traceId = crypto.randomUUID();
+        const traceStartedAt = new Date();
+
         // 1. Get Execution Plan (DAG Layers: string[][])
         const plan = await pipelineRepository.getExecutionPlan(triggerEvent);
 
-        // If no plan exists, we default to ALLOW
+        // If no plan exists, we default to ALLOW (no trace needed)
         if (!plan || plan.length === 0) {
             return { allowed: true };
         }
@@ -48,7 +53,7 @@ export class PipelineEngine {
         if (plan.length > this.MAX_CHAIN_DEPTH) {
             return {
                 allowed: false,
-                error: `Pipeline exceeds max chain depth (${this.MAX_CHAIN_DEPTH} layers allowed, got ${plan.length})`
+                error: `Pipeline exceeds max chain depth(${this.MAX_CHAIN_DEPTH} layers allowed, got ${plan.length})`
             };
         }
 
@@ -57,7 +62,7 @@ export class PipelineEngine {
             if (plan[i].length > this.MAX_PARALLEL_NODES) {
                 return {
                     allowed: false,
-                    error: `Layer ${i + 1} exceeds max parallel nodes (${this.MAX_PARALLEL_NODES} allowed, got ${plan[i].length})`
+                    error: `Layer ${i + 1} exceeds max parallel nodes(${this.MAX_PARALLEL_NODES} allowed, got ${plan[i].length})`
                 };
             }
         }
@@ -69,20 +74,64 @@ export class PipelineEngine {
         // Output history for scripts to access specific node results: context.outputs['node_id']
         const outputs: Record<string, Record<string, unknown>> = {};
 
+        // === TRACING: Collect spans ===
+        const spans: Array<{
+            id: string;
+            scriptId: string;
+            name: string;
+            layerIndex: number;
+            parallelIndex: number;
+            status: string;
+            statusMessage?: string;
+            startedAt: Date;
+            endedAt?: Date;
+            durationMs?: number;
+            attributes?: string;
+        }> = [];
+
         // 2. Iterate through LAYERS (Sequential Layers)
+        let layerIndex = 0;
         for (const layer of plan) {
             // LAYER EXECUTION: Run all scripts in this layer in PARALLEL
-            const layerPromises = layer.map(async (scriptId) => {
+            const layerPromises = layer.map(async (scriptId, parallelIndex) => {
+                const spanId = crypto.randomUUID();
+                const spanStartedAt = new Date();
+
                 const script = await pipelineRepository.getScript(scriptId);
                 if (!script) {
                     console.warn(
                         `PipelineEngine: Script ${scriptId} in plan for ${triggerEvent} not found. Skipping.`
                     );
+                    spans.push({
+                        id: spanId,
+                        scriptId,
+                        name: "Unknown",
+                        layerIndex,
+                        parallelIndex,
+                        status: "skipped",
+                        statusMessage: "Script not found",
+                        startedAt: spanStartedAt,
+                        endedAt: new Date(),
+                        durationMs: Date.now() - spanStartedAt.getTime(),
+                    });
                     return null;
                 }
 
                 // Size Check
                 if (script.code.length > this.MAX_SCRIPT_SIZE) {
+                    const endedAt = new Date();
+                    spans.push({
+                        id: spanId,
+                        scriptId,
+                        name: script.name,
+                        layerIndex,
+                        parallelIndex,
+                        status: "error",
+                        statusMessage: "Script size limit exceeded",
+                        startedAt: spanStartedAt,
+                        endedAt,
+                        durationMs: endedAt.getTime() - spanStartedAt.getTime(),
+                    });
                     return {
                         id: scriptId,
                         allowed: false,
@@ -96,9 +145,36 @@ export class PipelineEngine {
                         { ...currentContext, outputs }, // Inject 'outputs' history
                         accumulatedData
                     );
+                    const endedAt = new Date();
+                    spans.push({
+                        id: spanId,
+                        scriptId,
+                        name: script.name,
+                        layerIndex,
+                        parallelIndex,
+                        status: result.allowed === false ? "blocked" : "success",
+                        statusMessage: result.error,
+                        startedAt: spanStartedAt,
+                        endedAt,
+                        durationMs: endedAt.getTime() - spanStartedAt.getTime(),
+                        attributes: JSON.stringify({ output: result.data }),
+                    });
                     return { id: scriptId, ...result };
                 } catch (err: unknown) {
                     const msg = err instanceof Error ? err.message : String(err);
+                    const endedAt = new Date();
+                    spans.push({
+                        id: spanId,
+                        scriptId,
+                        name: script.name,
+                        layerIndex,
+                        parallelIndex,
+                        status: "error",
+                        statusMessage: msg,
+                        startedAt: spanStartedAt,
+                        endedAt,
+                        durationMs: endedAt.getTime() - spanStartedAt.getTime(),
+                    });
                     return { id: scriptId, allowed: false, error: msg };
                 }
             });
@@ -114,6 +190,21 @@ export class PipelineEngine {
                 // FAIL SECURE: If ANY script in the layer denies, the whole pipeline stops.
                 // (In parallel execution, we wait for all to finish, then check blocking)
                 if (res.allowed === false) {
+                    // === TRACING: Finalize trace as blocked ===
+                    const traceEndedAt = new Date();
+                    await this.saveTrace({
+                        traceId,
+                        triggerEvent,
+                        status: "blocked",
+                        statusMessage: res.error || `Blocked by pipeline policy (Node: ${res.id})`,
+                        traceStartedAt,
+                        traceEndedAt,
+                        userId: metadata?.userId,
+                        requestIp: metadata?.requestIp,
+                        contextSnapshot: JSON.stringify(context),
+                        resultData: undefined,
+                        spans,
+                    });
                     return {
                         allowed: false,
                         error: res.error || `Blocked by pipeline policy (Node: ${res.id})`,
@@ -135,14 +226,96 @@ export class PipelineEngine {
                 ...currentContext,
                 prev: layerOutputData,
             };
+            layerIndex++;
         }
+
+        // === TRACING: Finalize trace as success ===
+        const traceEndedAt = new Date();
+        await this.saveTrace({
+            traceId,
+            triggerEvent,
+            status: "success",
+            statusMessage: undefined,
+            traceStartedAt,
+            traceEndedAt,
+            userId: metadata?.userId,
+            requestIp: metadata?.requestIp,
+            contextSnapshot: JSON.stringify(context),
+            resultData: JSON.stringify(accumulatedData),
+            spans,
+        });
 
         return { allowed: true, data: accumulatedData };
     }
 
     /**
-     * Runs a single Lua script securely using the pool.
+     * Saves trace and spans to database (fire-and-forget, non-blocking).
      */
+    private async saveTrace(params: {
+        traceId: string;
+        triggerEvent: string;
+        status: string;
+        statusMessage?: string;
+        traceStartedAt: Date;
+        traceEndedAt: Date;
+        userId?: string;
+        requestIp?: string;
+        contextSnapshot?: string;
+        resultData?: string;
+        spans: Array<{
+            id: string;
+            scriptId: string;
+            name: string;
+            layerIndex: number;
+            parallelIndex: number;
+            status: string;
+            statusMessage?: string;
+            startedAt: Date;
+            endedAt?: Date;
+            durationMs?: number;
+            attributes?: string;
+        }>;
+    }): Promise<void> {
+        try {
+            // Insert trace via repository
+            await pipelineRepository.createTrace({
+                id: params.traceId,
+                triggerEvent: params.triggerEvent,
+                status: params.status,
+                statusMessage: params.statusMessage,
+                startedAt: params.traceStartedAt,
+                endedAt: params.traceEndedAt,
+                durationMs: params.traceEndedAt.getTime() - params.traceStartedAt.getTime(),
+                userId: params.userId,
+                requestIp: params.requestIp,
+                contextSnapshot: params.contextSnapshot,
+                resultData: params.resultData,
+            });
+
+            // Insert spans via repository
+            if (params.spans.length > 0) {
+                await pipelineRepository.createSpans(
+                    params.spans.map((span) => ({
+                        id: span.id,
+                        traceId: params.traceId,
+                        name: span.name,
+                        scriptId: span.scriptId,
+                        layerIndex: span.layerIndex,
+                        parallelIndex: span.parallelIndex,
+                        status: span.status,
+                        statusMessage: span.statusMessage,
+                        startedAt: span.startedAt,
+                        endedAt: span.endedAt,
+                        durationMs: span.durationMs,
+                        attributes: span.attributes,
+                    }))
+                );
+            }
+        } catch (err) {
+            // Non-blocking: log error but don't fail the pipeline
+            console.error("[PipelineEngine] Failed to save trace:", err);
+        }
+    }
     private async runScript(
         code: string,
         context: Record<string, unknown>,
@@ -171,7 +344,7 @@ export class PipelineEngine {
                     return null;
                 },
                 queueWebhook: (event: string, payload: unknown) => {
-                    console.log(`[Pipeline Webhook Queued] ${event}:`, payload);
+                    console.log(`[Pipeline Webhook Queued] ${event}: `, payload);
                 },
                 secret: (key: string) => {
                     return this.SECRETS[key] || null;
@@ -194,20 +367,20 @@ export class PipelineEngine {
                 local __instruction_count = 0
                 local __MAX_INSTRUCTIONS = ${this.MAX_INSTRUCTIONS}
                 local __HOOK_INTERVAL = 100
-                debug.sethook(function()
+debug.sethook(function ()
                     __instruction_count = __instruction_count + __HOOK_INTERVAL
                     if __instruction_count > __MAX_INSTRUCTIONS then
-                        error("Script exceeded instruction limit (" .. __MAX_INSTRUCTIONS .. " operations)")
-                    end
-                end, "", __HOOK_INTERVAL)
-            `;
+error("Script exceeded instruction limit ("..__MAX_INSTRUCTIONS.. " operations)")
+end
+end, "", __HOOK_INTERVAL)
+`;
 
             // Inject 'await' helper as Lua function that yields
             const luaPrelude = `
-                function await(p)
-                    coroutine.yield(p)
-                    return helpers.getLastAsync()
-                end
+function await(p)
+coroutine.yield(p)
+return helpers.getLastAsync()
+end
             `;
             const fullCode = instructionLimit + "\n" + luaPrelude + "\n" + code;
 
@@ -285,7 +458,7 @@ export class PipelineEngine {
             } catch (fetchErr) {
                 clearTimeout(timeoutId);
                 if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
-                    throw new Error(`Fetch timeout exceeded (${this.FETCH_TIMEOUT_MS}ms)`);
+                    throw new Error(`Fetch timeout exceeded(${this.FETCH_TIMEOUT_MS}ms)`);
                 }
                 throw fetchErr;
             }
