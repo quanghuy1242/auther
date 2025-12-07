@@ -23,7 +23,7 @@ import {
 } from "@/lib/utils/auth-middleware";
 import { checkOAuthClientAccess } from "@/lib/utils/oauth-authorization";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
-import { createBetterAuthWebhookHooks } from "@/lib/webhooks/better-auth-hooks";
+import { createPipelineDatabaseHooks } from "@/lib/pipelines";
 
 const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
 
@@ -191,7 +191,7 @@ export const auth = betterAuth({
   hooks: {
     before: beforeHook,
   },
-  databaseHooks: createBetterAuthWebhookHooks(),
+  databaseHooks: createPipelineDatabaseHooks(),
   plugins: [
     admin(),
     username(),

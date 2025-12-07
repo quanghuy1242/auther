@@ -1,0 +1,207 @@
+============================================================
+=== DEMO 01 ===
+============================================================
+--- DEMO 01: Shared Node (Universal Logger) ---
+
+> Triggering 'before_login'...
+[Pipeline Log]: AUDIT [before_login]: 1765104583855
+
+> Triggering 'before_signup'...
+[Pipeline Log]: AUDIT [before_signup]: 1765104583870
+
+PASS: Shared Logic reused across different events.
+
+============================================================
+=== DEMO 02 ===
+============================================================
+--- DEMO 02: Chaining (Pipeline Logic) ---
+
+> Executing Grading Pipeline...
+[Pipeline Log]: Calculated Raw Score: 85
+[Pipeline Log]: Assigned Grade: B
+Final Pipeline Output: { raw_score: 85, grade: 'B' }
+
+============================================================
+=== DEMO 03 ===
+============================================================
+--- DEMO 03: Blocking (Control Flow Interrupt) ---
+------------------------------------------------
+SCENARIO A: Good User (US)
+
+[TS APP] 1. Starting Signup Process for user_good...
+[TS APP] 2. Validating Form Data...
+[TS APP] 3. Calling Pipeline Trigger 'signup_check'...
+[TS APP] ✅ Pipeline Passed. Proceeding...
+[TS APP] 4. Inserting User into Database (Simulated)
+[TS APP] 5. Sending Welcome Email
+------------------------------------------------
+SCENARIO B: Bad User (BANNED)
+
+[TS APP] 1. Starting Signup Process for user_bad...
+[TS APP] 2. Validating Form Data...
+[TS APP] 3. Calling Pipeline Trigger 'signup_check'...
+[TS APP] 🛑 STOP! Pipeline blocked this request: "Country is Sanctioned"
+
+PASS: TypeScript App logic was successfully HALTED by Pipeline.
+
+============================================================
+=== DEMO 04 ===
+============================================================
+--- DEMO 04: Async (App Responsiveness) ---
+
+[TS APP] 1. Received API Request
+[TS APP] 2. Triggering 'post_activity' hook...
+[Pipeline Log]: Script starting...
+[Pipeline Webhook Queued] analytics: { event: 'click' }
+[Pipeline Log]: Script finished (took ~0ms CPU time)
+[TS APP] 3. Sending HTTP Response to User
+[TS APP]    Total Processing Time: 25ms
+
+PASS: App responded instantly (<100ms), ignoring background job.
+
+============================================================
+=== DEMO 05 ===
+============================================================
+--- DEMO 05: Enrichment (State Modification) ---
+------------------------------------------------
+
+[TS APP] 1. Initializing Session Object...
+[TS APP]    Current State: {"userId":"admin_user","permissions":["read:public"],"accessLevel":1,"metadata":{}}
+[TS APP] 2. Calling Pipeline Trigger 'session_enrich'...
+[TS APP] 🔄 Pipeline returned data. Modifying State...
+[TS APP] 3. Finalizing Session Creation
+[TS APP]    Final State: {
+  "userId": "admin_user",
+  "permissions": [
+    "read:public",
+    "write:all",
+    "delete:users"
+  ],
+  "accessLevel": 99,
+  "metadata": {
+    "verified": true
+  }
+}
+
+PASS: TypeScript State was successfully MUTATED by Pipeline data.
+
+============================================================
+=== DEMO 06 ===
+============================================================
+--- TEST: Advanced DAG & Safe HTTP ---
+Executing DAG...
+[Pipeline Log]: Stripe Fetch Status: 200
+[Pipeline Log]: Stripe Fetch OK: true
+DAG Result: {
+  "allowed": true,
+  "data": {
+    "subscription": "active",
+    "from": "B",
+    "risk": 10,
+    "decision": "approved",
+    "merged": true
+  }
+}
+PASS: Advanced DAG Verified
+
+============================================================
+=== DEMO 07 ===
+============================================================
+--- DEMO 07: Error Handling ---
+
+TEST 1: Syntax Error
+  Result: BLOCKED: [string "..."]:18: '}' expected near <eof>
+  Status: ✅ PASS
+
+TEST 2: Timeout (Infinite Loop)
+  Duration: 16ms
+  Result: BLOCKED: [string "..."]:8: Script exceeded instruction limit (50000 operations)
+stack traceback:
+	[string "..."]:8: in hook '?'
+	[string "..."]:19: in main chunk
+  Status: ✅ PASS
+
+TEST 3: Missing Output (returns nil)
+Pipeline script returned nil. Defaulting to allowed.
+  Result: ALLOWED (nil defaults to allowed)
+  Status: ✅ PASS (graceful handling)
+
+TEST 4: Script Size Limit
+  Result: BLOCKED: Script size limit exceeded
+  Status: ✅ PASS
+
+--- DEMO 07 Complete ---
+
+============================================================
+=== DEMO 08 ===
+============================================================
+--- DEMO 08: Diamond DAG Pattern ---
+
+Executing Diamond DAG...
+
+[Pipeline Log]: Node A: Extracting user data
+[Pipeline Log]: Node B: Calculating score from A
+[Pipeline Log]: Node C: Checking reputation from A
+[Pipeline Log]: Node D: Final Decision (Fan-in from B + C)
+[Pipeline Log]:   B.score: 150
+[Pipeline Log]:   C.reputation: trusted
+Result: {
+  "allowed": true,
+  "data": {
+    "tier": "premium",
+    "userId": "user123",
+    "score": 150,
+    "reputation": "trusted",
+    "final_reputation": "trusted",
+    "decision": "approved",
+    "final_score": 150
+  }
+}
+
+Status: ✅ PASS
+--- DEMO 08 Complete ---
+
+============================================================
+=== DEMO 09 ===
+============================================================
+--- DEMO 09: Limits Validation ---
+
+TEST 1: Chain Depth Limit (Max 10 layers)
+  11 Layers Result: BLOCKED: Pipeline exceeds max chain depth (10 layers allowed, got 11)
+  Status: ✅ PASS
+
+TEST 2: Parallel Node Limit (Max 5 per layer)
+  6 Parallel Result: BLOCKED: Layer 1 exceeds max parallel nodes (5 allowed, got 6)
+  Status: ✅ PASS
+
+TEST 3: Within Limits (5 parallel, 3 layers)
+  Valid Config Result: ALLOWED ✅
+  Status: ✅ PASS
+
+--- DEMO 09 Complete ---
+
+============================================================
+=== DEMO 10 ===
+============================================================
+--- DEMO 10: Heavy Computation Protection ---
+
+TEST 1: Heavy Loop (100,000 iterations)
+  Duration: 44ms
+  Result: BLOCKED: [string "..."]:8: Script exceeded instruction limit (50000 operations)
+stack traceback:
+	[string "..."]:8: in hook '?'
+	[string "..."]:21: in main chunk
+  Status: ✅ PASS
+
+TEST 2: Moderate Loop (10,000 iterations)
+  Result: ALLOWED (sum = 50005000)
+  Status: ✅ PASS
+
+TEST 3: Nested Loops (300 x 300 = 90,000 iterations)
+  Result: BLOCKED: [string "..."]:8: Script exceeded instruction limit (50000 operations)
+stack traceback:
+	[string "..."]:8: in hook '?'
+	[string "..."]:22: in main chunk
+  Status: ✅ PASS
+
+--- DEMO 10 Complete ---
