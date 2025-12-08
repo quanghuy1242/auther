@@ -16,6 +16,7 @@ import {
     type HelperDefinition,
     type ContextField,
 } from "./definitions";
+import { inferVariableTypes } from "./type-inference";
 
 // =============================================================================
 // LUA BUILTIN DOCUMENTATION
@@ -316,6 +317,63 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
         if (!wordInfo) return null;
 
         const { word, from } = wordInfo;
+
+        // 0. Check for local variables/functions (Dynamic)
+        // We do this first because locals shadow globals
+        const code = view.state.doc.toString();
+        const { variables } = inferVariableTypes(code);
+        const local = variables.get(word);
+
+        if (local && (local.doc || local.type === "function")) {
+            return {
+                pos: from,
+                above: true,
+                create: () => {
+                    const dom = document.createElement("div");
+                    dom.className = "cm-tooltip-lua-hover";
+                    dom.style.cssText = `
+                        padding: 8px 12px;
+                        max-width: 400px;
+                        font-size: 13px;
+                        line-height: 1.4;
+                    `;
+
+                    let signature = word;
+                    if (local.type === "function") {
+                        const params = local.functionParams || [];
+                        signature = `function ${word}(${params.join(", ")})`;
+                    } else {
+                        signature = `${word}: ${local.type}`;
+                    }
+
+                    dom.innerHTML = `
+                        <div style="font-weight: 600; font-family: monospace; color: #61afef; margin-bottom: 6px;">
+                            ${signature}
+                        </div>
+                        <div style="margin-bottom: 8px;">${local.doc?.description || ""}</div>
+                        ${local.doc?.params?.length ? `
+                        <div style="font-size: 0.9em; opacity: 0.8;">
+                            <div style="font-weight: 500; margin-bottom: 4px;">Parameters:</div>
+                            ${local.doc.params.map(p => `
+                                <div style="margin-left: 8px;">
+                                    <code style="color: #e5c07b;">${p.name}</code>: <span style="color: #98c379;">${p.type}</span>
+                                    <span style="opacity: 0.7;"> — ${p.description}</span>
+                                </div>
+                            `).join("")}
+                        </div>
+                        ` : ""}
+                        ${local.doc?.returns ? `
+                        <div style="font-size: 0.9em; margin-top: 6px;">
+                            <span style="font-weight: 500;">Returns:</span> 
+                            <code style="color: #98c379;">${local.doc.returns.type}</code>
+                            <span style="opacity: 0.7;"> — ${local.doc.returns.description}</span>
+                        </div>
+                        ` : ""}
+                    `;
+                    return { dom };
+                }
+            };
+        }
 
         // Check for helpers.xxx
         const helpersMatch = word.match(/^helpers\.(\w+)$/);

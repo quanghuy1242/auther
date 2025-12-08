@@ -133,7 +133,7 @@ export function CodeEditor({
                 },
             }),
         ],
-        [height, onChange, hookName, executionMode]
+        [height, onChange, hookName, executionMode, previousScriptCode]
     );
 
     // Inject tooltip styles

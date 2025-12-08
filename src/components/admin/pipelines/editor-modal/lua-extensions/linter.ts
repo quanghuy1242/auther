@@ -366,8 +366,222 @@ function findUndefinedVariables(ast: LuaAST): Diagnostic[] {
 }
 
 // =============================================================================
-// MAIN LINTER FUNCTION
+// UNUSED VARIABLE DETECTION
 // =============================================================================
+
+interface VariableInfo {
+    name: string;
+    node: LuaNode;
+    used: boolean;
+    scopeLevel: number;
+}
+
+interface Scope {
+    variables: Map<string, VariableInfo>;
+    parent?: Scope;
+    level: number;
+}
+
+function findUnusedVariables(ast: LuaAST): Diagnostic[] {
+    const diagnostics: Diagnostic[] = [];
+    let currentScope: Scope = { variables: new Map(), level: 0 };
+
+    // Helper to enter a new scope
+    function enterScope() {
+        currentScope = {
+            variables: new Map(),
+            parent: currentScope,
+            level: currentScope.level + 1,
+        };
+    }
+
+    // Helper to exit scope and collect unused variables
+    function exitScope() {
+        for (const info of currentScope.variables.values()) {
+            if (!info.used && !info.name.startsWith("_")) {
+                const [from, to] = info.node.range || [0, 0];
+                diagnostics.push({
+                    from,
+                    to,
+                    severity: "warning",
+                    message: `Unused local variable '${info.name}'`,
+                    source: "lua-unused",
+                });
+            }
+        }
+        if (currentScope.parent) {
+            currentScope = currentScope.parent;
+        }
+    }
+
+    // Helper to register a declaration
+    function declareVariable(name: string, node: LuaNode) {
+        if (!currentScope.variables.has(name)) {
+            currentScope.variables.set(name, {
+                name,
+                node,
+                used: false,
+                scopeLevel: currentScope.level,
+            });
+        }
+    }
+
+    // Helper to mark a variable as used
+    function markVariableUsed(name: string) {
+        let scope: Scope | undefined = currentScope;
+        while (scope) {
+            if (scope.variables.has(name)) {
+                scope.variables.get(name)!.used = true;
+                return;
+            }
+            scope = scope.parent;
+        }
+    }
+
+    // Custom walker for scope-aware traversal
+    function walk(node: LuaNode) {
+        if (!node || typeof node !== "object") return;
+
+        const type = node.type;
+
+        // 1. Scope Creators
+        // FunctionDeclaration: creates scope, declares params (in new scope), declares name (in OUTER scope if local)
+        if (type === "FunctionDeclaration") {
+            // If it's a local function, declare its name in the current (outer) scope
+            if (node.isLocal && node.identifier) {
+                declareVariable(node.identifier.name, node.identifier);
+            }
+
+            // Enter function scope
+            enterScope();
+
+            // Declare parameters in the new function scope
+            (node.parameters || []).forEach((p: LuaNode) => {
+                if (p.type === "Identifier") {
+                    declareVariable(p.name, p);
+                }
+            });
+
+            // Walk body
+            (node.body || []).forEach(walk);
+
+            exitScope();
+            return;
+        }
+
+        // Blocks that create scopes
+        const blockTypes = ["DoStatement", "WhileStatement", "RepeatStatement", "IfStatement", "ForStatement", "ForGenericStatement", "ForNumericStatement"];
+        if (blockTypes.includes(type)) {
+            enterScope();
+
+            // Handle loop variables
+            if (type === "ForNumericStatement") {
+                if (node.variable && node.variable.type === "Identifier") {
+                    declareVariable(node.variable.name, node.variable);
+                }
+            } else if (type === "ForGenericStatement") {
+                (node.variables || []).forEach((v: LuaNode) => {
+                    if (v.type === "Identifier") {
+                        declareVariable(v.name, v);
+                    }
+                });
+            }
+
+            // Walk children normally
+            walkChildren(node);
+
+            exitScope();
+            return;
+        }
+
+        // 2. Declarations
+        if (type === "LocalStatement") {
+            // Calculate initializers first (they exist in OUTER scope)
+            (node.init || []).forEach(walk);
+
+            // Then declare variables
+            (node.variables || []).forEach((v: LuaNode) => {
+                if (v.type === "Identifier") {
+                    declareVariable(v.name, v);
+                }
+            });
+            return;
+        }
+
+        // 3. References
+        if (type === "Identifier") {
+            markVariableUsed(node.name);
+            // Note: We don't stop walking here, but Identifiers usually don't have children to walk.
+            // But valid to return.
+            return;
+        }
+
+        // 4. Special case: MemberExpression (only walk base, not identifier property)
+        if (type === "MemberExpression") {
+            walk(node.base);
+            // Do NOT walk node.identifier (it's a property name, not a variable usage)
+            return;
+        }
+
+        // 4b. Special case: TableKey/TableKeyString
+        if (type === "TableKey" || type === "TableKeyString") {
+            if (node.key && node.key.type !== "StringLiteral") {
+                // In `a = { key = val }`, "key" is identifier but not usage.
+                // luaparse: TableKeyString key is Identifier (but treated as string).
+                // TableKey key is expression.
+                if (type === "TableKey") walk(node.key);
+            }
+            walk(node.value);
+            return;
+        }
+
+        // Default: walk children
+        walkChildren(node);
+    }
+
+    function walkChildren(node: LuaNode) {
+        // Safe mapping for common node keys to avoid missing anything
+        for (const key of Object.keys(node)) {
+            if (key === "type" || key === "range" || key === "loc" || key === "isLocal") continue;
+
+            // If we already handled specific keys in `walk`, we should skip them here?
+            // The `childKeys` approach in `linter.ts` was manual.
+            // Let's rely on a robust list or specific logic.
+
+            // Let's stick to the manual list plus a few extras to be safe, 
+            // but carefully avoiding "identifier" where it implies definition/property.
+        }
+
+        // Re-using the safe list from earlier, but expanded for clauses/etc
+        const safeChildKeys = [
+            "body", "init", "base", "argument", "arguments",
+            "expression", "expressions", "variables", "values",
+            "clauses", "condition", "consequent", "alternative",
+            "start", "end", "step", "iterators", "fields"
+        ];
+
+        for (const key of safeChildKeys) {
+            const child = node[key];
+            if (Array.isArray(child)) {
+                child.forEach((c: LuaNode) => walk(c));
+            } else if (child && typeof child === "object" && child.type) {
+                walk(child);
+            }
+        }
+
+        // Handle Identifier if it wasn't caught by special cases?
+        // No, Identifier type is handled in `walk`. 
+        // We just need to make sure we visit properties that ARE expressions.
+    }
+
+    // Start walking
+    walk(ast as unknown as LuaNode);
+
+    // Process root scope
+    exitScope();
+
+    return diagnostics;
+}
 
 export interface LuaLinterOptions {
     executionMode?: HookExecutionMode;
@@ -402,6 +616,11 @@ export function createLuaLinter(options: LuaLinterOptions = {}) {
         // Check return statements
         if (checkReturnType) {
             diagnostics.push(...validateReturnStatements(ast, executionMode));
+        }
+
+        // Check unused variables
+        if (checkUndefinedVariables) {
+            diagnostics.push(...findUnusedVariables(ast));
         }
 
         // Check undefined variables (optional, can be noisy)

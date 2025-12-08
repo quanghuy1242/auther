@@ -3,7 +3,7 @@
 // =============================================================================
 // Custom completion sources for helpers.*, context.*, Lua keywords, and snippets
 
-import type { Completion, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
+import { snippet, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
 import {
     HELPERS_DEFINITIONS,
@@ -390,12 +390,43 @@ export function createLuaCompletionSource(options: LuaCompletionOptions = {}) {
                     table: "table",
                     prev: "context.prev",
                     outputs: "context.outputs",
+                    function: "function",
                     unknown: "local",
                 };
+
+                let detail = typeLabels[info.type] || "local";
+                let infoFn: (() => HTMLElement) | undefined;
+
+                let apply: Completion["apply"] | undefined;
+
+                if (info.type === "function") {
+                    const params = info.functionParams || [];
+                    detail = `function(${params.join(", ")})`;
+
+                    // Create snippet string: name(${1:param1}, ${2:param2})
+                    const snippetArgs = params.map((p, i) => `\${${i + 1}:${p}}`).join(", ");
+                    const snippetText = `${name}(${snippetArgs})`;
+                    apply = snippet(snippetText);
+
+                    if (info.doc) {
+                        infoFn = () => {
+                            const div = document.createElement("div");
+                            div.className = "cm-completion-info-lua";
+                            div.innerHTML = `
+                                <div style="font-weight: 600; margin-bottom: 4px;">${name}(${params.join(", ")})</div>
+                                <div style="margin-bottom: 8px;">${info.doc!.description || ""}</div>
+                            `;
+                            return div;
+                        };
+                    }
+                }
+
                 allCompletions.push({
                     label: name,
-                    type: "variable",
-                    detail: typeLabels[info.type] || "local",
+                    type: info.type === "function" ? "function" : "variable",
+                    detail,
+                    info: infoFn,
+                    apply, // Add apply handler
                     boost: 15, // Higher than everything else
                 });
             }
@@ -439,12 +470,43 @@ export function createLuaCompletionSource(options: LuaCompletionOptions = {}) {
                     table: "table",
                     prev: "context.prev",
                     outputs: "context.outputs",
+                    function: "function",
                     unknown: "local",
                 };
+
+                let detail = typeLabels[info.type] || "local";
+                let infoFn: (() => HTMLElement) | undefined;
+
+                let apply: Completion["apply"] | undefined;
+
+                if (info.type === "function") {
+                    const params = info.functionParams || [];
+                    detail = `function(${params.join(", ")})`;
+
+                    // Create snippet string: name(${1:param1}, ${2:param2})
+                    const snippetArgs = params.map((p, i) => `\${${i + 1}:${p}}`).join(", ");
+                    const snippetText = `${name}(${snippetArgs})`;
+                    apply = snippet(snippetText);
+
+                    if (info.doc) {
+                        infoFn = () => {
+                            const div = document.createElement("div");
+                            div.className = "cm-completion-info-lua";
+                            div.innerHTML = `
+                                <div style="font-weight: 600; margin-bottom: 4px;">${name}(${params.join(", ")})</div>
+                                <div style="margin-bottom: 8px;">${info.doc!.description || ""}</div>
+                            `;
+                            return div;
+                        };
+                    }
+                }
+
                 allCompletions.push({
                     label: name,
-                    type: "variable",
-                    detail: typeLabels[info.type] || "local",
+                    type: info.type === "function" ? "function" : "variable",
+                    detail,
+                    info: infoFn,
+                    apply,
                     boost: 15,
                 });
             }

@@ -12,13 +12,19 @@ import type { Chunk, LocalStatement, AssignmentStatement, MemberExpression, Iden
 
 export interface VariableType {
     name: string;
-    type: "unknown" | "helpers" | "context" | "nestedContext" | "table" | "prev" | "outputs";
+    type: "unknown" | "helpers" | "context" | "nestedContext" | "table" | "prev" | "outputs" | "function";
     /** For nested context types, the specific object (user, session, etc.) */
     contextObject?: string;
     /** For table literals, the known fields */
     tableFields?: string[];
+    /** For functions, the parameter names */
+    functionParams?: string[];
+    /** Documentation for the variable/function */
+    doc?: LuaDocComment;
     /** The line where this variable was defined */
     line: number;
+    /** The AST node of the initialization expression */
+    initNode?: LuaNode;
 }
 
 /**
@@ -127,8 +133,12 @@ function inferExpressionType(expr: LuaNode): Partial<VariableType> {
 export function inferVariableTypes(code: string): InferenceResult {
     const variables = new Map<string, VariableType>();
 
+    // Parse docs first
+    const docs = parseLuaDocComments(code);
+
     // First, try regex-based extraction (works with incomplete code)
-    extractLocalVariablesWithRegex(code, variables);
+    // First, try regex-based extraction (works with incomplete code)
+    extractLocalVariablesWithRegex(code, variables, docs);
 
     // Then try AST-based extraction for more accurate type info
     try {
@@ -166,6 +176,7 @@ export function inferVariableTypes(code: string): InferenceResult {
                                 contextObject: typeInfo.contextObject,
                                 tableFields: typeInfo.tableFields,
                                 line: varNode.loc?.start?.line || 0,
+                                initNode: initExpr,
                             });
                         }
                     }
@@ -193,15 +204,37 @@ export function inferVariableTypes(code: string): InferenceResult {
                                     contextObject: typeInfo.contextObject,
                                     tableFields: typeInfo.tableFields,
                                     line: varNode.loc?.start?.line || 0,
+                                    initNode: initExpr,
                                 });
                             }
                         }
                     }
                 }
             }
+
+            // Function Declaration: local function name(args) ...
+            if (node.type === "FunctionDeclaration") {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const func = node as unknown as any;
+                if (func.identifier && func.identifier.type === "Identifier") {
+                    const name = func.identifier.name;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const params = (func.parameters || []).map((p: any) => p.name || p.value);
+                    const doc = docs.get(name);
+
+                    variables.set(name, {
+                        name,
+                        type: "function",
+                        functionParams: params,
+                        doc,
+                        line: func.identifier.loc?.start?.line || 0,
+                        initNode: node
+                    });
+                }
+            }
         });
 
-        return { variables };
+        return { variables, functionDocs: docs };
     } catch (e) {
         // AST parsing failed, but we still have regex-extracted variables
         return {
@@ -214,9 +247,28 @@ export function inferVariableTypes(code: string): InferenceResult {
 /**
  * Extract local variables using regex (works with incomplete/invalid code)
  */
-function extractLocalVariablesWithRegex(code: string, variables: Map<string, VariableType>): void {
-    // Match "local name", "local name =", "local name, name2 ="
-    const localPattern = /\blocal\s+(\w+(?:\s*,\s*\w+)*)/g;
+function extractLocalVariablesWithRegex(code: string, variables: Map<string, VariableType>, docs?: Map<string, LuaDocComment>): void {
+    // 1. Match local functions: local function name(args)
+    const localFuncPattern = /\blocal\s+function\s+(\w+)(?:\s*\(([^)]*)\))?/g;
+    let funcMatch;
+    while ((funcMatch = localFuncPattern.exec(code)) !== null) {
+        const name = funcMatch[1];
+        const paramsStr = funcMatch[2];
+        const params = paramsStr ? paramsStr.split(",").map(p => p.trim()).filter(p => p) : [];
+        const doc = docs?.get(name);
+
+        variables.set(name, {
+            name,
+            type: "function",
+            functionParams: params,
+            doc,
+            line: 0,
+        });
+    }
+
+    // 2. Match regular locals: "local name", "local name =", "local name, name2 ="
+    // Exclude "local function" to prevent capturing "function" as a variable name
+    const localPattern = /\blocal\s+(?!function\b)(\w+(?:\s*,\s*\w+)*)/g;
     let match;
 
     while ((match = localPattern.exec(code)) !== null) {
@@ -316,63 +368,107 @@ export interface ReturnSchema {
 }
 
 /**
+ * Resolve fields from an expression, handling recursion for variables
+ */
+function resolveExpressionFields(
+    expr: LuaNode,
+    variables: Map<string, VariableType>,
+    visited = new Set<string>()
+): { fields: string[]; dataFields: string[] } {
+    const fields: string[] = [];
+    let dataFields: string[] = [];
+
+    if (!expr) return { fields, dataFields };
+
+    // Case 1: Inline Table { a = 1, data = { ... } }
+    if (expr.type === "TableConstructorExpression") {
+        for (const field of expr.fields || []) {
+            if (field.type === "TableKey" || field.type === "TableKeyString") {
+                const key = field.key;
+                let fieldName: string | null = null;
+
+                if (key.type === "Identifier") {
+                    fieldName = key.name;
+                } else if (key.type === "StringLiteral") {
+                    fieldName = key.value;
+                }
+
+                if (fieldName) {
+                    fields.push(fieldName);
+
+                    // If this is the "data" field
+                    if (fieldName === "data") {
+                        // Recursively resolve data value
+                        const result = resolveExpressionFields(field.value, variables, visited);
+                        // If the value itself is a table, its fields are the data fields
+                        if (field.value?.type === "TableConstructorExpression") {
+                            // Direct table: data = { x = 1 } -> result.fields is ["x"]
+                            dataFields = result.fields;
+                        } else {
+                            // Variable reference: data = d
+                            // If resolveExpressionFields returns fields, those are the data fields
+                            dataFields = result.fields;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Case 2: Identifier (Variable Reference)
+    else if (expr.type === "Identifier") {
+        const varName = expr.name;
+        if (!visited.has(varName)) {
+            visited.add(varName);
+            const varInfo = variables.get(varName);
+            if (varInfo?.initNode) {
+                // Recursively resolve the variable's initialization
+                return resolveExpressionFields(varInfo.initNode, variables, visited);
+            } else if (varInfo?.tableFields) {
+                // Fallback to tableFields if initNode missing
+                return { fields: varInfo.tableFields, dataFields: [] };
+            }
+        }
+    }
+
+    return { fields, dataFields };
+}
+
+/**
  * Extract the schema of return statements from a script
  * Used for context.prev autocomplete in downstream scripts
  */
 export function extractReturnSchema(code: string): ReturnSchema | null {
     try {
+        // First, infer variable types so we can resolve identifiers
+        const { variables } = inferVariableTypes(code);
+
         const ast = luaparse.parse(code, {
             locations: true,
             ranges: true,
             luaVersion: "5.3",
         }) as Chunk;
 
-        const fields: string[] = [];
-        const dataFields: string[] = [];
+        const allFields = new Set<string>();
+        const allDataFields = new Set<string>();
 
         // Find return statements
         walkAST(ast, (node: LuaNode) => {
             if (node.type === "ReturnStatement") {
                 const args = node.arguments || [];
-                if (args.length > 0 && args[0].type === "TableConstructorExpression") {
-                    const table = args[0];
-                    for (const field of table.fields || []) {
-                        if (field.type === "TableKey" || field.type === "TableKeyString") {
-                            const key = field.key;
-                            let fieldName: string | null = null;
-
-                            if (key.type === "Identifier") {
-                                fieldName = key.name;
-                            } else if (key.type === "StringLiteral") {
-                                fieldName = key.value;
-                            }
-
-                            if (fieldName) {
-                                fields.push(fieldName);
-
-                                // If this is the "data" field, extract its nested fields
-                                if (fieldName === "data" && field.value?.type === "TableConstructorExpression") {
-                                    for (const dataField of field.value.fields || []) {
-                                        if (dataField.type === "TableKey" || dataField.type === "TableKeyString") {
-                                            const dataKey = dataField.key;
-                                            if (dataKey.type === "Identifier") {
-                                                dataFields.push(dataKey.name);
-                                            } else if (dataKey.type === "StringLiteral") {
-                                                dataFields.push(dataKey.value);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                if (args.length > 0) {
+                    const result = resolveExpressionFields(args[0], variables);
+                    result.fields.forEach((f) => allFields.add(f));
+                    result.dataFields.forEach((f) => allDataFields.add(f));
                 }
             }
         });
 
-        if (fields.length === 0) return null;
+        if (allFields.size === 0) return null;
 
-        return { fields, dataFields: dataFields.length > 0 ? dataFields : undefined };
+        return {
+            fields: Array.from(allFields),
+            dataFields: allDataFields.size > 0 ? Array.from(allDataFields) : undefined,
+        };
     } catch {
         return null;
     }
