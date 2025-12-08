@@ -583,6 +583,58 @@ function findUnusedVariables(ast: LuaAST): Diagnostic[] {
     return diagnostics;
 }
 
+// =============================================================================
+// COMPLEXITY CHECKS
+// =============================================================================
+
+function checkComplexity(ast: LuaAST): Diagnostic[] {
+    const diagnostics: Diagnostic[] = [];
+
+    // Recursive function to check loop depth
+    function checkNode(node: LuaNode, depth: number) {
+        if (!node || typeof node !== "object") return;
+
+        let nextDepth = depth;
+        const loopTypes = ["WhileStatement", "RepeatStatement", "ForStatement", "ForGenericStatement", "ForNumericStatement"];
+
+        if (loopTypes.includes(node.type)) {
+            nextDepth++;
+            if (nextDepth >= 3) {
+                const [from, to] = node.range || [0, 0];
+                // Avoid duplicate warnings for same nest
+                // We warn at the start of the 3rd level loop
+                diagnostics.push({
+                    from,
+                    to,
+                    severity: "warning",
+                    message: "Deeply nested loops (depth >= 3) may exceed instruction limits (50k ops).",
+                    source: "lua-complexity",
+                });
+            }
+        }
+
+        // Walk children
+        const childKeys = [
+            "body", "init", "base", "argument", "arguments",
+            "expression", "expressions", "variables", "values",
+            "clauses", "condition", "consequent", "alternative",
+            "start", "end", "step", "iterators", "fields"
+        ];
+
+        for (const key of childKeys) {
+            const child = node[key];
+            if (Array.isArray(child)) {
+                child.forEach((c: LuaNode) => checkNode(c, nextDepth));
+            } else if (child && typeof child === "object" && child.type) {
+                checkNode(child, nextDepth);
+            }
+        }
+    }
+
+    checkNode(ast as unknown as LuaNode, 0);
+    return diagnostics;
+}
+
 export interface LuaLinterOptions {
     executionMode?: HookExecutionMode;
     checkReturnType?: boolean;
@@ -591,9 +643,21 @@ export interface LuaLinterOptions {
 
 export function createLuaLinter(options: LuaLinterOptions = {}) {
     const { executionMode = "blocking", checkReturnType = true, checkUndefinedVariables = true } = options;
+    const MAX_SCRIPT_SIZE = 5120; // 5KB
 
     return function luaLinter(view: EditorView): Diagnostic[] {
         const code = view.state.doc.toString();
+
+        // 1. Script Size Check
+        if (code.length > MAX_SCRIPT_SIZE) {
+            return [{
+                from: 0,
+                to: Math.min(code.length, 100),
+                severity: "error",
+                message: `Script size (${code.length} bytes) exceeds limit of ${MAX_SCRIPT_SIZE} bytes.`,
+                source: "lua-limit",
+            }];
+        }
 
         // Skip empty code
         if (!code.trim()) return [];
@@ -613,6 +677,9 @@ export function createLuaLinter(options: LuaLinterOptions = {}) {
         // Check for disabled globals
         diagnostics.push(...findDisabledGlobals(ast));
 
+        // Check complexity (Nested Loops)
+        diagnostics.push(...checkComplexity(ast));
+
         // Check return statements
         if (checkReturnType) {
             diagnostics.push(...validateReturnStatements(ast, executionMode));
@@ -623,7 +690,7 @@ export function createLuaLinter(options: LuaLinterOptions = {}) {
             diagnostics.push(...findUnusedVariables(ast));
         }
 
-        // Check undefined variables (optional, can be noisy)
+        // Check undefined variables
         if (checkUndefinedVariables) {
             diagnostics.push(...findUndefinedVariables(ast));
         }

@@ -196,7 +196,11 @@ export const DISABLED_GLOBALS = [
     "loadstring",
     "rawset",
     "rawget",
-    "debug",
+    "require",
+    "load",
+    "getfenv",
+    "setfenv",
+    "newproxy",
 ] as const;
 
 export const DISABLED_GLOBAL_MESSAGES: Record<string, string> = {
@@ -209,6 +213,11 @@ export const DISABLED_GLOBAL_MESSAGES: Record<string, string> = {
     rawset: "rawset() is disabled to prevent metatable bypasses.",
     rawget: "rawget() is disabled to prevent metatable bypasses.",
     debug: "The 'debug' library is disabled for security.",
+    require: "require() is disabled. External modules cannot be loaded.",
+    load: "load() is disabled. Dynamic code execution is not allowed.",
+    getfenv: "getfenv() is disabled for security.",
+    setfenv: "setfenv() is disabled for security.",
+    newproxy: "newproxy() is disabled for security.",
 };
 
 // =============================================================================
