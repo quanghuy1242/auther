@@ -5,8 +5,10 @@ import {
     pipelineExecutionPlan,
     pipelineTraces,
     pipelineSpans,
+    pipelineSecrets,
 } from "../../db/pipeline-schema";
 import { eq, lt } from "drizzle-orm";
+import { encryptSecret, decryptSecret } from "../utils/encryption";
 
 
 export type PipelineScript = typeof pipelineScripts.$inferSelect;
@@ -14,6 +16,7 @@ export type PipelineGraph = typeof pipelineGraph.$inferSelect;
 export type PipelineExecutionPlan = typeof pipelineExecutionPlan.$inferSelect;
 export type PipelineTrace = typeof pipelineTraces.$inferSelect;
 export type PipelineSpan = typeof pipelineSpans.$inferSelect;
+export type PipelineSecret = typeof pipelineSecrets.$inferSelect;
 
 export class PipelineRepository {
     /* -------------------------------------------------------------------------- */
@@ -262,6 +265,98 @@ export class PipelineRepository {
             deletedSpans: deletedSpans.length,
             deletedTraces: deletedTraces.length,
         };
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                           Secrets (User-defined)                           */
+    /* -------------------------------------------------------------------------- */
+
+    /**
+     * Lists all secrets (without exposing values).
+     */
+    async listSecrets(): Promise<Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>> {
+        const secrets = await db.query.pipelineSecrets.findMany();
+        return secrets.map((s) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+        }));
+    }
+
+    /**
+     * Gets decrypted secret value by name (for engine use).
+     */
+    async getSecretValue(name: string): Promise<string | null> {
+        const secret = await db.query.pipelineSecrets.findFirst({
+            where: eq(pipelineSecrets.name, name),
+        });
+        if (!secret) return null;
+        try {
+            return decryptSecret(secret.encryptedValue);
+        } catch (error) {
+            console.error(`[Pipeline] Failed to decrypt secret: ${name}`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Creates a new secret (encrypts the value).
+     */
+    async createSecret(data: {
+        name: string;
+        value: string;
+        description?: string;
+    }): Promise<{ id: string; name: string }> {
+        const encrypted = encryptSecret(data.value);
+        const [secret] = await db
+            .insert(pipelineSecrets)
+            .values({
+                id: crypto.randomUUID(),
+                name: data.name,
+                encryptedValue: encrypted,
+                description: data.description || null,
+            })
+            .returning({ id: pipelineSecrets.id, name: pipelineSecrets.name });
+        return secret;
+    }
+
+    /**
+     * Updates a secret (re-encrypts if value changed).
+     */
+    async updateSecret(
+        id: string,
+        data: { value?: string; description?: string }
+    ): Promise<boolean> {
+        const toUpdate: Partial<typeof pipelineSecrets.$inferInsert> = {};
+        if (data.value !== undefined) {
+            toUpdate.encryptedValue = encryptSecret(data.value);
+        }
+        if (data.description !== undefined) {
+            toUpdate.description = data.description || null;
+        }
+        if (Object.keys(toUpdate).length === 0) return true;
+
+        const result = await db
+            .update(pipelineSecrets)
+            .set(toUpdate)
+            .where(eq(pipelineSecrets.id, id))
+            .returning({ id: pipelineSecrets.id });
+        return result.length > 0;
+    }
+
+    /**
+     * Deletes a secret.
+     */
+    async deleteSecret(id: string): Promise<void> {
+        await db.delete(pipelineSecrets).where(eq(pipelineSecrets.id, id));
     }
 }
 

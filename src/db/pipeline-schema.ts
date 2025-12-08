@@ -1,6 +1,31 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 
+// =============================================================================
+// SECRETS: User-defined secrets for pipeline scripts
+// =============================================================================
+
+/**
+ * Stores encrypted secrets for use in Lua scripts via helpers.secret("KEY")
+ * Values are encrypted using AES-256-GCM with BETTER_AUTH_SECRET
+ */
+export const pipelineSecrets = sqliteTable("pipeline_secrets", {
+    id: text("id").primaryKey(),
+    name: text("name").notNull().unique(), // "STRIPE_KEY" - used in helpers.secret("STRIPE_KEY")
+    encryptedValue: text("encrypted_value").notNull(), // AES-256-GCM encrypted
+    description: text("description"), // Optional description for UI
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+        .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+        .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+        .$onUpdate(() => /* @__PURE__ */ new Date())
+        .notNull(),
+});
+
+// =============================================================================
+// SCRIPTS: Lua script storage
+// =============================================================================
+
 /**
  * Stores re-usable Lua scripts (Logic layer)
  */

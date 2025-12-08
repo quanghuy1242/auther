@@ -13,18 +13,26 @@ export class PipelineEngine {
     // SAFETY LIMITS (Phase 3 Hardening)
     // ==========================================================================
     private readonly MAX_SCRIPT_SIZE = 5120; // 5KB limit
-    private readonly SCRIPT_TIMEOUT_MS = 1000; // 1 second
-    private readonly FETCH_TIMEOUT_MS = 3000; // 3 seconds
+    private readonly SCRIPT_TIMEOUT_MS = 10000; // 10 seconds (allows for HTTP calls)
+    private readonly FETCH_TIMEOUT_MS = 3000; // 3 seconds per fetch
+    private readonly FETCH_MAX_RESPONSE_SIZE = 1024 * 1024; // 1MB response limit
     private readonly MAX_CHAIN_DEPTH = 10; // Max layers in DAG
     private readonly MAX_PARALLEL_NODES = 5; // Max nodes per layer
     private readonly MAX_INSTRUCTIONS = 50000; // 50k ops
 
-    // Configuration for Safe Fetch (should be moved to DB/Env later)
-    private readonly ALLOWED_DOMAINS = ["api.stripe.com", "api.internal.co", "mock-api.com"];
-    private readonly SECRETS: Record<string, string> = {
-        STRIPE_KEY: "sk_test_mock_stripe_key",
-        INTERNAL_API_KEY: "mock_internal_key",
-    };
+    // Private IP ranges to block (SSRF protection)
+    private readonly BLOCKED_IP_PATTERNS = [
+        /^127\./, // Loopback
+        /^10\./, // Class A private
+        /^192\.168\./, // Class C private
+        /^172\.(1[6-9]|2\d|3[01])\./, // Class B private
+        /^169\.254\./, // Link-local
+        /^0\./, // Current network
+        /^::1$/, // IPv6 loopback
+        /^fc00:/, // IPv6 unique local
+        /^fe80:/, // IPv6 link-local
+        /^localhost$/i, // Localhost hostname
+    ];
 
     /**
      * Executes the pipeline for a specific trigger event.
@@ -142,8 +150,7 @@ export class PipelineEngine {
                 try {
                     const result = await this.runScript(
                         script.code,
-                        { ...currentContext, outputs }, // Inject 'outputs' history
-                        accumulatedData
+                        { ...currentContext, outputs } // Inject 'outputs' history
                     );
                     const endedAt = new Date();
                     spans.push({
@@ -318,8 +325,7 @@ export class PipelineEngine {
     }
     private async runScript(
         code: string,
-        context: Record<string, unknown>,
-        accumulatedData: Record<string, unknown>
+        context: Record<string, unknown>
     ): Promise<{
         allowed: boolean;
         error?: string;
@@ -343,22 +349,56 @@ export class PipelineEngine {
                     if (ALLOWED_ENV.includes(key)) return process.env[key];
                     return null;
                 },
-                queueWebhook: (event: string, payload: unknown) => {
-                    console.log(`[Pipeline Webhook Queued] ${event}: `, payload);
-                },
-                secret: (key: string) => {
-                    return this.SECRETS[key] || null;
+                secret: async (key: string) => {
+                    // Read from pipeline_secrets table (encrypted)
+                    const value = await pipelineRepository.getSecretValue(key);
+                    return value;
                 },
                 // SAFE FETCH
                 fetch: async (url: string, options: Record<string, unknown>) => {
                     return this.safeFetch(url, options);
                 },
-                getLastAsync: () => this.lastAsyncResult
+                getLastAsync: () => this.lastAsyncResult,
+                // REGEX MATCHING - Converts Lua patterns to JS regex
+                matches: (str: string, pattern: string): boolean => {
+                    try {
+                        // Support both Lua-style patterns and JS regex
+                        // Lua patterns: %d (digit), %w (word), %s (space), %. (literal dot)
+                        const jsPattern = pattern
+                            .replace(/%%/g, "__PERCENT_ESCAPE__")
+                            .replace(/%d/g, "\\d")
+                            .replace(/%w/g, "\\w")
+                            .replace(/%s/g, "\\s")
+                            .replace(/%a/g, "[a-zA-Z]")
+                            .replace(/%l/g, "[a-z]")
+                            .replace(/%u/g, "[A-Z]")
+                            .replace(/%./g, (m) => "\\" + m[1]) // Escape other %X as literal
+                            .replace(/__PERCENT_ESCAPE__/g, "%");
+                        return new RegExp(jsPattern).test(str);
+                    } catch {
+                        console.warn("[Pipeline] Invalid regex pattern:", pattern);
+                        return false;
+                    }
+                },
             };
 
 
             engine.global.set("helpers", helpers);
             engine.global.set("context", context);
+
+            // --- SECURITY: Disable dangerous Lua globals ---
+            // These could be used for sandbox escapes or unintended side effects
+            engine.global.set("os", undefined);
+            engine.global.set("io", undefined);
+            engine.global.set("package", undefined);
+            engine.global.set("require", undefined);
+            engine.global.set("loadfile", undefined);
+            engine.global.set("dofile", undefined);
+            engine.global.set("loadstring", undefined);
+            engine.global.set("load", undefined);
+            engine.global.set("rawset", undefined);
+            engine.global.set("rawget", undefined);
+            // Note: Keep 'debug' for instruction limiting via debug.sethook
 
             // --- Execution ---
             // Inject instruction limit (debug hook) - 50k ops
@@ -412,26 +452,30 @@ end
     }
 
     /**
-     * Restricted Fetch Implementation with safety controls
+     * Restricted Fetch Implementation with safety controls:
+     * - HTTPS-only (no plain HTTP)
+     * - SSRF protection (blocks private IP ranges)
+     * - Response size limit (1MB)
+     * - Timeout (3 seconds)
      */
     private async safeFetch(url: string, options: Record<string, unknown> = {}) {
         try {
             const parsedUrl = new URL(url);
 
-            // 1. Domain Whitelist Check
-            if (!this.ALLOWED_DOMAINS.includes(parsedUrl.hostname)) {
-                throw new Error(`Domain ${parsedUrl.hostname} is not whitelisted.`);
+            // 1. HTTPS-only enforcement
+            if (parsedUrl.protocol !== "https:") {
+                throw new Error(`Only HTTPS URLs are allowed. Got: ${parsedUrl.protocol}`);
             }
 
-            // 2. Secret Injection in Headers
-            // (Lua passes reference like {{STRIPE_KEY}}, implementation handles logic if needed,
-            // but here we allow Lua to call helpers.secret() directly to construct headers.
-            // If we wanted automatic injection for body, we'd do it here.)
+            // 2. SSRF Protection - Block private IP ranges and localhost
+            const hostname = parsedUrl.hostname;
+            for (const pattern of this.BLOCKED_IP_PATTERNS) {
+                if (pattern.test(hostname)) {
+                    throw new Error(`Access to private/internal addresses is blocked: ${hostname}`);
+                }
+            }
 
-            // 3. Rate Limiting (Simple Placeholder)
-            // TODO: Add Redis-based rate limiting here
-
-            // 4. Execute Fetch with TIMEOUT (3 seconds)
+            // 3. Execute Fetch with TIMEOUT
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.FETCH_TIMEOUT_MS);
 
@@ -445,8 +489,25 @@ end
 
                 clearTimeout(timeoutId);
 
-                // 5. Response Sanitization
-                const body = await response.json().catch(() => ({ text: "Non-JSON response" }));
+                // 4. Response size limit check
+                const contentLength = response.headers.get("content-length");
+                if (contentLength && parseInt(contentLength, 10) > this.FETCH_MAX_RESPONSE_SIZE) {
+                    throw new Error(`Response too large: ${contentLength} bytes (max: ${this.FETCH_MAX_RESPONSE_SIZE})`);
+                }
+
+                // 5. Read response with size limit
+                const text = await response.text();
+                if (text.length > this.FETCH_MAX_RESPONSE_SIZE) {
+                    throw new Error(`Response too large: ${text.length} bytes (max: ${this.FETCH_MAX_RESPONSE_SIZE})`);
+                }
+
+                // 6. Parse as JSON if possible
+                let body: unknown;
+                try {
+                    body = JSON.parse(text);
+                } catch {
+                    body = { text };
+                }
 
                 const result = {
                     status: response.status,
@@ -458,12 +519,12 @@ end
             } catch (fetchErr) {
                 clearTimeout(timeoutId);
                 if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
-                    throw new Error(`Fetch timeout exceeded(${this.FETCH_TIMEOUT_MS}ms)`);
+                    throw new Error(`Fetch timeout exceeded (${this.FETCH_TIMEOUT_MS}ms)`);
                 }
                 throw fetchErr;
             }
         } catch (err) {
-            console.error("SafeFetch Error:", err);
+            console.error("[SafeFetch Error]", err);
             throw new Error("SafeFetch failed: " + (err instanceof Error ? err.message : String(err)));
         }
     }

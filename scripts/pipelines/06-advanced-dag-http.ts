@@ -65,7 +65,7 @@ async function main() {
   // But we CAN mock the global fetch used BY safeFetch.
 
   const originalFetch = global.fetch;
-  const mockFetch = async (url: string | URL | Request, _options?: RequestInit) => {
+  const mockFetch = async (url: string | URL | Request) => {
     const u = url.toString();
     if (u.includes("api.stripe.com")) {
       return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
