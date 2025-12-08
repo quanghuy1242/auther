@@ -38,19 +38,19 @@ helpers.log("Action completed for user: " .. (context.userId or "unknown"))
 `;
 
 const ENRICHMENT_TEMPLATE = `-- Enrichment Hook Script
--- Return { data = { ... } } to add extra data to the response
+-- Return { allowed = true, data = { ... } } to add extra data to the response
 -- Access previous script outputs: context.outputs["script_id"], context.prev
 
 -- Example: Add custom claims to token
 local userData = {
     customClaim = "value",
-    timestamp = os.time()
+    timestamp = helpers.now()
 }
 
 -- For chained scripts, access previous output:
 -- local prevData = context.prev or {}
 
-return { data = userData }
+return { allowed = true, data = userData }
 `;
 
 function getDefaultTemplate(executionMode?: "blocking" | "async" | "enrichment"): string {
@@ -72,6 +72,8 @@ interface ScriptEditorModalProps {
     script: Script | null;
     executionMode?: "blocking" | "async" | "enrichment";
     hookName?: string;
+    /** Code from the previous script in the pipeline for context.prev completions */
+    previousScriptCode?: string;
     onSave: (name: string, code: string) => Promise<void>;
     onDelete: () => Promise<void>;
 }
@@ -82,6 +84,7 @@ export function ScriptEditorModal({
     script,
     executionMode,
     hookName,
+    previousScriptCode,
     onSave,
     onDelete,
 }: ScriptEditorModalProps) {
@@ -143,6 +146,7 @@ export function ScriptEditorModal({
                     : `Editing: ${script?.name}`
             }
             size="lg"
+            preventCloseOnEscape
         >
             <div className="space-y-4">
                 {/* Script name */}
@@ -161,7 +165,14 @@ export function ScriptEditorModal({
                 <div>
                     <Label>Lua Code</Label>
                     <div className="mt-1.5">
-                        <CodeEditor value={code} onChange={setCode} height="350px" />
+                        <CodeEditor
+                            value={code}
+                            onChange={setCode}
+                            height="350px"
+                            hookName={hookName}
+                            executionMode={executionMode}
+                            previousScriptCode={previousScriptCode}
+                        />
                     </div>
                 </div>
 

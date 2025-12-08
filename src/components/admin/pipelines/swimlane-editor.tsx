@@ -41,6 +41,7 @@ export function SwimlaneEditor({
     const [editingScript, setEditingScript] = useState<Script | null>(null);
     const [targetHook, setTargetHook] = useState<HookName | null>(null);
     const [targetExecutionMode, setTargetExecutionMode] = useState<"blocking" | "async" | "enrichment" | undefined>(undefined);
+    const [previousScriptCode, setPreviousScriptCode] = useState<string | undefined>(undefined);
 
     // Script picker modal state
     const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -111,8 +112,29 @@ export function SwimlaneEditor({
         setTargetHook(hookName);
         setTargetExecutionMode(hookDef?.type);
         setEditingScript(script);
+
+        // Compute previous script's code for context.prev completions
+        // Find which layer this script is in and get the first script from the previous layer
+        const layers = pipelineConfig[hookName] || [];
+        let prevCode: string | undefined;
+        for (let i = 0; i < layers.length; i++) {
+            if (layers[i].includes(script.id)) {
+                // Found the layer, get ALL scripts from previous layer for merged context.prev
+                if (i > 0 && layers[i - 1].length > 0) {
+                    // Collect code from all parallel scripts in previous layer
+                    const prevScriptCodes = layers[i - 1]
+                        .map(id => scripts.find(s => s.id === id)?.code)
+                        .filter((code): code is string => !!code);
+                    // Concatenate so extractReturnSchema picks up all return fields
+                    prevCode = prevScriptCodes.join("\n\n-- parallel script --\n\n");
+                }
+                break;
+            }
+        }
+        setPreviousScriptCode(prevCode);
+
         setIsEditorOpen(true);
-    }, []);
+    }, [pipelineConfig, scripts]);
 
     // Handle script drop (drag & drop)
     const handleDropScript = useCallback((scriptId: string, hookName: HookName, layerIndex?: number) => {
@@ -321,6 +343,7 @@ export function SwimlaneEditor({
                 script={editingScript}
                 executionMode={targetExecutionMode}
                 hookName={targetHook || undefined}
+                previousScriptCode={previousScriptCode}
                 onSave={handleScriptSave}
                 onDelete={handleScriptDelete}
             />
