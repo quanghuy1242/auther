@@ -72,11 +72,51 @@
     - [x] Add cron to `vercel.json.bin` (daily 4am)
     - [x] Tracing test (`11-tracing.ts`)
 
-- [ ] **Admin UI: Trace Viewer** (NOT IMPLEMENTED)
-    - [ ] Create `/admin/pipelines/traces` page
-    - [ ] List recent traces with status, duration, trigger
-    - [ ] Trace detail view with span waterfall/timeline
-    - [ ] Filter by trigger event, status, date range
+- [ ] **Admin UI: Trace Viewer** (IN PROGRESS)
+    
+    ### Phase 4A: Route Refactoring ✅
+    Convert pipelines from in-page tabs to route-based navigation for lazy loading.
+    
+    - [x] Create `/admin/pipelines/layout.tsx` with shared header + NavTabs
+    - [x] Create `/admin/pipelines/pipeline-tabs.tsx` (Editor, Secrets, Traces)
+    - [x] Create `/admin/pipelines/editor/page.tsx` (move SwimlaneEditor)
+    - [x] Create `/admin/pipelines/secrets/page.tsx` (move SecretsManager)
+    - [x] Create `/admin/pipelines/traces/page.tsx` (new)
+    - [x] Add `loading.tsx` files for each sub-route
+    - [x] Verify lazy loading works (`pnpm lint` passed)
+
+    
+    ### Phase 4B: Trace List View ✅
+    Searchable, filterable table of recent traces.
+    
+    - [x] Add `getTraces()` action (with filters: trigger, status, date range)
+    - [x] Add `getTraceWithSpans()` action
+    - [x] Create `trace-list.tsx` component
+      - Table: Trace ID, Trigger, Status badge, Duration, User, Time
+      - Click row → open detail
+    - [x] Create `trace-filters.tsx` component
+      - Trigger dropdown, status dropdown
+    - [x] Add empty state component (uses shared EmptyState)
+    - [ ] Add pagination (Load More or infinite scroll) - deferred
+    
+    ### Phase 4C: Trace Detail View ✅
+    Waterfall timeline visualization with span details.
+    
+    - [x] Create `trace-detail.tsx` (modal)
+      - Trace metadata header
+      - Waterfall timeline (integrated, not separate component)
+      - Span detail panel
+    - [x] Waterfall features:
+      - Timeline scale (0ms → total duration)
+      - Spans grouped by layerIndex (parallel = same layer)
+      - Horizontal bars (width = duration, color = status)
+      - Click bar → select span
+    - [x] Span detail shows: script name, status, duration, layer index, attributes
+
+    - [ ] Loading skeletons
+    - [ ] Refresh button + auto-refresh toggle
+    - [ ] Responsive design
+    - [ ] Test with real auth flow traces
 
 ## Phase 5: Cleanup & Security Improvements (NEW)
 
@@ -110,7 +150,7 @@
 | Phase 3: Resource Limits | ✅ Complete | All limits implemented & tested |
 | Phase 3: Sandbox Hardening | ✅ Complete | Dangerous globals disabled, matches() added |
 | Phase 4: Backend | ✅ Complete | Tracing schema, repository, engine |
-| Phase 4: UI | ❌ **NOT IMPLEMENTED** | **Trace viewer page needed** |
+| Phase 4: UI | 🟡 **IN PROGRESS** | Route refactoring + Trace Viewer |
 | Phase 5: SafeFetch | ✅ Complete | SSRF protection, HTTPS-only, 10s timeout |
 | Phase 5: Cleanup | ✅ Complete | Dead code removed |
 | Phase 5: Secrets | ✅ Complete | Encrypted storage, tabbed UI |

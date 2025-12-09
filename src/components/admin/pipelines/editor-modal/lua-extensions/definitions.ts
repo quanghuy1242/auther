@@ -100,6 +100,29 @@ export const HELPERS_DEFINITIONS: HelperDefinition[] = [
   body = '{"email": "' .. context.email .. '"}'
 })`,
     },
+    {
+        name: "trace",
+        signature: "helpers.trace(name, [attributes,] fn)",
+        description: "Create a custom tracing span. Max 2 nesting levels. Span auto-closes when function returns. Return values pass through.",
+        params: [
+            { name: "name", type: "string", description: "Span name (e.g., 'Fetch User Data')" },
+            { name: "attributes", type: "table", description: "Optional key-value metadata for the span", optional: true },
+            { name: "fn", type: "function", description: "Work to trace (executed synchronously)" },
+        ],
+        returns: "any -- Return value from fn",
+        example: `-- Simple trace
+helpers.trace("Validate Email", function()
+    helpers.log("Checking email format...")
+end)
+
+-- With attributes and return value
+local user = helpers.trace("Fetch User", {
+    userId = context.userId,
+    source = "database"
+}, function()
+    return helpers.fetch("https://api.example.com/user")
+end)`,
+    },
 ];
 
 // =============================================================================
@@ -367,6 +390,22 @@ export const SNIPPET_TEMPLATES: SnippetTemplate[] = [
 if response.status == 200 then
 \t\${4:-- handle success}
 end`,
+    },
+    {
+        label: "trace-simple",
+        detail: "Create a tracing span",
+        template: `helpers.trace("\${1:Span Name}", function()
+\t\${2:-- traced work}
+end)`,
+    },
+    {
+        label: "trace-with-attrs",
+        detail: "Create a tracing span with attributes",
+        template: `helpers.trace("\${1:Span Name}", {
+\t\${2:key} = \${3:value}
+}, function()
+\t\${4:-- traced work}
+end)`,
     },
 ];
 

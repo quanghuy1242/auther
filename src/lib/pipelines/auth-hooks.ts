@@ -42,7 +42,7 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
 
                 // AFTER: Async hook (runs AFTER user insert)
                 async after(user) {
-                    // Fire-and-forget pipeline
+                    // Fire-and-forget pipeline with user metadata for tracing
                     afterSignupPipeline({
                         user: {
                             id: user.id,
@@ -53,7 +53,7 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
                             ip: undefined,
                             userAgent: undefined,
                         }
-                    });
+                    }, { userId: user.id });
 
                     // Emit webhook
                     await emitWebhookEvent(user.id, "user.created", {
@@ -80,7 +80,7 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
         session: {
             create: {
                 async after(session) {
-                    // Fire-and-forget after login pipeline
+                    // Fire-and-forget after login pipeline with metadata for tracing
                     afterSigninPipeline({
                         user: {
                             id: session.userId,
@@ -90,7 +90,7 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
                             userId: session.userId,
                             expiresAt: session.expiresAt,
                         }
-                    });
+                    }, { userId: session.userId, requestIp: session.ipAddress ?? undefined });
 
                     // Emit webhook
                     await emitWebhookEvent(session.userId, "session.created", {

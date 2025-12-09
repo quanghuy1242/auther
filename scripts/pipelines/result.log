@@ -243,3 +243,290 @@ stack traceback:
 ✓ ALL TRACING TESTS PASSED
 ========================================
 
+
+========================================
+11. TRACING TEST
+========================================
+✓ Created test scripts: 256c4a84-0749-4f23-ba8d-697157c10601, dc02ac9d-1740-45a2-a3f1-7859e82974c6
+
+--- Test 1: Success Path Tracing ---
+✓ Pipeline executed successfully with traced data
+✓ Trace created: eef2f6e1-e58b-4f38-8f91-546bb0d3a861
+  Status: success
+  Duration: 28ms
+  User ID: user_123
+  Request IP: 127.0.0.1
+✓ Span created: Tracing Success (success)
+  Script ID: 256c4a84-0749-4f23-ba8d-697157c10601
+  Duration: 21ms
+
+--- Test 2: Blocked Path Tracing ---
+✓ Pipeline correctly blocked
+✓ Blocked trace created: a2bd48d8-4301-40b5-8339-d03a20fba05f
+  Status: blocked
+  Status Message: Blocked for tracing test
+✓ Blocked span: Tracing Blocker (blocked)
+
+--- Test 3: Multi-Layer DAG Tracing ---
+✓ DAG pipeline executed successfully
+✓ DAG trace: 65de624c-a11e-42d0-9478-1fc139d8b6a4
+  Total spans: 2
+  - Layer 0: DAG Layer 1 (success)
+  - Layer 1: DAG Layer 2 (success)
+✓ Both layers traced correctly
+✓ Test 1-3 scripts cleaned up
+
+--- Test 4: Complex Parallel Execution Tracing ---
+✓ Created 6 parallel test scripts
+✓ Complex parallel pipeline executed successfully
+✓ Complex parallel test scripts cleaned up
+
+========================================
+✓ ALL TRACING TESTS PASSED
+========================================
+
+
+========================================
+11. TRACING TEST
+========================================
+✓ Created test scripts: 185e793d-15a1-47e1-a717-962104ffb3b0, 82b0eed4-8115-4d57-b023-59ee8711906f
+
+--- Test 1: Success Path Tracing ---
+✓ Pipeline executed successfully with traced data
+✓ Trace created: c66579a4-fc82-439d-978f-ff9175e298b7
+  Status: success
+  Duration: 29ms
+  User ID: user_123
+  Request IP: 127.0.0.1
+✓ Span created: Tracing Success (success)
+  Script ID: 185e793d-15a1-47e1-a717-962104ffb3b0
+  Duration: 21ms
+
+--- Test 2: Blocked Path Tracing ---
+✓ Pipeline correctly blocked
+✓ Blocked trace created: 0b0ffdd5-848d-4cfc-b3be-cebe913b5fa6
+  Status: blocked
+  Status Message: Blocked for tracing test
+✓ Blocked span: Tracing Blocker (blocked)
+
+--- Test 3: Multi-Layer DAG Tracing ---
+✓ DAG pipeline executed successfully
+✓ DAG trace: b1105811-3c1b-4713-8963-d3b0aac85d49
+  Total spans: 2
+  - Layer 0: DAG Layer 1 (success)
+  - Layer 1: DAG Layer 2 (success)
+✓ Both layers traced correctly
+✓ Test 1-3 scripts cleaned up
+
+--- Test 4: Complex Parallel Execution Tracing ---
+✓ Created 6 parallel test scripts
+✓ Complex parallel pipeline executed successfully
+✓ Complex trace: 94baf064-0946-49e7-bf6c-180190a13a30
+  Total duration: 70ms
+  Total spans: 6
+  Layer 0:
+    - Geo Blocker: 15ms (started at +6ms)
+    - IP Validator: 20ms (started at +6ms)
+    - Rate Limiter: 29ms (started at +6ms)
+  Layer 1:
+    - Fetch Profile: 21ms (started at +35ms)
+    - Load Permissions: 28ms (started at +36ms)
+  Layer 2:
+    - Aggregate Results: 6ms (started at +64ms)
+✓ All 6 spans traced correctly
+  Layer 0 start time variance: 0ms (should be <5ms for parallel)
+✓ Complex parallel test scripts cleaned up
+
+========================================
+✓ ALL TRACING TESTS PASSED
+========================================
+
+
+========================================
+11. TRACING TEST
+========================================
+✓ Created test scripts: 36ed5bb2-9524-408a-b76c-e5e85a630833, c3eb930c-c280-4372-90da-9ce842849d86
+
+--- Test 1: Success Path Tracing ---
+✓ Pipeline executed successfully with traced data
+✓ Trace created: 5f655a74-5226-4d77-b5e6-e1e4068090f9
+  Status: success
+  Duration: 41ms
+  User ID: user_123
+  Request IP: 127.0.0.1
+✓ Span created: Tracing Success (success)
+  Script ID: 36ed5bb2-9524-408a-b76c-e5e85a630833
+  Duration: 28ms
+
+--- Test 2: Blocked Path Tracing ---
+✓ Pipeline correctly blocked
+✓ Blocked trace created: 9cf770c3-6da0-4273-bcdf-1263c12cb889
+  Status: blocked
+  Status Message: Blocked for tracing test
+✓ Blocked span: Tracing Blocker (blocked)
+
+--- Test 3: Multi-Layer DAG Tracing ---
+✓ DAG pipeline executed successfully
+✓ DAG trace: 15be6931-df77-40d8-aa08-68c93aecaba8
+  Total spans: 2
+  - Layer 0: DAG Layer 1 (success)
+  - Layer 1: DAG Layer 2 (success)
+✓ Both layers traced correctly
+✓ Test 1-3 scripts cleaned up
+
+--- Test 5: Custom Nested Tracing ---
+Triggering trace_test...
+Trace Result: {"allowed":true,"data":{}}
+✓ Found 4 spans.
+✓ Custom nested spans verified successfully
+✓ Custom nested tracing test scripts cleaned up
+
+--- Test 4: Complex Parallel Execution Tracing ---
+✓ Created 6 parallel test scripts
+✓ Complex parallel pipeline executed successfully
+✓ Complex trace: b3e1de34-6cd3-41b8-9c7e-b970547aaa05
+  Total duration: 79ms
+  Total spans: 6
+  Layer 0:
+    - Rate Limiter: 20ms (started at +6ms)
+    - Geo Blocker: 28ms (started at +5ms)
+    - IP Validator: 34ms (started at +6ms)
+  Layer 1:
+    - Fetch Profile: 23ms (started at +40ms)
+    - Load Permissions: 30ms (started at +40ms)
+  Layer 2:
+    - Aggregate Results: 8ms (started at +71ms)
+✓ All 6 spans traced correctly
+  Layer 0 start time variance: 1ms (should be <5ms for parallel)
+✓ Complex parallel test scripts cleaned up
+
+========================================
+✓ ALL TRACING TESTS PASSED
+========================================
+
+
+========================================
+11. TRACING TEST
+========================================
+✓ Created test scripts: 537dea02-14fb-4d41-ac32-799981b755d2, b21a663e-8a0b-4166-b68c-90de26675868
+
+--- Test 1: Success Path Tracing ---
+✓ Pipeline executed successfully with traced data
+✓ Trace created: 994998cf-ee0f-4f27-bcd0-065c43007e19
+  Status: success
+  Duration: 39ms
+  User ID: user_123
+  Request IP: 127.0.0.1
+✓ Span created: Tracing Success (success)
+  Script ID: 537dea02-14fb-4d41-ac32-799981b755d2
+  Duration: 29ms
+
+--- Test 2: Blocked Path Tracing ---
+✓ Pipeline correctly blocked
+✓ Blocked trace created: f21317c3-25c3-4569-bc28-409ed4daa55a
+  Status: blocked
+  Status Message: Blocked for tracing test
+✓ Blocked span: Tracing Blocker (blocked)
+
+--- Test 3: Multi-Layer DAG Tracing ---
+✓ DAG pipeline executed successfully
+✓ DAG trace: d858af75-eb92-4f45-b8e6-3969fcfd5c2c
+  Total spans: 2
+  - Layer 0: DAG Layer 1 (success)
+  - Layer 1: DAG Layer 2 (success)
+✓ Both layers traced correctly
+✓ Test 1-3 scripts cleaned up
+
+--- Test 5: Custom Nested Tracing ---
+Triggering trace_test...
+Trace Result: {"allowed":true,"data":{}}
+✓ Found 4 spans.
+✓ Custom nested spans verified successfully
+✓ Custom nested tracing test scripts cleaned up
+
+--- Test 4: Complex Parallel Execution Tracing ---
+✓ Created 6 parallel test scripts
+✓ Complex parallel pipeline executed successfully
+✓ Complex trace: 8141c729-aea7-4b10-aced-88b1c2a70eaf
+  Total duration: 98ms
+  Total spans: 6
+  Layer 0:
+    - Geo Blocker: 22ms (started at +15ms)
+    - Rate Limiter: 36ms (started at +15ms)
+    - IP Validator: 42ms (started at +15ms)
+  Layer 1:
+    - Load Permissions: 20ms (started at +57ms)
+    - Fetch Profile: 34ms (started at +57ms)
+  Layer 2:
+    - Aggregate Results: 7ms (started at +91ms)
+✓ All 6 spans traced correctly
+  Layer 0 start time variance: 0ms (should be <5ms for parallel)
+✓ Complex parallel test scripts cleaned up
+
+========================================
+✓ ALL TRACING TESTS PASSED
+========================================
+
+
+========================================
+11. TRACING TEST
+========================================
+✓ Created test scripts: e7f47c9c-d575-4211-b5b4-16682d996ca8, 85898846-a59f-4544-9b43-8453aeac8514
+
+--- Test 1: Success Path Tracing ---
+✓ Pipeline executed successfully with traced data
+✓ Trace created: 74b9eb63-d62e-4e48-9a73-f9eeb3eea1f3
+  Status: success
+  Duration: 34ms
+  User ID: user_123
+  Request IP: 127.0.0.1
+✓ Span created: Tracing Success (success)
+  Script ID: e7f47c9c-d575-4211-b5b4-16682d996ca8
+  Duration: 23ms
+
+--- Test 2: Blocked Path Tracing ---
+✓ Pipeline correctly blocked
+✓ Blocked trace created: d5aee274-6ea1-4719-a1b3-1fb7bfc9b326
+  Status: blocked
+  Status Message: Blocked for tracing test
+✓ Blocked span: Tracing Blocker (blocked)
+
+--- Test 3: Multi-Layer DAG Tracing ---
+✓ DAG pipeline executed successfully
+✓ DAG trace: 3c973647-1f8e-4372-9349-912e075bc1c5
+  Total spans: 2
+  - Layer 0: DAG Layer 1 (success)
+  - Layer 1: DAG Layer 2 (success)
+✓ Both layers traced correctly
+✓ Test 1-3 scripts cleaned up
+
+--- Test 5: Custom Nested Tracing ---
+Triggering trace_test...
+Trace Result: {"allowed":true,"data":{}}
+✓ Found 4 spans.
+✓ Custom nested spans verified successfully
+✓ Custom nested tracing test scripts cleaned up
+
+--- Test 4: Complex Parallel Execution Tracing ---
+✓ Created 6 parallel test scripts
+✓ Complex parallel pipeline executed successfully
+✓ Complex trace: 67cbfb2a-bb9f-4aa4-8dc8-16a5bb9777d4
+  Total duration: 90ms
+  Total spans: 6
+  Layer 0:
+    - Rate Limiter: 22ms (started at +8ms)
+    - Geo Blocker: 29ms (started at +8ms)
+    - IP Validator: 38ms (started at +8ms)
+  Layer 1:
+    - Fetch Profile: 24ms (started at +46ms)
+    - Load Permissions: 33ms (started at +46ms)
+  Layer 2:
+    - Aggregate Results: 11ms (started at +79ms)
+✓ All 6 spans traced correctly
+  Layer 0 start time variance: 0ms (should be <5ms for parallel)
+✓ Complex parallel test scripts cleaned up
+
+========================================
+✓ ALL TRACING TESTS PASSED
+========================================
+

@@ -204,6 +204,7 @@ export function ScriptEditorModal({
                                 <div><code className="text-blue-400">helpers.secret(key)</code> - Get secret from config</div>
                                 <div><code className="text-blue-400">helpers.queueWebhook(event, data)</code> - Queue webhook event</div>
                                 <div><code className="text-blue-400">helpers.fetch(url, opts)</code> - HTTP request (whitelisted domains only)</div>
+                                <div><code className="text-blue-400">helpers.trace(name, [attrs], fn)</code> - Custom nested trace span</div>
                             </div>
                         </div>
 

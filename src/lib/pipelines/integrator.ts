@@ -7,6 +7,14 @@ import { HOOK_REGISTRY, type HookName, type HookInput } from "./definitions";
 // This class bridges the PipelineEngine with better-auth hooks.
 // It validates input/output schemas and converts results to appropriate formats.
 
+/**
+ * Metadata for tracing - optional context about the request
+ */
+export interface PipelineMetadata {
+    userId?: string;
+    requestIp?: string;
+}
+
 export class PipelineIntegrator {
     /**
      * Creates a BLOCKING hook handler for better-auth.
@@ -18,7 +26,7 @@ export class PipelineIntegrator {
             throw new Error(`Hook "${hookName}" is not a blocking hook.`);
         }
 
-        return async (context: HookInput<T>): Promise<{
+        return async (context: HookInput<T>, metadata?: PipelineMetadata): Promise<{
             abort: boolean;
             error?: string
         }> => {
@@ -26,8 +34,8 @@ export class PipelineIntegrator {
                 // Validate input against schema
                 const validatedInput = definition.input.parse(context);
 
-                // Execute pipeline
-                const result = await pipelineEngine.executeTrigger(hookName, validatedInput);
+                // Execute pipeline with metadata for tracing
+                const result = await pipelineEngine.executeTrigger(hookName, validatedInput, metadata);
 
                 // Validate output (optional, for debugging)
                 const validatedOutput = definition.output.safeParse(result);
@@ -59,9 +67,9 @@ export class PipelineIntegrator {
             throw new Error(`Hook "${hookName}" is not an async hook.`);
         }
 
-        return async (context: HookInput<T>): Promise<void> => {
+        return async (context: HookInput<T>, metadata?: PipelineMetadata): Promise<void> => {
             // Fire-and-forget: Don't await the pipeline
-            pipelineEngine.executeTrigger(hookName, definition.input.parse(context))
+            pipelineEngine.executeTrigger(hookName, definition.input.parse(context), metadata)
                 .catch(err => console.error(`[Pipeline Async] Error in ${hookName}:`, err));
         };
     }
@@ -76,10 +84,10 @@ export class PipelineIntegrator {
             throw new Error(`Hook "${hookName}" is not an enrichment hook.`);
         }
 
-        return async (context: HookInput<T>): Promise<Record<string, unknown>> => {
+        return async (context: HookInput<T>, metadata?: PipelineMetadata): Promise<Record<string, unknown>> => {
             try {
                 const validatedInput = definition.input.parse(context);
-                const result = await pipelineEngine.executeTrigger(hookName, validatedInput);
+                const result = await pipelineEngine.executeTrigger(hookName, validatedInput, metadata);
 
                 if (result.allowed === false) {
                     throw new Error(result.error || "Enrichment blocked by pipeline");
@@ -96,3 +104,4 @@ export class PipelineIntegrator {
         };
     }
 }
+

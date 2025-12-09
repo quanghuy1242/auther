@@ -1,11 +1,40 @@
 import { luaEnginePool } from "./lua-engine-pool";
 import { pipelineRepository } from "./pipeline-repository";
 import { createHash } from "crypto";
+import { AsyncLocalStorage } from "async_hooks";
+
+// Storage for async context propagation of tracing parent/depth
+const spanContextStorage = new AsyncLocalStorage<{ spanId: string; depth: number }>();
 
 export interface PipelineResult {
     allowed: boolean;
     error?: string;
     data?: Record<string, unknown>; // Accumulated data
+}
+
+/**
+ * Child span created by helpers.trace() within a script
+ */
+interface ChildSpan {
+    id: string;
+    parentSpanId: string;
+    traceId: string;
+    name: string;
+    status: "success" | "error";
+    statusMessage?: string;
+    startedAt: Date;
+    endedAt: Date;
+    durationMs: number;
+    attributes?: string; // JSON-encoded custom attributes
+}
+
+/**
+ * Tracing context passed to runScript for custom span creation
+ */
+interface TracingContext {
+    traceId: string;
+    parentSpanId: string;
+    collectSpan: (span: ChildSpan) => void;
 }
 
 export class PipelineEngine {
@@ -19,6 +48,12 @@ export class PipelineEngine {
     private readonly MAX_CHAIN_DEPTH = 10; // Max layers in DAG
     private readonly MAX_PARALLEL_NODES = 5; // Max nodes per layer
     private readonly MAX_INSTRUCTIONS = 50000; // 50k ops
+    private readonly MAX_TRACE_CONTEXT_SIZE = 32768; // 32KB max for trace context/result
+
+    // Custom tracing limits
+    private readonly MAX_CUSTOM_SPAN_DEPTH = 2; // Max nesting levels for helpers.trace()
+    private readonly MAX_CUSTOM_SPANS_PER_SCRIPT = 100; // Max custom spans per script
+    private readonly MAX_SPAN_ATTRIBUTES_SIZE = 1024; // 1KB max for custom span attributes
 
     // Private IP ranges to block (SSRF protection)
     private readonly BLOCKED_IP_PATTERNS = [
@@ -85,7 +120,8 @@ export class PipelineEngine {
         // === TRACING: Collect spans ===
         const spans: Array<{
             id: string;
-            scriptId: string;
+            scriptId?: string;  // Optional for child spans (custom traces)
+            parentSpanId?: string;  // For custom child spans
             name: string;
             layerIndex: number;
             parallelIndex: number;
@@ -125,7 +161,7 @@ export class PipelineEngine {
                     return null;
                 }
 
-                // Size Check
+                // Size Check - fail-open if exceeded
                 if (script.code.length > this.MAX_SCRIPT_SIZE) {
                     const endedAt = new Date();
                     spans.push({
@@ -140,17 +176,44 @@ export class PipelineEngine {
                         endedAt,
                         durationMs: endedAt.getTime() - spanStartedAt.getTime(),
                     });
+                    // FAIL-OPEN: Size limit is a configuration error, not an intentional block
+                    console.error(`[PipelineEngine] Script ${scriptId} exceeds size limit (fail-open)`);
                     return {
                         id: scriptId,
-                        allowed: false,
-                        error: "Script size limit exceeded"
+                        allowed: true,
+                        error: "Script size limit exceeded",
+                        _isScriptError: true
                     };
                 }
 
+
                 try {
+                    // Create tracing context for helpers.trace() to collect child spans
+                    const tracingContext: TracingContext = {
+                        traceId,
+                        parentSpanId: spanId,
+                        collectSpan: (childSpan: ChildSpan) => {
+                            // Add child span with layerIndex/parallelIndex inherited from parent
+                            spans.push({
+                                id: childSpan.id,
+                                parentSpanId: childSpan.parentSpanId,
+                                name: childSpan.name,
+                                layerIndex,
+                                parallelIndex,
+                                status: childSpan.status,
+                                statusMessage: childSpan.statusMessage,
+                                startedAt: childSpan.startedAt,
+                                endedAt: childSpan.endedAt,
+                                durationMs: childSpan.durationMs,
+                                attributes: childSpan.attributes,
+                            });
+                        },
+                    };
+
                     const result = await this.runScript(
                         script.code,
-                        { ...currentContext, outputs } // Inject 'outputs' history
+                        { ...currentContext, outputs }, // Inject 'outputs' history
+                        tracingContext
                     );
                     const endedAt = new Date();
                     spans.push({
@@ -182,8 +245,12 @@ export class PipelineEngine {
                         endedAt,
                         durationMs: endedAt.getTime() - spanStartedAt.getTime(),
                     });
-                    return { id: scriptId, allowed: false, error: msg };
+                    // FAIL-OPEN: Script errors (timeout, crashes, etc.) should NOT block the auth flow.
+                    // Only intentional { allowed: false } from script should block.
+                    console.error(`[PipelineEngine] Script ${scriptId} errored (fail-open):`, msg);
+                    return { id: scriptId, allowed: true, error: msg, _isScriptError: true };
                 }
+
             });
 
             const layerResults = await Promise.all(layerPromises);
@@ -194,12 +261,19 @@ export class PipelineEngine {
             for (const res of layerResults) {
                 if (!res) continue; // Skipped script
 
-                // FAIL SECURE: If ANY script in the layer denies, the whole pipeline stops.
-                // (In parallel execution, we wait for all to finish, then check blocking)
+                // FAIL-OPEN for script errors: If a script crashed/timed out, continue anyway.
+                // The error is already logged and traced as "error" status in the span.
+                if (res._isScriptError) {
+                    console.warn(`[PipelineEngine] Script ${res.id} errored but flow continues (fail-open)`);
+                    continue;
+                }
+
+                // INTENTIONAL BLOCK: If a script returns { allowed: false }, block the flow.
+                // This is the only way a script can block - explicit denial, not crashes.
                 if (res.allowed === false) {
-                    // === TRACING: Finalize trace as blocked ===
+                    // === TRACING: Finalize trace as blocked (fire-and-forget) ===
                     const traceEndedAt = new Date();
-                    await this.saveTrace({
+                    this.saveTrace({
                         traceId,
                         triggerEvent,
                         status: "blocked",
@@ -208,7 +282,7 @@ export class PipelineEngine {
                         traceEndedAt,
                         userId: metadata?.userId,
                         requestIp: metadata?.requestIp,
-                        contextSnapshot: JSON.stringify(context),
+                        contextSnapshot: this.truncateJson(context, this.MAX_TRACE_CONTEXT_SIZE),
                         resultData: undefined,
                         spans,
                     });
@@ -218,13 +292,15 @@ export class PipelineEngine {
                     };
                 }
 
-                if (res.data) {
+
+                if ('data' in res && res.data) {
                     // Store for specific node access
                     outputs[res.id] = res.data;
                     // Merge into layer output for next layer's 'prev'
                     Object.assign(layerOutputData, res.data);
                     Object.assign(accumulatedData, res.data);
                 }
+
             }
 
             // 4. Update Context for NEXT layer
@@ -236,9 +312,9 @@ export class PipelineEngine {
             layerIndex++;
         }
 
-        // === TRACING: Finalize trace as success ===
+        // === TRACING: Finalize trace as success (fire-and-forget) ===
         const traceEndedAt = new Date();
-        await this.saveTrace({
+        this.saveTrace({
             traceId,
             triggerEvent,
             status: "success",
@@ -247,8 +323,8 @@ export class PipelineEngine {
             traceEndedAt,
             userId: metadata?.userId,
             requestIp: metadata?.requestIp,
-            contextSnapshot: JSON.stringify(context),
-            resultData: JSON.stringify(accumulatedData),
+            contextSnapshot: this.truncateJson(context, this.MAX_TRACE_CONTEXT_SIZE),
+            resultData: this.truncateJson(accumulatedData, this.MAX_TRACE_CONTEXT_SIZE),
             spans,
         });
 
@@ -271,7 +347,8 @@ export class PipelineEngine {
         resultData?: string;
         spans: Array<{
             id: string;
-            scriptId: string;
+            scriptId?: string;  // Optional for child spans (custom traces)
+            parentSpanId?: string;  // For custom child spans
             name: string;
             layerIndex: number;
             parallelIndex: number;
@@ -305,8 +382,9 @@ export class PipelineEngine {
                     params.spans.map((span) => ({
                         id: span.id,
                         traceId: params.traceId,
+                        parentSpanId: span.parentSpanId,  // Include parent span for hierarchy
                         name: span.name,
-                        scriptId: span.scriptId,
+                        scriptId: span.scriptId ?? "",  // Default to empty for child spans
                         layerIndex: span.layerIndex,
                         parallelIndex: span.parallelIndex,
                         status: span.status,
@@ -325,7 +403,8 @@ export class PipelineEngine {
     }
     private async runScript(
         code: string,
-        context: Record<string, unknown>
+        context: Record<string, unknown>,
+        tracingContext?: TracingContext
     ): Promise<{
         allowed: boolean;
         error?: string;
@@ -334,76 +413,214 @@ export class PipelineEngine {
         const pooled = await luaEnginePool.acquire();
         const { engine } = pooled;
 
-        try {
-            // --- Sandbox Setup ---
+        // Trace limits scoped to this script execution
+        let customSpanCount = 0;
 
-            // 1. Helpers
-            const helpers = {
-                log: (msg: unknown) => console.log("[Pipeline Log]:", msg),
-                now: () => Date.now(),
-                hash: (text: string, algorithm: "sha256" | "md5" = "sha256") => {
-                    return createHash(algorithm).update(text).digest("hex");
-                },
-                env: (key: string) => {
-                    const ALLOWED_ENV = ["NODE_ENV", "NEXT_PUBLIC_APP_URL"];
-                    if (ALLOWED_ENV.includes(key)) return process.env[key];
-                    return null;
-                },
-                secret: async (key: string) => {
-                    // Read from pipeline_secrets table (encrypted)
-                    const value = await pipelineRepository.getSecretValue(key);
-                    return value;
-                },
-                // SAFE FETCH
-                fetch: async (url: string, options: Record<string, unknown>) => {
-                    return this.safeFetch(url, options);
-                },
-                getLastAsync: () => this.lastAsyncResult,
-                // REGEX MATCHING - Converts Lua patterns to JS regex
-                matches: (str: string, pattern: string): boolean => {
-                    try {
-                        // Support both Lua-style patterns and JS regex
-                        // Lua patterns: %d (digit), %w (word), %s (space), %. (literal dot)
-                        const jsPattern = pattern
-                            .replace(/%%/g, "__PERCENT_ESCAPE__")
-                            .replace(/%d/g, "\\d")
-                            .replace(/%w/g, "\\w")
-                            .replace(/%s/g, "\\s")
-                            .replace(/%a/g, "[a-zA-Z]")
-                            .replace(/%l/g, "[a-z]")
-                            .replace(/%u/g, "[A-Z]")
-                            .replace(/%./g, (m) => "\\" + m[1]) // Escape other %X as literal
-                            .replace(/__PERCENT_ESCAPE__/g, "%");
-                        return new RegExp(jsPattern).test(str);
-                    } catch {
-                        console.warn("[Pipeline] Invalid regex pattern:", pattern);
-                        return false;
-                    }
-                },
-            };
+        // Initial context for this script execution
+        const initialContext = {
+            spanId: tracingContext?.parentSpanId || "",
+            depth: 0,
+        };
 
+        return spanContextStorage.run(initialContext, async () => {
+            try {
+                // --- Sandbox Setup ---
 
-            engine.global.set("helpers", helpers);
-            engine.global.set("context", context);
+                // 1. Helpers
+                const helpers: Record<string, unknown> = {
+                    log: (msg: unknown) => console.log("[Pipeline Log]:", msg),
+                    now: () => Date.now(),
+                    hash: (text: string, algorithm: "sha256" | "md5" = "sha256") => {
+                        return createHash(algorithm).update(text).digest("hex");
+                    },
+                    env: (key: string) => {
+                        const ALLOWED_ENV = ["NODE_ENV", "NEXT_PUBLIC_APP_URL"];
+                        if (ALLOWED_ENV.includes(key)) return process.env[key];
+                        return null;
+                    },
+                    secret: async (key: string) => {
+                        // Read from pipeline_secrets table (encrypted)
+                        const value = await pipelineRepository.getSecretValue(key);
+                        return value;
+                    },
+                    // SAFE FETCH
+                    fetch: async (url: string, options: Record<string, unknown>) => {
+                        return this.safeFetch(url, options);
+                    },
+                    getLastAsync: () => this.lastAsyncResult,
+                    // REGEX MATCHING - Converts Lua patterns to JS regex
+                    matches: (str: string, pattern: string): boolean => {
+                        try {
+                            // Support both Lua-style patterns and JS regex
+                            // Lua patterns: %d (digit), %w (word), %s (space), %. (literal dot)
+                            const jsPattern = pattern
+                                .replace(/%%/g, "__PERCENT_ESCAPE__")
+                                .replace(/%d/g, "\\d")
+                                .replace(/%w/g, "\\w")
+                                .replace(/%s/g, "\\s")
+                                .replace(/%a/g, "[a-zA-Z]")
+                                .replace(/%l/g, "[a-z]")
+                                .replace(/%u/g, "[A-Z]")
+                                .replace(/%./g, (m) => "\\" + m[1]) // Escape other %X as literal
+                                .replace(/__PERCENT_ESCAPE__/g, "%");
+                            return new RegExp(jsPattern).test(str);
+                        } catch {
+                            console.warn("[Pipeline] Invalid regex pattern:", pattern);
+                            return false;
+                        }
+                    },
+                    // CUSTOM TRACING: helpers.trace(name, [attributes,] fn)
+                    trace: (
+                        nameOrFn: string | (() => unknown),
+                        attrsOrFn?: Record<string, unknown> | (() => unknown),
+                        maybeFn?: () => unknown
+                    ): unknown => {
+                        // Parse overloaded arguments: trace(name, fn) or trace(name, attrs, fn)
+                        let name: string;
+                        let attributes: Record<string, unknown> | undefined;
+                        let fn: () => unknown;
 
-            // --- SECURITY: Disable dangerous Lua globals ---
-            // These could be used for sandbox escapes or unintended side effects
-            engine.global.set("os", undefined);
-            engine.global.set("io", undefined);
-            engine.global.set("package", undefined);
-            engine.global.set("require", undefined);
-            engine.global.set("loadfile", undefined);
-            engine.global.set("dofile", undefined);
-            engine.global.set("loadstring", undefined);
-            engine.global.set("load", undefined);
-            engine.global.set("rawset", undefined);
-            engine.global.set("rawget", undefined);
-            // Note: Keep 'debug' for instruction limiting via debug.sethook
+                        if (typeof nameOrFn === "string" && typeof attrsOrFn === "function") {
+                            // trace(name, fn)
+                            name = nameOrFn;
+                            fn = attrsOrFn as () => unknown;
+                        } else if (
+                            typeof nameOrFn === "string" &&
+                            typeof attrsOrFn === "object" &&
+                            typeof maybeFn === "function"
+                        ) {
+                            // trace(name, attrs, fn)
+                            name = nameOrFn;
+                            attributes = attrsOrFn as Record<string, unknown>;
+                            fn = maybeFn;
+                        } else {
+                            console.warn("[Pipeline] Invalid helpers.trace() arguments, executing without tracing");
+                            if (typeof attrsOrFn === "function") {
+                                return (attrsOrFn as () => unknown)();
+                            }
+                            if (typeof maybeFn === "function") {
+                                return maybeFn();
+                            }
+                            return undefined;
+                        }
 
-            // --- Execution ---
-            // Inject instruction limit (debug hook) - 50k ops
-            // Hook fires every 100 instructions, so we count by 100
-            const instructionLimit = `
+                        // If no tracing context, just execute the function
+                        if (!tracingContext) {
+                            return fn();
+                        }
+
+                        // Get current async context
+                        const currentContext = spanContextStorage.getStore();
+                        const currentDepth = currentContext?.depth ?? 0;
+                        const parentSpanId = currentContext?.spanId ?? tracingContext.parentSpanId ?? "";
+
+                        // Check nesting depth (max 2)
+                        if (currentDepth >= this.MAX_CUSTOM_SPAN_DEPTH) {
+                            console.warn(
+                                `[Pipeline] helpers.trace() max depth (${this.MAX_CUSTOM_SPAN_DEPTH}) exceeded, skipping span: ${name}`
+                            );
+                            return fn();
+                        }
+
+                        // Check span count limit
+                        if (customSpanCount >= this.MAX_CUSTOM_SPANS_PER_SCRIPT) {
+                            console.warn(
+                                `[Pipeline] helpers.trace() max spans (${this.MAX_CUSTOM_SPANS_PER_SCRIPT}) exceeded, skipping span: ${name}`
+                            );
+                            return fn();
+                        }
+
+                        // Validate and truncate attributes if needed
+                        let attributesJson: string | undefined;
+                        if (attributes) {
+                            try {
+                                const json = JSON.stringify(attributes);
+                                if (json.length > this.MAX_SPAN_ATTRIBUTES_SIZE) {
+                                    console.warn(
+                                        `[Pipeline] helpers.trace() attributes exceed ${this.MAX_SPAN_ATTRIBUTES_SIZE} bytes, truncating`
+                                    );
+                                    attributesJson = json.substring(0, this.MAX_SPAN_ATTRIBUTES_SIZE);
+                                } else {
+                                    attributesJson = json;
+                                }
+                            } catch {
+                                console.warn("[Pipeline] helpers.trace() failed to serialize attributes");
+                            }
+                        }
+
+                        const childSpanId = crypto.randomUUID();
+                        const childSpanStart = new Date();
+
+                        customSpanCount++;
+
+                        const finishSpan = (status: "success" | "error", errorMsg?: string) => {
+                            const endedAt = new Date();
+                            tracingContext.collectSpan({
+                                id: childSpanId,
+                                parentSpanId: parentSpanId,
+                                traceId: tracingContext.traceId,
+                                name,
+                                status,
+                                statusMessage: errorMsg,
+                                startedAt: childSpanStart,
+                                endedAt,
+                                durationMs: endedAt.getTime() - childSpanStart.getTime(),
+                                attributes: attributesJson,
+                            });
+                        };
+
+                        // Execute within child span context
+                        return spanContextStorage.run({ spanId: childSpanId, depth: currentDepth + 1 }, () => {
+                            try {
+                                const result = fn();
+
+                                // Handle Promise return for async duration
+                                if (result instanceof Promise) {
+                                    return result
+                                        .then((res) => {
+                                            finishSpan("success");
+                                            return res;
+                                        })
+                                        .catch((err) => {
+                                            const errorMsg = err instanceof Error ? err.message : String(err);
+                                            finishSpan("error", errorMsg);
+                                            throw err;
+                                        });
+                                }
+
+                                // Synchronous Success
+                                finishSpan("success");
+                                return result;
+                            } catch (err) {
+                                const errorMsg = err instanceof Error ? err.message : String(err);
+                                finishSpan("error", errorMsg);
+                                throw err;
+                            }
+                        });
+                    },
+                };
+
+                engine.global.set("helpers", helpers);
+                engine.global.set("context", context);
+
+                // --- SECURITY: Disable dangerous Lua globals ---
+                // These could be used for sandbox escapes or unintended side effects
+                engine.global.set("os", undefined);
+                engine.global.set("io", undefined);
+                engine.global.set("package", undefined);
+                engine.global.set("require", undefined);
+                engine.global.set("loadfile", undefined);
+                engine.global.set("dofile", undefined);
+                engine.global.set("loadstring", undefined);
+                engine.global.set("load", undefined);
+                engine.global.set("rawset", undefined);
+                engine.global.set("rawget", undefined);
+                // Note: Keep 'debug' for instruction limiting via debug.sethook
+
+                // --- Execution ---
+                // Inject instruction limit (debug hook) - 50k ops
+                // Hook fires every 100 instructions, so we count by 100
+                const instructionLimit = `
                 local __instruction_count = 0
                 local __MAX_INSTRUCTIONS = ${this.MAX_INSTRUCTIONS}
                 local __HOOK_INTERVAL = 100
@@ -415,40 +632,41 @@ end
 end, "", __HOOK_INTERVAL)
 `;
 
-            // Inject 'await' helper as Lua function that yields
-            const luaPrelude = `
+                // Inject 'await' helper as Lua function that yields
+                const luaPrelude = `
 function await(p)
 coroutine.yield(p)
 return helpers.getLastAsync()
 end
             `;
-            const fullCode = instructionLimit + "\n" + luaPrelude + "\n" + code;
+                const fullCode = instructionLimit + "\n" + luaPrelude + "\n" + code;
 
-            const result = await Promise.race([
-                engine.doString(fullCode),
-                new Promise<never>((_, reject) =>
-                    setTimeout(
-                        () => reject(new Error("Script execution timeout")),
-                        this.SCRIPT_TIMEOUT_MS
-                    )
-                ),
-            ]);
+                const result = await Promise.race([
+                    engine.doString(fullCode),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(
+                            () => reject(new Error("Script execution timeout")),
+                            this.SCRIPT_TIMEOUT_MS
+                        )
+                    ),
+                ]);
 
-            if (!result) {
-                console.warn("Pipeline script returned nil. Defaulting to allowed.");
-                return { allowed: true };
+                if (!result) {
+                    console.warn("Pipeline script returned nil. Defaulting to allowed.");
+                    return { allowed: true };
+                }
+
+                const allowed = result.allowed !== false;
+                const error = result.error;
+                const data = result.data;
+
+                return { allowed, error, data };
+            } finally {
+                engine.global.set("helpers", undefined);
+                engine.global.set("context", undefined);
+                luaEnginePool.release(pooled);
             }
-
-            const allowed = result.allowed !== false;
-            const error = result.error;
-            const data = result.data;
-
-            return { allowed, error, data };
-        } finally {
-            engine.global.set("helpers", undefined);
-            engine.global.set("context", undefined);
-            luaEnginePool.release(pooled);
-        }
+        });
     }
 
     /**
@@ -530,6 +748,20 @@ end
     }
 
     private lastAsyncResult: unknown = null;
+
+    /**
+     * Truncates JSON data to a maximum size to prevent DB bloat.
+     * Large context/result data is truncated with a marker.
+     */
+    private truncateJson(data: unknown, maxSize: number): string {
+        const json = JSON.stringify(data);
+        if (json.length <= maxSize) {
+            return json;
+        }
+        // Truncate and add marker
+        const truncated = json.slice(0, maxSize - 50);
+        return truncated + '..."__truncated":true,"__originalSize":' + json.length + '}';
+    }
 }
 
 export const pipelineEngine = new PipelineEngine();

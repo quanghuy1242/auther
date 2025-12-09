@@ -192,6 +192,7 @@ export class PipelineRepository {
     async createSpans(spans: Array<{
         id: string;
         traceId: string;
+        parentSpanId?: string;  // For nested custom spans
         name: string;
         scriptId: string;
         layerIndex: number;

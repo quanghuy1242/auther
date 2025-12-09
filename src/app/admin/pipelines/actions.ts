@@ -536,3 +536,134 @@ export async function deleteSecret(
     }
 }
 
+// =============================================================================
+// TRACE OPERATIONS (for trace viewer)
+// =============================================================================
+
+export interface TraceInfo {
+    id: string;
+    triggerEvent: string;
+    status: string;
+    statusMessage: string | null;
+    startedAt: Date;
+    endedAt: Date | null;
+    durationMs: number | null;
+    userId: string | null;
+    requestIp: string | null;
+    createdAt: Date;
+}
+
+export interface SpanInfo {
+    id: string;
+    traceId: string;
+    parentSpanId: string | null;
+    name: string;
+    scriptId: string;
+    layerIndex: number;
+    parallelIndex: number;
+    status: string;
+    statusMessage: string | null;
+    startedAt: Date;
+    endedAt: Date | null;
+    durationMs: number | null;
+    attributes: string | null;
+}
+
+export interface TraceFilters {
+    triggerEvent?: string;
+    status?: string;
+    from?: Date;
+    to?: Date;
+    limit?: number;
+}
+
+/**
+ * Get traces with optional filters.
+ */
+export async function getTraces(filters?: TraceFilters): Promise<TraceInfo[]> {
+    const traces = await pipelineRepository.listTraces({
+        triggerEvent: filters?.triggerEvent,
+        limit: filters?.limit || 50,
+    });
+
+    // Apply additional filters that repository doesn't support
+    let filtered = traces;
+
+    if (filters?.status) {
+        filtered = filtered.filter(t => t.status === filters.status);
+    }
+
+    if (filters?.from) {
+        filtered = filtered.filter(t => t.startedAt >= filters.from!);
+    }
+
+    if (filters?.to) {
+        filtered = filtered.filter(t => t.startedAt <= filters.to!);
+    }
+
+    return filtered.map(t => ({
+        id: t.id,
+        triggerEvent: t.triggerEvent,
+        status: t.status,
+        statusMessage: t.statusMessage,
+        startedAt: t.startedAt,
+        endedAt: t.endedAt,
+        durationMs: t.durationMs,
+        userId: t.userId,
+        requestIp: t.requestIp,
+        createdAt: t.createdAt,
+    }));
+}
+
+/**
+ * Get a single trace with its spans.
+ */
+export async function getTraceWithSpans(traceId: string): Promise<{
+    trace: TraceInfo | null;
+    spans: SpanInfo[];
+}> {
+    const result = await pipelineRepository.getTraceWithSpans(traceId);
+
+    if (!result.trace) {
+        return { trace: null, spans: [] };
+    }
+
+    return {
+        trace: {
+            id: result.trace.id,
+            triggerEvent: result.trace.triggerEvent,
+            status: result.trace.status,
+            statusMessage: result.trace.statusMessage,
+            startedAt: result.trace.startedAt,
+            endedAt: result.trace.endedAt,
+            durationMs: result.trace.durationMs,
+            userId: result.trace.userId,
+            requestIp: result.trace.requestIp,
+            createdAt: result.trace.createdAt,
+        },
+        spans: result.spans.map(s => ({
+            id: s.id,
+            traceId: s.traceId,
+            parentSpanId: s.parentSpanId,
+            name: s.name,
+            scriptId: s.scriptId,
+            layerIndex: s.layerIndex,
+            parallelIndex: s.parallelIndex,
+            status: s.status,
+            statusMessage: s.statusMessage,
+            startedAt: s.startedAt,
+            endedAt: s.endedAt,
+            durationMs: s.durationMs,
+            attributes: s.attributes,
+        })),
+    };
+}
+
+/**
+ * Get list of unique trigger events from traces (for filter dropdown).
+ */
+export async function getTraceTriggerEvents(): Promise<string[]> {
+    const traces = await pipelineRepository.listTraces({ limit: 100 });
+    const events = new Set(traces.map(t => t.triggerEvent));
+    return Array.from(events).sort();
+}
