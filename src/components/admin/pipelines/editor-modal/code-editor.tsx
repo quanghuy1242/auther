@@ -65,6 +65,8 @@ export function CodeEditor({
                 autocomplete: true,
                 linting: true,
                 hover: true,
+                semanticHighlighting: true,
+                inlayHints: false,
                 lintDelay: 300,
                 checkReturnType: true,
             }),

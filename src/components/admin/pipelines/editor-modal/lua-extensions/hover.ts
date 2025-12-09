@@ -13,151 +13,41 @@ import {
     DISABLED_GLOBALS,
     DISABLED_GLOBAL_MESSAGES,
     LUA_KEYWORDS,
+    LUA_BUILTIN_DOCS,
     type HelperDefinition,
     type ContextField,
 } from "./definitions";
-import { inferVariableTypes } from "./type-inference";
+import { getVariablesInScope, resolveTableKeyAtPosition, formatLuaType as baseFormatLuaType } from "./type-inference";
 
 // =============================================================================
-// LUA BUILTIN DOCUMENTATION
+// TABLE KEY CONTEXT DETECTION
 // =============================================================================
 
-const LUA_BUILTIN_DOCS: Record<string, { signature: string; description: string }> = {
-    pairs: {
-        signature: "pairs(t)",
-        description: "Returns an iterator function for traversing all key-value pairs in table t.",
-    },
-    ipairs: {
-        signature: "ipairs(t)",
-        description:
-            "Returns an iterator function for traversing the array part of table t (integer keys 1, 2, 3...).",
-    },
-    tonumber: {
-        signature: "tonumber(e, base?)",
-        description:
-            "Converts e to a number. If e is already a number, returns it. Otherwise tries to parse as number.",
-    },
-    tostring: {
-        signature: "tostring(v)",
-        description: "Converts any value to a string.",
-    },
-    type: {
-        signature: "type(v)",
-        description:
-            'Returns the type of v as a string: "nil", "number", "string", "boolean", "table", "function", etc.',
-    },
-    print: {
-        signature: "print(...)",
-        description: "Prints values to stdout (goes to execution log in sandbox).",
-    },
-    error: {
-        signature: "error(message, level?)",
-        description: "Raises an error with the given message.",
-    },
-    pcall: {
-        signature: "pcall(f, ...)",
-        description: "Calls f with the given arguments in protected mode. Returns success status and result/error.",
-    },
-    assert: {
-        signature: "assert(v, message?)",
-        description: "Raises an error if v is false or nil.",
-    },
-    select: {
-        signature: 'select(index, ...)',
-        description: 'Returns arguments after index, or "#" returns count of arguments.',
-    },
-    next: {
-        signature: "next(t, key?)",
-        description: "Returns next key-value pair in table after key.",
-    },
-    getmetatable: {
-        signature: "getmetatable(t)",
-        description: "Returns the metatable of t, or nil if none.",
-    },
-    setmetatable: {
-        signature: "setmetatable(t, mt)",
-        description: "Sets the metatable of t to mt and returns t.",
-    },
-    unpack: {
-        signature: "unpack(list, i?, j?)",
-        description: "Returns elements from list[i] to list[j].",
-    },
-    // String library
-    "string.sub": {
-        signature: "string.sub(s, i, j?)",
-        description: "Returns substring from position i to j.",
-    },
-    "string.len": {
-        signature: "string.len(s)",
-        description: "Returns the length of string s.",
-    },
-    "string.find": {
-        signature: "string.find(s, pattern, init?, plain?)",
-        description: "Finds first match of pattern in s.",
-    },
-    "string.match": {
-        signature: "string.match(s, pattern, init?)",
-        description: "Returns captures from pattern match.",
-    },
-    "string.gsub": {
-        signature: "string.gsub(s, pattern, repl, n?)",
-        description: "Global substitution of pattern matches.",
-    },
-    "string.format": {
-        signature: "string.format(fmt, ...)",
-        description: "Formats values according to format string.",
-    },
-    "string.lower": {
-        signature: "string.lower(s)",
-        description: "Returns lowercase version of s.",
-    },
-    "string.upper": {
-        signature: "string.upper(s)",
-        description: "Returns uppercase version of s.",
-    },
-    // Table library
-    "table.insert": {
-        signature: "table.insert(t, pos?, value)",
-        description: "Inserts value into array t at position pos.",
-    },
-    "table.remove": {
-        signature: "table.remove(t, pos?)",
-        description: "Removes and returns element at position pos.",
-    },
-    "table.concat": {
-        signature: "table.concat(t, sep?, i?, j?)",
-        description: "Concatenates array elements into string.",
-    },
-    "table.sort": {
-        signature: "table.sort(t, comp?)",
-        description: "Sorts array t in-place.",
-    },
-    // Math library
-    "math.abs": {
-        signature: "math.abs(x)",
-        description: "Returns absolute value of x.",
-    },
-    "math.floor": {
-        signature: "math.floor(x)",
-        description: "Returns largest integer <= x.",
-    },
-    "math.ceil": {
-        signature: "math.ceil(x)",
-        description: "Returns smallest integer >= x.",
-    },
-    "math.min": {
-        signature: "math.min(x, ...)",
-        description: "Returns minimum value.",
-    },
-    "math.max": {
-        signature: "math.max(x, ...)",
-        description: "Returns maximum value.",
-    },
-    "math.random": {
-        signature: "math.random(m?, n?)",
-        description: "Returns random number.",
-    },
-};
+/**
+ * Check if a word at a given line position is a table key (not a function call/builtin)
+ * This uses simple regex-based heuristics to detect patterns like:
+ * - `{ key = value }`
+ * - `{ ["key"] = value }`
+ * - `key = value,` (inside table)
+ */
+function isTableKeyContext(lineText: string, wordStart: number, word: string): boolean {
+    // Pattern 1: word is followed by '=' but not '==' (assignment in table)
+    const afterWord = lineText.slice(wordStart + word.length).trim();
+    if (afterWord.startsWith("=") && !afterWord.startsWith("==")) {
+        // Check if we're inside curly braces (table context)
+        const beforeWord = lineText.slice(0, wordStart);
+        // Count open/close braces to see if we're inside a table
+        const openBraces = (beforeWord.match(/{/g) || []).length;
+        const closeBraces = (beforeWord.match(/}/g) || []).length;
+        if (openBraces > closeBraces) {
+            return true; // Inside table literal
+        }
+    }
+    return false;
+}
+
+// =============================================================================
+
 
 // =============================================================================
 // TOOLTIP CONTENT BUILDERS
@@ -272,61 +162,213 @@ function createKeywordTooltip(keyword: string): HTMLElement {
     `);
 }
 
-// =============================================================================
-// WORD EXTRACTION
-// =============================================================================
 
-function getWordAtPosition(view: EditorView, pos: number): { word: string; from: number; to: number } | null {
-    const line = view.state.doc.lineAt(pos);
-    const text = line.text;
-    const col = pos - line.from;
-
-    // Find word boundaries
-    let start = col;
-    let end = col;
-
-    // Expand backwards
-    while (start > 0 && /[\w.]/.test(text[start - 1])) {
-        start--;
-    }
-
-    // Expand forwards
-    while (end < text.length && /\w/.test(text[end])) {
-        end++;
-    }
-
-    const word = text.slice(start, end);
-    if (!word) return null;
-
-    return { word, from: line.from + start, to: line.from + end };
-}
 
 // =============================================================================
-// MAIN HOVER TOOLTIP
+// HELPER: Resolve Type from Chain (Adapted for Hover)
 // =============================================================================
+
+import { type VariableType, type LuaType } from "./type-inference";
 
 export interface LuaHoverOptions {
     hookName?: string;
+}
+
+function resolveHoverChainType(chain: string[], variables: Map<string, VariableType>): LuaType | null {
+    if (chain.length === 0) return null;
+
+    let currentType: LuaType | null = null;
+    const start = chain[0];
+
+    // 1. Resolve start
+    const variable = variables.get(start);
+    if (variable) {
+        currentType = variable.inferredType;
+    } else if (start === "context") {
+        currentType = { kind: "global", name: "context" };
+    } else if (start === "helpers") {
+        currentType = { kind: "global", name: "helpers" };
+    } else {
+        return null;
+    }
+
+    // 2. Resolve rest
+    for (let i = 1; i < chain.length; i++) {
+        if (!currentType) return null;
+        const member = chain[i];
+
+        if (currentType.kind === "global" && currentType.name === "context") {
+            const typeMap: Record<string, string> = {
+                user: "PipelineUser",
+                session: "PipelineSession",
+                apikey: "PipelineApiKey",
+                client: "OAuthClient",
+                request: "RequestInfo",
+            };
+            if (Object.keys(typeMap).includes(member)) {
+                currentType = { kind: "context", contextObject: member };
+            } else if (member === "prev") {
+                currentType = { kind: "global", name: "prev" };
+            } else if (member === "outputs") {
+                currentType = { kind: "global", name: "outputs" };
+            } else {
+                return null;
+            }
+        }
+        else if (currentType.kind === "context" && currentType.contextObject) {
+            // Look up field in nested context object definitions
+            const typeMap: Record<string, string> = {
+                user: "PipelineUser",
+                session: "PipelineSession",
+                apikey: "PipelineApiKey",
+                client: "OAuthClient",
+                request: "RequestInfo",
+            };
+            const typeName: string = typeMap[currentType.contextObject];
+
+            if (typeName && NESTED_TYPE_FIELDS[typeName]) {
+                const field: ContextField | undefined = NESTED_TYPE_FIELDS[typeName].find(f => f.name === member);
+                if (field) {
+                    // Convert ContextField to LuaType for consistency
+                    currentType = { kind: "primitive", name: field.type }; // approximation
+                } else {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        else if (currentType.kind === "table" && currentType.fields) {
+            currentType = currentType.fields.get(member) || null;
+        }
+        else {
+            return null;
+        }
+    }
+
+    return currentType;
 }
 
 export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
     const { hookName } = options;
 
     return hoverTooltip((view: EditorView, pos: number): Tooltip | null => {
-        const wordInfo = getWordAtPosition(view, pos);
-        if (!wordInfo) return null;
+        // Expand word to include dots for chain detection
+        const line = view.state.doc.lineAt(pos);
+        const text = line.text;
+        const col = pos - line.from;
 
-        const { word, from } = wordInfo;
+        // Find chain boundaries (e.g. "response.body")
+        let start = col;
+        let end = col;
+        while (start > 0 && /[\w.]/.test(text[start - 1])) start--;
+        while (end < text.length && /[\w.]/.test(text[end])) end++;
+
+        const fullChain = text.slice(start, end);
+
+        // Find the specific word being hovered
+        let wordStart = col;
+        let wordEnd = col;
+        while (wordStart > 0 && /\w/.test(text[wordStart - 1])) wordStart--;
+        while (wordEnd < text.length && /\w/.test(text[wordEnd])) wordEnd++;
+        const word = text.slice(wordStart, wordEnd);
+
+        if (!word) return null;
+
+        const variables = getVariablesInScope(view.state.doc.toString(), line.from + wordStart);
+
+        // Check for table key definition first (e.g. { a = 1 })
+        // This is a special case where we are not hovering a variable but a key declaration
+        const tableKey = resolveTableKeyAtPosition(view.state.doc.toString(), line.from + wordStart);
+        if (tableKey) {
+            const formatType = (t: typeof tableKey.type, depth = 0): string => baseFormatLuaType(t, depth);
+            return {
+                pos: line.from + wordStart,
+                above: true,
+                create: () => ({
+                    dom: createTooltipDOM(`
+                        <div style="font-weight: 600; font-family: monospace; color: #9CDCFE; margin-bottom: 6px;">
+                            (field) ${tableKey.name}: ${formatType(tableKey.type)}
+                        </div>
+                        <div style="font-size: 0.9em; opacity: 0.8;">
+                           Table field definition
+                        </div>
+                    `)
+                })
+            };
+        }
+
+        // ---------------------------------------------------------------------
+        // 1. Try resolving as a property chain first
+        // ---------------------------------------------------------------------
+        // Check if the word is part of a chain like "obj.field"
+        // We only care if we are hovering over "field", or if "obj" is a table
+
+        if (fullChain.includes(".") && fullChain !== word) {
+            // Split chain up to the hovered word
+            // e.g. "response.body" -> hovering "body" -> chain ["response", "body"]
+            // e.g. "a.b.c" -> hovering "b" -> chain ["a", "b"]
+
+            // Find where the hovered word is in the chain
+            const chainParts = fullChain.split(".");
+            const relativeStart = wordStart - start;
+
+            // Approximate index of word in chain
+            // This is heuristic but works for simple "a.b.c" cases
+            let currentLen = 0;
+            let targetIndex = -1;
+            for (let i = 0; i < chainParts.length; i++) {
+                if (currentLen === relativeStart) {
+                    targetIndex = i;
+                    break;
+                }
+                currentLen += chainParts[i].length + 1; // +1 for dot
+            }
+
+            if (targetIndex > 0) { // Must be at least the second part to be a property access
+                const prefixChain = chainParts.slice(0, targetIndex + 1);
+                const resolvedType = resolveHoverChainType(prefixChain, variables);
+
+                if (resolvedType) {
+                    return {
+                        pos: line.from + wordStart,
+                        above: true,
+                        create: () => {
+                            // Re-use formatting logic or simplified display
+                            let typeDisplay = "unknown";
+                            if (resolvedType.kind === "primitive") typeDisplay = resolvedType.name || "any";
+                            else if (resolvedType.kind === "table") typeDisplay = "table";
+                            else if (resolvedType.kind === "function") typeDisplay = "function(...)";
+
+                            return {
+                                dom: createTooltipDOM(`
+                                    <div style="font-weight: 600; font-family: monospace; color: #61afef; margin-bottom: 6px;">
+                                        ${prefixChain.join(".")}
+                                    </div>
+                                    <div style="margin-bottom: 8px;">Property of inferred type</div>
+                                    <div style="font-size: 0.9em; opacity: 0.8;">
+                                        Type: <code style="color: #98c379;">${typeDisplay}</code>
+                                    </div>
+                                 `)
+                            };
+                        }
+                    };
+                }
+            }
+        }
+
+
+        // ---------------------------------------------------------------------
+        // 2. Fallback to existing single-word checks
+        // ---------------------------------------------------------------------
 
         // 0. Check for local variables/functions (Dynamic)
         // We do this first because locals shadow globals
-        const code = view.state.doc.toString();
-        const { variables } = inferVariableTypes(code);
         const local = variables.get(word);
 
-        if (local && (local.doc || local.type === "function")) {
+        if (local) {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => {
                     const dom = document.createElement("div");
@@ -339,17 +381,17 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
                     `;
 
                     let signature = word;
-                    if (local.type === "function") {
-                        const params = local.functionParams || [];
-                        signature = `function ${word}(${params.join(", ")})`;
-                    } else {
-                        signature = `${word}: ${local.type}`;
-                    }
+                    const type = local.inferredType;
+
+                    // Helper to format LuaType using the shared one but with our depth preference if needed
+                    // Actually, let's just use the imported formatLuaType (baseFormatLuaType)
+                    const formatType = (t: typeof type, depth = 0): string => baseFormatLuaType(t, depth);
+
+                    signature = `${word}: ${formatType(type)}`;
 
                     dom.innerHTML = `
-                        <div style="font-weight: 600; font-family: monospace; color: #61afef; margin-bottom: 6px;">
-                            ${signature}
-                        </div>
+                        <div style="font-weight: 600; font-family: monospace; color: #61afef; margin-bottom: 6px; white-space: pre-wrap;">${signature}</div>
+                        ${local.kind === "upvalue" ? '<div style="color: #abb2bf; font-style: italic; margin-bottom: 4px; font-size: 0.9em;">Upvalue from outer scope</div>' : ""}
                         <div style="margin-bottom: 8px;">${local.doc?.description || ""}</div>
                         ${local.doc?.params?.length ? `
                         <div style="font-size: 0.9em; opacity: 0.8;">
@@ -369,30 +411,39 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
                             <span style="opacity: 0.7;"> — ${local.doc.returns.description}</span>
                         </div>
                         ` : ""}
+                        ${local.initNode ? `
+                            <div style="font-size: 0.8em; margin-top: 8px; opacity: 0.6; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+                                Defined on line ${local.line}
+                            </div>
+                        ` : ""}
                     `;
                     return { dom };
                 }
             };
         }
 
-        // Check for helpers.xxx
-        const helpersMatch = word.match(/^helpers\.(\w+)$/);
-        if (helpersMatch) {
-            const helperName = helpersMatch[1];
-            const helper = HELPERS_DEFINITIONS.find((h) => h.name === helperName);
-            if (helper) {
-                return {
-                    pos: from,
-                    above: true,
-                    create: () => ({ dom: createHelperTooltip(helper) }),
-                };
+        // Check for helpers.xxx (Using fullChain to match)
+        const helpersMatch = fullChain.match(/^helpers\.(\w+)$/);
+        if (helpersMatch && (word === helpersMatch[1] || word === "helpers")) {
+            // If hovering "fetch" in "helpers.fetch", OR hovering "helpers" (optional legacy behavior, ensuring we catch it)
+            // Prioritize the method name if hovering the method
+            if (word === helpersMatch[1]) {
+                const helperName = helpersMatch[1];
+                const helper = HELPERS_DEFINITIONS.find((h) => h.name === helperName);
+                if (helper) {
+                    return {
+                        pos: line.from + wordStart,
+                        above: true,
+                        create: () => ({ dom: createHelperTooltip(helper) }),
+                    };
+                }
             }
         }
 
         // Check for "helpers" alone
         if (word === "helpers") {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({
                     dom: createTooltipDOM(`
@@ -407,8 +458,8 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
         }
 
         // Check for context.xxx or context.user.xxx etc.
-        const contextNestedMatch = word.match(/^context\.(user|session|apikey|client|request)\.(\w+)$/);
-        if (contextNestedMatch) {
+        const contextNestedMatch = fullChain.match(/^context\.(user|session|apikey|client|request)\.(\w+)$/);
+        if (contextNestedMatch && word === contextNestedMatch[2]) {
             const [, objectName, fieldName] = contextNestedMatch;
             const typeMap: Record<string, string> = {
                 user: "PipelineUser",
@@ -423,25 +474,25 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
                 const field = fields?.find((f) => f.name === fieldName);
                 if (field) {
                     return {
-                        pos: from,
+                        pos: line.from + wordStart,
                         above: true,
                         create: () => ({
                             dom: createTooltipDOM(`
-                                <div style="font-weight: 600; font-family: monospace; margin-bottom: 4px;">
-                                    <span style="color: #e5c07b;">context.${objectName}.${field.name}</span>
-                                    <span style="opacity: 0.7;">: ${field.type}</span>
-                                </div>
-                                <div>${field.description}</div>
-                            `),
+                        <div style="font-weight: 600; font-family: monospace; margin-bottom: 4px;">
+                            <span style="color: #e5c07b;">context.${objectName}.${field.name}</span>
+                            <span style="opacity: 0.7;">: ${field.type}</span>
+                        </div>
+                        <div>${field.description}</div>
+                        `),
                         }),
                     };
                 }
             }
         }
 
-        // Check for context.xxx
-        const contextMatch = word.match(/^context\.(\w+)$/);
-        if (contextMatch) {
+        // Check for context.xxx (universal fields)
+        const contextMatch = fullChain.match(/^context\.(\w+)$/);
+        if (contextMatch && (word === contextMatch[1])) {
             const fieldName = contextMatch[1];
 
             // Check universal fields
@@ -462,7 +513,7 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
 
             if (field) {
                 return {
-                    pos: from,
+                    pos: line.from + wordStart,
                     above: true,
                     create: () => ({ dom: createContextFieldTooltip(field) }),
                 };
@@ -472,69 +523,69 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
         // Check for "context" alone
         if (word === "context") {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({
                     dom: createTooltipDOM(`
-                        <div style="font-weight: 600; color: #e5c07b; margin-bottom: 4px;">context</div>
-                        <div>Hook-specific context object containing request data and user info.</div>
-                        <div style="margin-top: 8px; font-size: 0.9em; opacity: 0.8;">
-                            Universal fields: ${CONTEXT_FIELDS_UNIVERSAL.map((f) => f.name).join(", ")}
-                        </div>
-                    `),
+                                        <div style="font-weight: 600; color: #e5c07b; margin-bottom: 4px;">context</div>
+                                        <div>Hook-specific context object containing request data and user info.</div>
+                                        <div style="margin-top: 8px; font-size: 0.9em; opacity: 0.8;">
+                                            Universal fields: ${CONTEXT_FIELDS_UNIVERSAL.map((f) => f.name).join(", ")}
+                                        </div>
+                `),
                 }),
             };
         }
 
         // Check for context.prev
-        if (word === "context.prev") {
+        if (fullChain === "context.prev" && word === "prev") {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({
                     dom: createTooltipDOM(`
-                        <div style="font-weight: 600; font-family: monospace; margin-bottom: 4px;">
-                            <span style="color: #e5c07b;">context.prev</span>
-                            <span style="opacity: 0.7;">: table | nil</span>
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            Merged data from the previous script layer in the pipeline.
-                        </div>
-                        <div style="font-size: 0.9em; opacity: 0.8;">
-                            <div style="font-weight: 500; margin-bottom: 4px;">Common fields:</div>
-                            <div style="margin-left: 8px;">
-                                <code style="color: #98c379;">allowed</code> — Whether previous script allowed the action<br/>
-                                <code style="color: #98c379;">data</code> — Data returned by previous script<br/>
-                                <code style="color: #98c379;">error</code> — Error message if blocked
-                            </div>
-                        </div>
-                    `),
+                <div style="font-weight: 600; font-family: monospace; margin-bottom: 4px;">
+                    <span style="color: #e5c07b;">context.prev</span>
+                    <span style="opacity: 0.7;">: table | nil</span>
+                </div>
+                <div style="margin-bottom: 8px;">
+                    Merged data from the previous script layer in the pipeline.
+                </div>
+                <div style="font-size: 0.9em; opacity: 0.8;">
+                    <div style="font-weight: 500; margin-bottom: 4px;">Common fields:</div>
+                    <div style="margin-left: 8px;">
+                        <code style="color: #98c379;">allowed</code> — Whether previous script allowed the action<br/>
+                        <code style="color: #98c379;">data</code> — Data returned by previous script<br/>
+                        <code style="color: #98c379;">error</code> — Error message if blocked
+                    </div>
+                </div>
+                `),
                 }),
             };
         }
 
         // Check for context.outputs
-        if (word === "context.outputs" || word.startsWith("context.outputs")) {
+        if ((fullChain === "context.outputs" && word === "outputs") || (fullChain.startsWith("context.outputs") && word === "outputs")) {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({
                     dom: createTooltipDOM(`
-                        <div style="font-weight: 600; font-family: monospace; margin-bottom: 4px;">
-                            <span style="color: #e5c07b;">context.outputs</span>
-                            <span style="opacity: 0.7;">: table&lt;string, table&gt;</span>
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            Outputs from all previous scripts, keyed by script ID.
-                        </div>
-                        <div style="font-size: 0.9em; opacity: 0.8;">
-                            <div style="font-weight: 500; margin-bottom: 4px;">Usage:</div>
-                            <div style="background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; font-family: monospace;">
-                                local prev = context.outputs["script-id"]<br/>
-                                if prev and prev.allowed then ... end
-                            </div>
-                        </div>
-                    `),
+                                                            <div style="font-weight: 600; font-family: monospace; margin-bottom: 4px;">
+                                                                <span style="color: #e5c07b;">context.outputs</span>
+                                                                <span style="opacity: 0.7;">: table&lt;string, table&gt;</span>
+                                                            </div>
+                                                            <div style="margin-bottom: 8px;">
+                                                                Outputs from all previous scripts, keyed by script ID.
+                                                            </div>
+                                                            <div style="font-size: 0.9em; opacity: 0.8;">
+                                                                <div style="font-weight: 500; margin-bottom: 4px;">Usage:</div>
+                                                                <div style="background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; font-family: monospace;">
+                                                                    local prev = context.outputs["script-id"]<br/>
+                                                                    if prev and prev.allowed then ... end
+                                                                </div>
+                                                            </div>
+        `),
                 }),
             };
         }
@@ -542,28 +593,28 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
         // Check for disabled globals
         if (DISABLED_GLOBALS.includes(word as (typeof DISABLED_GLOBALS)[number])) {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({ dom: createDisabledGlobalTooltip(word) }),
             };
         }
 
-        // Check for Lua builtins
-        if (LUA_BUILTIN_DOCS[word]) {
+        // Check for Lua builtins (but NOT if it's a table key like { error = "..." })
+        if (LUA_BUILTIN_DOCS[word] && !isTableKeyContext(text, wordStart, word)) {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({ dom: createBuiltinTooltip(word, LUA_BUILTIN_DOCS[word]) }),
             };
         }
 
         // Check for string.xxx, table.xxx, math.xxx
-        const libMatch = word.match(/^(string|table|math)\.(\w+)$/);
-        if (libMatch) {
-            const fullName = word;
+        const libMatch = fullChain.match(/^(string|table|math)\.(\w+)$/);
+        if (libMatch && word === libMatch[2]) {
+            const fullName = fullChain;
             if (LUA_BUILTIN_DOCS[fullName]) {
                 return {
-                    pos: from,
+                    pos: line.from + wordStart,
                     above: true,
                     create: () => ({ dom: createBuiltinTooltip(fullName, LUA_BUILTIN_DOCS[fullName]) }),
                 };
@@ -573,7 +624,7 @@ export function createLuaHoverTooltip(options: LuaHoverOptions = {}) {
         // Check for Lua keywords
         if (LUA_KEYWORDS.includes(word as (typeof LUA_KEYWORDS)[number])) {
             return {
-                pos: from,
+                pos: line.from + wordStart,
                 above: true,
                 create: () => ({ dom: createKeywordTooltip(word) }),
             };

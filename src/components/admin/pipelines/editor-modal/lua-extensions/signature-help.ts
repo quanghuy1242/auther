@@ -38,10 +38,10 @@ function getSignatureAtPosition(code: string, pos: number): SignatureInfo | null
             depth--;
         } else if (char === "," && depth === 0) {
             paramIndex++;
-        } else if (char === "\n") {
-            // Stop at newline if depth is 0 to avoid scanning too far back incorrectly
-            if (depth === 0) break;
         }
+
+        // Limit scan distance to prevent performance issues (e.g. 2000 chars)
+        if (pos - i > 2000) break;
     }
 
     if (funcStart === -1) return null;
@@ -74,13 +74,14 @@ function getSignatureAtPosition(code: string, pos: number): SignatureInfo | null
         const { variables } = inferVariableTypes(code);
         const local = variables.get(funcName);
 
-        if (local && local.type === "function") {
-            const params = (local.functionParams || []).map((name) => {
+        if (local && local.inferredType.kind === "function") {
+            const params = (local.inferredType.params || []).map((p) => {
+                const name = p.name || "arg";
                 // Try to match with doc params
-                const docParam = local.doc?.params.find(p => p.name === name);
+                const docParam = local.doc?.params.find(dp => dp.name === name);
                 return {
                     name,
-                    type: docParam?.type || "any",
+                    type: docParam?.type || p.kind || "any",
                     description: docParam?.description || "",
                     optional: false
                 };

@@ -39,6 +39,10 @@ interface LuaAST {
 // AST WALKER
 // =============================================================================
 
+// =============================================================================
+// AST WALKER
+// =============================================================================
+
 function walkAST(node: LuaNode, callback: (node: LuaNode) => void): void {
     if (!node || typeof node !== "object") return;
 
@@ -64,6 +68,10 @@ function walkAST(node: LuaNode, callback: (node: LuaNode) => void): void {
         "step",
         "iterators",
         "parameters",
+        "left",
+        "right",
+        "value",
+        "key",
     ];
 
     for (const key of childKeys) {
@@ -469,6 +477,24 @@ function findUnusedVariables(ast: LuaAST): Diagnostic[] {
             return;
         }
 
+        if (type === "FunctionExpression") {
+            // Enter function scope
+            enterScope();
+
+            // Declare parameters
+            (node.parameters || []).forEach((p: LuaNode) => {
+                if (p.type === "Identifier") {
+                    declareVariable(p.name, p);
+                }
+            });
+
+            // Walk body
+            (node.body || []).forEach(walk);
+
+            exitScope();
+            return;
+        }
+
         // Blocks that create scopes
         const blockTypes = ["DoStatement", "WhileStatement", "RepeatStatement", "IfStatement", "ForStatement", "ForGenericStatement", "ForNumericStatement"];
         if (blockTypes.includes(type)) {
@@ -557,7 +583,8 @@ function findUnusedVariables(ast: LuaAST): Diagnostic[] {
             "body", "init", "base", "argument", "arguments",
             "expression", "expressions", "variables", "values",
             "clauses", "condition", "consequent", "alternative",
-            "start", "end", "step", "iterators", "fields"
+            "start", "end", "step", "iterators", "fields",
+            "left", "right", "value", "key"
         ];
 
         for (const key of safeChildKeys) {
@@ -618,7 +645,8 @@ function checkComplexity(ast: LuaAST): Diagnostic[] {
             "body", "init", "base", "argument", "arguments",
             "expression", "expressions", "variables", "values",
             "clauses", "condition", "consequent", "alternative",
-            "start", "end", "step", "iterators", "fields"
+            "start", "end", "step", "iterators", "fields",
+            "left", "right", "value", "key"
         ];
 
         for (const key of childKeys) {
@@ -632,6 +660,210 @@ function checkComplexity(ast: LuaAST): Diagnostic[] {
     }
 
     checkNode(ast as unknown as LuaNode, 0);
+    return diagnostics;
+}
+
+// =============================================================================
+// ADVANCED CHECKS (ReadOnly, Shadowing)
+// =============================================================================
+
+function checkAdvancedRules(ast: LuaAST): Diagnostic[] {
+    const diagnostics: Diagnostic[] = [];
+
+    // Scope management for shadowing
+    const scopeStack: Set<string>[] = [new Set()]; // Global scope
+    const enterScope = () => scopeStack.push(new Set());
+    const exitScope = () => scopeStack.pop();
+    const defineVar = (name: string, node: LuaNode) => {
+        const current = scopeStack[scopeStack.length - 1];
+        if (scopeStack.length > 1) {
+            // Check for shadowing of OUTER scopes
+            for (let i = 0; i < scopeStack.length - 1; i++) {
+                if (scopeStack[i].has(name)) {
+                    diagnostics.push({
+                        from: node.range ? node.range[0] : 0,
+                        to: node.range ? node.range[1] : 0,
+                        severity: "warning",
+                        message: `Variable '${name}' shadows an existing variable in an outer scope.`,
+                    });
+                }
+            }
+        }
+        current.add(name);
+    };
+
+    const traverse = (node: LuaNode) => {
+        if (!node) return;
+
+        // --- SCOPE MANAGEMENT ---
+        const isBlock = ["FunctionDeclaration", "FunctionExpression", "DoStatement", "WhileStatement", "RepeatStatement", "IfStatement", "ForNumericStatement", "ForGenericStatement"].includes(node.type);
+        if (isBlock) enterScope();
+
+        // --- READ-ONLY CHECKS ---
+        if (node.type === "AssignmentStatement") {
+            const vars = node.variables || [];
+            vars.forEach((v: LuaNode) => {
+                if (v.type === "Identifier") {
+                    // 1. Root assignment to context or helpers
+                    if (v.name === "context" || v.name === "helpers") {
+                        diagnostics.push({
+                            from: v.range ? v.range[0] : 0,
+                            to: v.range ? v.range[1] : 0,
+                            severity: "error",
+                            message: `Cannot reassign read-only global '${v.name}'.`
+                        });
+                    } else if (scopeStack.length > 1) {
+                        // 3. Accidental Global Creation check
+                        // If assigning to a variable NOT in scope (and not defined in any outer scope),
+                        // and we are NOT at root scope -> Warning
+                        let found = false;
+                        for (let i = scopeStack.length - 1; i >= 0; i--) {
+                            if (scopeStack[i].has(v.name)) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            diagnostics.push({
+                                from: v.range ? v.range[0] : 0,
+                                to: v.range ? v.range[1] : 0,
+                                severity: "warning",
+                                message: `Global variable creation '${v.name}' inside function. Did you mean 'local ${v.name}'?`
+                            });
+                        }
+                    }
+                } else if (v.type === "MemberExpression") {
+                    // 2. Member assignment check
+                    const base = v.base;
+                    if (base.type === "Identifier") {
+                        if (base.name === "helpers") {
+                            diagnostics.push({
+                                from: v.range ? v.range[0] : 0,
+                                to: v.range ? v.range[1] : 0,
+                                severity: "error",
+                                message: `Cannot modify 'helpers' library.`
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- SHADOWING CHECKS + DEFINITIONS ---
+        if (node.type === "LocalStatement") {
+            const vars = node.variables || [];
+            vars.forEach((v: LuaNode) => {
+                if (v.type === "Identifier") {
+                    defineVar(v.name, v);
+                }
+            });
+        }
+        if (node.type === "FunctionDeclaration") {
+            if (node.identifier && node.identifier.type === "Identifier") {
+                if (node.isLocal) {
+                    defineVar(node.identifier.name, node.identifier);
+                }
+            }
+            // Parameters are in the NEW scope
+            const current = scopeStack[scopeStack.length - 1];
+            const params = node.parameters || [];
+            params.forEach((p: LuaNode) => {
+                if (p.type === "Identifier") {
+                    for (let i = 0; i < scopeStack.length - 1; i++) {
+                        if (scopeStack[i].has(p.name)) {
+                            diagnostics.push({
+                                from: p.range ? p.range[0] : 0,
+                                to: p.range ? p.range[1] : 0,
+                                severity: "warning",
+                                message: `Parameter '${p.name}' shadows an existing variable.`,
+                            });
+                        }
+                    }
+                    current.add(p.name);
+                }
+            });
+        }
+        if (node.type === "FunctionExpression") {
+            // Parameters are in the NEW scope
+            const current = scopeStack[scopeStack.length - 1]; // We already entered scope due to isBlock check
+            const params = node.parameters || [];
+            params.forEach((p: LuaNode) => {
+                if (p.type === "Identifier") {
+                    for (let i = 0; i < scopeStack.length - 1; i++) {
+                        if (scopeStack[i].has(p.name)) {
+                            // Shadowing warning for anonymous function params too? Sure.
+                            // diagnostics.push(...) 
+                            // Keep it simpler for now or replicate warning
+                        }
+                    }
+                    current.add(p.name);
+                }
+            });
+        }
+
+        // Loop variables
+        if (node.type === "ForNumericStatement") {
+            if (node.variable && node.variable.type === "Identifier") {
+                const current = scopeStack[scopeStack.length - 1];
+                for (let i = 0; i < scopeStack.length - 1; i++) {
+                    if (scopeStack[i].has(node.variable.name)) {
+                        diagnostics.push({
+                            from: node.variable.range ? node.variable.range[0] : 0,
+                            to: node.variable.range ? node.variable.range[1] : 0,
+                            severity: "warning",
+                            message: `Loop variable '${node.variable.name}' shadows an existing variable.`,
+                        });
+                    }
+                }
+                current.add(node.variable.name);
+            }
+        }
+        if (node.type === "ForGenericStatement") {
+            const vars = node.variables || [];
+            vars.forEach((v: LuaNode) => {
+                if (v.type === "Identifier") {
+                    const current = scopeStack[scopeStack.length - 1];
+                    for (let i = 0; i < scopeStack.length - 1; i++) {
+                        if (scopeStack[i].has(v.name)) {
+                            diagnostics.push({
+                                from: v.range ? v.range[0] : 0,
+                                to: v.range ? v.range[1] : 0,
+                                severity: "warning",
+                                message: `Loop variable '${v.name}' shadows an existing variable.`,
+                            });
+                        }
+                    }
+                    current.add(v.name);
+                }
+            });
+        }
+
+        // --- RECURSION ---
+        const childKeys = [
+            "body", "init", "base", "identifier", "argument", "arguments",
+            "expression", "expressions", "variables", "values", "clauses",
+            "condition", "consequent", "start", "end", "step", "iterators",
+            "left", "right", "value", "key", "block"
+        ];
+
+        for (const key of childKeys) {
+            const child = node[key];
+            if (key === "parameters") continue;
+            if (key === "variables" && (node.type === "LocalStatement" || node.type === "AssignmentStatement" || node.type === "ForGenericStatement")) continue;
+            if (key === "variable" && node.type === "ForNumericStatement") continue;
+
+            if (Array.isArray(child)) {
+                child.forEach(traverse);
+            } else if (child && typeof child === "object" && child.type) {
+                traverse(child);
+            }
+        }
+
+        if (isBlock) exitScope();
+    };
+
+    traverse(ast as unknown as LuaNode);
+
     return diagnostics;
 }
 
@@ -676,6 +908,9 @@ export function createLuaLinter(options: LuaLinterOptions = {}) {
 
         // Check for disabled globals
         diagnostics.push(...findDisabledGlobals(ast));
+
+        // Check advanced rules (ReadOnly, Shadowing)
+        diagnostics.push(...checkAdvancedRules(ast));
 
         // Check complexity (Nested Loops)
         diagnostics.push(...checkComplexity(ast));

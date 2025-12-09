@@ -15,6 +15,8 @@ import { luaSignatureHelp } from "./signature-help";
 import { luaFormatter } from "./formatter";
 import { luaGotoDefinition } from "./goto-definition";
 import { luaFindReferences } from "./find-references";
+import { luaSemanticHighlighting } from "./semantic-highlighting";
+import { luaInlayHints } from "./inlay-hints";
 import type { ReturnSchema } from "./type-inference";
 
 // Re-export individual components for advanced usage
@@ -25,6 +27,8 @@ export { luaSignatureHelp } from "./signature-help";
 export { luaFormatter, formatLuaCode } from "./formatter";
 export { luaGotoDefinition, findDefinitions } from "./goto-definition";
 export { luaFindReferences, findAllOccurrences } from "./find-references";
+export { luaSemanticHighlighting } from "./semantic-highlighting";
+export { luaInlayHints } from "./inlay-hints";
 export { parseLuaDocComments, type LuaDocComment, type ReturnSchema } from "./type-inference";
 export * from "./definitions";
 
@@ -69,6 +73,18 @@ export interface LuaExtensionsOptions {
      * @default true
      */
     hover?: boolean;
+
+    /**
+     * Enable semantic highlighting (variables, upvalues, globals).
+     * @default true
+     */
+    semanticHighlighting?: boolean;
+
+    /**
+     * Enable inlay hints (inferred types).
+     * @default false
+     */
+    inlayHints?: boolean;
 
     /**
      * Lint delay in milliseconds.
@@ -116,6 +132,8 @@ export interface LuaExtensionsOptions {
  * - Hover documentation for all APIs
  * - Local variable type tracking
  * - Dynamic context.prev schema inference
+ * - Semantic highlighting for globals and upvalues
+ * - Inlay hints for local variable types
  *
  * @example
  * ```typescript
@@ -140,6 +158,8 @@ export function createLuaExtensions(options: LuaExtensionsOptions = {}): Extensi
         autocomplete: enableAutocomplete = true,
         linting: enableLinting = true,
         hover: enableHover = true,
+        semanticHighlighting: enableSemanticHighlighting = true,
+        inlayHints: enableInlayHints = false,
         gotoDefinition: enableGotoDefinition = true,
         findReferences: enableFindReferences = true,
         lintDelay = 300,
@@ -189,6 +209,16 @@ export function createLuaExtensions(options: LuaExtensionsOptions = {}): Extensi
         extensions.push(luaFindReferences());
     }
 
+    // Semantic Highlighting
+    if (enableSemanticHighlighting) {
+        extensions.push(luaSemanticHighlighting);
+    }
+
+    // Inlay Hints
+    if (enableInlayHints) {
+        extensions.push(luaInlayHints);
+    }
+
     return extensions;
 }
 
@@ -218,12 +248,101 @@ export const LUA_TOOLTIP_STYLES = `
 /* Lua hover tooltip */
 .cm-tooltip-lua-hover code {
     background: rgba(0, 0, 0, 0.2);
-    padding: 1px 4px;
+    padding: 2px 4px;
     border-radius: 3px;
     font-family: monospace;
 }
 
-/* Lint diagnostics */
+/* Inlay Hints */
+.cm-lua-inlay-hint {
+    color: #7d8799;
+    font-family: inherit;
+    font-size: 0.85em;
+    margin-left: 2px;
+    opacity: 0.8;
+    background: rgba(0,0,0,0.1);
+    border-radius: 3px;
+    padding: 0 2px;
+    vertical-align: middle;
+}
+
+/* ============================================================================= */
+/* SEMANTIC HIGHLIGHTING - VS Code Dark+ inspired colors                        */
+/* Override CodeMirror's generated classes (like .ͼp) on child elements         */
+/* ============================================================================= */
+/* Color Reference:
+   - Namespace/Module: Teal (#4EC9B0)
+   - Method/Function: Light Yellow (#DCDCAA)
+   - Property: Light Blue (#9CDCFE)
+   - Variable: Sky Blue (#9CDCFE)
+   - Parameter: Light Orange (#E8AB6A)
+*/
+
+/* Global variables - Orange bold */
+.cm-lua-global,
+.cm-lua-global * { color: #d19a66 !important; font-weight: 600; }
+
+/* helpers/context/prev/outputs BASE - Teal (namespace color) */
+.cm-lua-helpers-base,
+.cm-lua-helpers-base *,
+.cm-lua-context-base,
+.cm-lua-context-base *,
+.cm-lua-lib-namespace,
+.cm-lua-lib-namespace * { color: #4EC9B0 !important; font-weight: 600; }
+
+/* helpers METHODS - Light Yellow (function color) */
+.cm-lua-helper,
+.cm-lua-helper * { color: #DCDCAA !important; }
+
+/* context/prev/outputs PROPERTIES - Light Blue (property color) */
+.cm-lua-context,
+.cm-lua-context * { color: #9CDCFE !important; }
+
+/* Unknown globals - Red wavy underline */
+.cm-lua-unknown-global { text-decoration: underline wavy #f44747 !important; }
+.cm-lua-unknown-global,
+.cm-lua-unknown-global * { color: #ce9178 !important; }
+
+/* Function parameters - Light Orange italic */
+.cm-lua-parameter,
+.cm-lua-parameter * { color: #E8AB6A !important; font-style: italic; }
+
+/* Upvalues (outer scope vars) - Light Blue italic */
+.cm-lua-upvalue,
+.cm-lua-upvalue * { color: #9CDCFE !important; font-style: italic; }
+
+/* Local variables - Sky Blue */
+.cm-lua-local,
+.cm-lua-local * { color: #9CDCFE !important; }
+
+/* string/table/math library METHODS - Light Yellow (function color) */
+.cm-lua-string-lib,
+.cm-lua-string-lib *,
+.cm-lua-table-lib,
+.cm-lua-table-lib *,
+.cm-lua-math-lib,
+.cm-lua-math-lib * { color: #DCDCAA !important; }
+
+/* Boolean literals (true/false) - Blue (keyword-like) */
+.cm-lua-boolean,
+.cm-lua-boolean * { color: #569CD6 !important; font-weight: 500; }
+
+/* nil literal - Blue italic */
+.cm-lua-nil,
+.cm-lua-nil * { color: #569CD6 !important; font-style: italic; }
+
+/* Builtin functions (pairs, ipairs, etc.) - Light Yellow (function color) */
+.cm-lua-builtin,
+.cm-lua-builtin * { color: #DCDCAA !important; }
+
+/* User-defined function names - Light Yellow (function color) */
+.cm-lua-function,
+.cm-lua-function * { color: #DCDCAA !important; }
+
+/* ============================================================================= */
+/* Lint diagnostics                                                             */
+/* ============================================================================= */
+
 .cm-lintRange-error {
     background: rgba(224, 108, 117, 0.2);
     text-decoration: underline wavy #e06c75;
@@ -245,7 +364,10 @@ export const LUA_TOOLTIP_STYLES = `
     color: #e5c07b;
 }
 
-/* Autocomplete menu styling */
+/* ============================================================================= */
+/* Autocomplete menu styling                                                    */
+/* ============================================================================= */
+
 .cm-tooltip-autocomplete {
     background: #282c34 !important;
     border: 1px solid #3e4451 !important;

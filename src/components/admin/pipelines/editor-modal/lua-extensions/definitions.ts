@@ -244,6 +244,128 @@ export const DISABLED_GLOBAL_MESSAGES: Record<string, string> = {
 };
 
 // =============================================================================
+// LUA BUILTIN DOCUMENTATION
+// =============================================================================
+
+export const LUA_BUILTIN_DOCS: Record<string, { signature: string; description: string }> = {
+    // Globals
+    print: {
+        signature: "print(...)",
+        description: "Prints values to the output log.",
+    },
+    await: {
+        signature: "await(promise)",
+        description: "Waits for an async operation (like helpers.fetch) to complete.",
+    },
+    pairs: {
+        signature: "pairs(t)",
+        description: "Returns an iterator function for traversing all key-value pairs in table t.",
+    },
+    ipairs: {
+        signature: "ipairs(t)",
+        description:
+            "Returns an iterator function for traversing the array part of table t (integer keys 1, 2, 3...).",
+    },
+    tonumber: {
+        signature: "tonumber(e, base?)",
+        description:
+            "Converts e to a number. If e is already a number, returns it. Otherwise tries to parse as number.",
+    },
+    tostring: {
+        signature: "tostring(v)",
+        description: "Converts value v to a string.",
+    },
+    type: {
+        signature: "type(v)",
+        description: "Returns the type of value v as a string (e.g. 'nil', 'number', 'string').",
+    },
+    assert: {
+        signature: "assert(v, message?)",
+        description: "Errors if v is false or nil; otherwise returns v. Message is optional.",
+    },
+    error: {
+        signature: "error(message, level?)",
+        description: "Terminates the last protected function called and returns message as the error object.",
+    },
+    pcall: {
+        signature: "pcall(f, ...)",
+        description: "Calls function f with the given arguments in protected mode. Returns boolean status and results.",
+    },
+    xpcall: {
+        signature: "xpcall(f, err)",
+        description: "Calls function f in protected mode with a new error handler err.",
+    },
+    select: {
+        signature: "select(index, ...)",
+        description: "Returns all arguments after argument number index.",
+    },
+    next: {
+        signature: "next(table, index?)",
+        description: "Returns the next index of the table and its associated value.",
+    },
+    getmetatable: {
+        signature: "getmetatable(object)",
+        description: "Returns the metatable of the given object.",
+    },
+    setmetatable: {
+        signature: "setmetatable(table, metatable)",
+        description: "Sets the metatable for the given table.",
+    },
+    unpack: {
+        signature: "unpack(list, i?, j?)",
+        description: "Returns the elements from the given list.",
+    },
+
+    // String Library
+    "string.byte": { signature: "string.byte(s, i?, j?)", description: "Returns the internal numerical codes of the characters s[i], s[i+1], ..., s[j]." },
+    "string.char": { signature: "string.char(...)", description: "Receives zero or more integers and returns a string with length equal to the number of arguments." },
+    "string.find": { signature: "string.find(s, pattern, init?, plain?)", description: "Looks for the first match of pattern in the string s." },
+    "string.format": { signature: "string.format(formatstring, ...)", description: "Returns a formatted version of its variable number of arguments following the description given in its first argument." },
+    "string.gmatch": { signature: "string.gmatch(s, pattern)", description: "Returns an iterator function that, each time it is called, returns the next captures from pattern found in the string s." },
+    "string.gsub": { signature: "string.gsub(s, pattern, repl, n?)", description: "Returns a copy of s in which all (or the first n) occurrences of the pattern have been replaced by a replacement string specified by repl." },
+    "string.len": { signature: "string.len(s)", description: "Receives a string and returns its length." },
+    "string.lower": { signature: "string.lower(s)", description: "Receives a string and returns a copy of this string with all uppercase letters changed to lowercase." },
+    "string.match": { signature: "string.match(s, pattern, init?)", description: "Looks for the first match of pattern in the string s." },
+    "string.rep": { signature: "string.rep(s, n)", description: "Returns a string that is the concatenation of n copies of the string s." },
+    "string.reverse": { signature: "string.reverse(s)", description: "Returns a string that is the string s reversed." },
+    "string.sub": { signature: "string.sub(s, i, j?)", description: "Returns the substring of s that starts at i and continues until j." },
+    "string.upper": { signature: "string.upper(s)", description: "Receives a string and returns a copy of this string with all lowercase letters changed to uppercase." },
+
+    // Table Library
+    "table.concat": { signature: "table.concat(list, sep?, i?, j?)", description: "Returns the elements of the given list concatenated, with the optional separator sep." },
+    "table.insert": { signature: "table.insert(list, [pos,] value)", description: "Inserts element value at position pos in list." },
+    "table.maxn": { signature: "table.maxn(table)", description: "Returns the largest positive numerical index of the given table, or zero if the table has no positive numerical indices." },
+    "table.remove": { signature: "table.remove(list, pos?)", description: "Removes from list the element at position pos, returning the value of the removed element." },
+    "table.sort": { signature: "table.sort(list, comp?)", description: "Sorts list elements in a given order, in-place, from list[1] to list[#list]." },
+
+    // Math Library
+    "math.abs": { signature: "math.abs(x)", description: "Returns the absolute value of x." },
+    "math.acos": { signature: "math.acos(x)", description: "Returns the arc cosine of x (in radians)." },
+    "math.asin": { signature: "math.asin(x)", description: "Returns the arc sine of x (in radians)." },
+    "math.atan": { signature: "math.atan(x)", description: "Returns the arc tangent of x (in radians)." },
+    "math.ceil": { signature: "math.ceil(x)", description: "Returns the smallest integer larger than or equal to x." },
+    "math.cos": { signature: "math.cos(x)", description: "Returns the cosine of x (assumed to be in radians)." },
+    "math.deg": { signature: "math.deg(x)", description: "Returns the angle x (given in radians) in degrees." },
+    "math.exp": { signature: "math.exp(x)", description: "Returns the value e^x." },
+    "math.floor": { signature: "math.floor(x)", description: "Returns the largest integer smaller than or equal to x." },
+    "math.fmod": { signature: "math.fmod(x, y)", description: "Returns the remainder of the division of x by y that rounds the quotient towards zero." },
+    "math.frexp": { signature: "math.frexp(x)", description: "Returns m and e such that x = m2^e." },
+    "math.ldexp": { signature: "math.ldexp(m, e)", description: "Returns m2^e." },
+    "math.log": { signature: "math.log(x)", description: "Returns the natural logarithm of x." },
+    "math.log10": { signature: "math.log10(x)", description: "Returns the base-10 logarithm of x." },
+    "math.max": { signature: "math.max(x, ...)", description: "Returns the maximum value among its arguments." },
+    "math.min": { signature: "math.min(x, ...)", description: "Returns the minimum value among its arguments." },
+    "math.modf": { signature: "math.modf(x)", description: "Returns two numbers, the integral part of x and the fractional part of x." },
+    "math.pow": { signature: "math.pow(x, y)", description: "Returns x^y." },
+    "math.rad": { signature: "math.rad(x)", description: "Returns the angle x (given in degrees) in radians." },
+    "math.random": { signature: "math.random(m?, n?)", description: "Returns a pseudo-random number." },
+    "math.randomseed": { signature: "math.randomseed(x)", description: "Sets x as the \"seed\" for the pseudo-random generator." },
+    "math.sin": { signature: "math.sin(x)", description: "Returns the sine of x (assumed to be in radians)." },
+    "math.sqrt": { signature: "math.sqrt(x)", description: "Returns the square root of x." },
+    "math.tan": { signature: "math.tan(x)", description: "Returns the tangent of x (assumed to be in radians)." },
+};
+
+// =============================================================================
 // LUA KEYWORDS
 // =============================================================================
 
