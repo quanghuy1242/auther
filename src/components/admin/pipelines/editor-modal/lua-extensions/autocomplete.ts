@@ -3,7 +3,7 @@
 // =============================================================================
 // Custom completion sources for helpers.*, context.*, Lua keywords, and snippets
 
-import { snippet, type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
+import { type Completion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import type { EditorView } from "@codemirror/view";
 import {
     HELPERS_DEFINITIONS,
@@ -17,7 +17,14 @@ import {
     type HelperDefinition,
     type ContextField,
 } from "./definitions";
-import { extractReturnSchema, getVariablesInScope, type ReturnSchema, type VariableType, type LuaType } from "./type-inference";
+import {
+    resolveNodeAtPosition,
+    inferExpressionType,
+    extractReturnSchema,
+    type ReturnSchema,
+    type VariableType,
+}
+    from "./type-inference";
 
 // =============================================================================
 // HELPER COMPLETIONS
@@ -184,363 +191,7 @@ function getSnippetCompletions(): Completion[] {
 }
 
 // =============================================================================
-// MAIN COMPLETION SOURCE
-// =============================================================================
-
-export interface LuaCompletionOptions {
-    hookName?: string;
-    /**
-     * Code from the previous script layer (if any).
-     * Used to infer context.prev schema for dynamic completions.
-     */
-    previousScriptCode?: string;
-    /**
-     * Map of script IDs to their return schemas.
-     * Used for context.outputs["id"].* completions.
-     */
-    scriptOutputs?: Map<string, ReturnSchema>;
-}
-
-// =============================================================================
-// HELPER: Resolve Type from Chain
-// =============================================================================
-
-function resolveLuaType(chain: string[], variables: Map<string, VariableType>): LuaType | null {
-    if (chain.length === 0) return null;
-
-    let currentType: LuaType | null = null;
-    const start = chain[0];
-
-    // 1. Resolve start
-    const variable = variables.get(start);
-    if (variable) {
-        currentType = variable.inferredType;
-    } else if (start === "context") {
-        currentType = { kind: "global", name: "context" };
-    } else if (start === "helpers") {
-        currentType = { kind: "global", name: "helpers" };
-    } else if (["string", "math", "table"].includes(start)) {
-        currentType = { kind: "global", name: start };
-    } else if (start.startsWith('"') || start.startsWith("'") || start.startsWith("[[")) {
-        // String literal
-        currentType = { kind: "primitive", name: "string" };
-    } else {
-        return null;
-    }
-
-    // 2. Resolve rest
-    for (let i = 1; i < chain.length; i++) {
-        if (!currentType) return null;
-        const member = chain[i];
-
-        if (currentType.kind === "global" && currentType.name === "context") {
-            const typeMap: Record<string, string> = {
-                user: "PipelineUser",
-                session: "PipelineSession",
-                apikey: "PipelineApiKey",
-                client: "OAuthClient",
-                request: "RequestInfo",
-            };
-            if (Object.keys(typeMap).includes(member)) {
-                currentType = { kind: "context", contextObject: member };
-            } else if (member === "prev") {
-                currentType = { kind: "global", name: "prev" };
-            } else if (member === "outputs") {
-                currentType = { kind: "global", name: "outputs" };
-            } else {
-                return null;
-            }
-        }
-        else if (currentType.kind === "table" && currentType.fields) {
-            currentType = currentType.fields.get(member) || null;
-        }
-        else {
-            return null;
-        }
-    }
-
-    return currentType;
-}
-
-export function createLuaCompletionSource(options: LuaCompletionOptions = {}) {
-    const { hookName, previousScriptCode, scriptOutputs } = options;
-
-    // Pre-compute previous script schema if available
-    const prevSchema = previousScriptCode ? extractReturnSchema(previousScriptCode) : null;
-
-    return function luaCompletionSource(context: CompletionContext): CompletionResult | null {
-        // Don't trigger on empty
-        if (context.pos === 0) return null;
-
-        const code = context.state.doc.toString();
-        const line = context.state.doc.lineAt(context.pos);
-        const textBefore = line.text.slice(0, context.pos - line.from);
-
-        // Parsing hack: The parser fails on syntactically invalid code (e.g. incomplete statements),
-        // causing getVariablesInScope to return nothing. We attempt to "repair" the code
-        // by turning incomplete expressions into valid statements (assignments or calls).
-        let codeToParse = code;
-        const isStatementStart = /^\s*[\w\.:]+$/.test(textBefore) && !/^\s*(local|function|return|break|goto|do|while|repeat|if|for)\b/.test(textBefore);
-
-        if (textBefore.endsWith(".")) {
-            // "obj." -> "obj.placeholder = 0" (if start of statement) or "obj.placeholder"
-            codeToParse = code.slice(0, context.pos) + "placeholder" + (isStatementStart ? " = 0" : "") + code.slice(context.pos);
-        } else if (textBefore.endsWith(":")) {
-            // "obj:" -> "obj:placeholder()"
-            codeToParse = code.slice(0, context.pos) + "placeholder()" + code.slice(context.pos);
-        } else if (isStatementStart) {
-            // "abc" (start of line) -> "abc = 0"
-            // This ensures "abcdf" parses as an assignment, preserving the AST for the rest of variable discovery.
-            codeToParse = code.slice(0, context.pos) + " = 0" + code.slice(context.pos);
-        }
-
-        // Infer variable types from current code
-        const variables = getVariablesInScope(codeToParse, context.pos);
-
-        // -------------------------------------------------------------------------
-        // 1. Chain Completion (local.field.subfield...)
-        // -------------------------------------------------------------------------
-
-        // Match a chain of identifiers ending with a dot/colon or partial identifier
-        // e.g. "context.user." or "myTable.field" or "object:method" or '"str":'
-        const chainMatch = textBefore.match(/((?:[a-zA-Z_]\w*|"[^"]*"|'[^']*')(?:\.|:)(?:[a-zA-Z_]\w*(?:\.|:))*)?([a-zA-Z_]\w*)?$/);
-
-        if (chainMatch) {
-            // Group 1: The chain prefix (e.g. "obj." or "obj:"), or undefined if just a word
-            // Group 2: The partial word (e.g. "meth"), or undefined if ending in delimiter
-
-            const fullChainPrefix = chainMatch[1] || "";
-            const partialWord = chainMatch[2] || "";
-
-            const isDotOrColonCompletion = fullChainPrefix.length > 0;
-
-            // If just typing a word (no dot/colon prefix), handle as global/local completion later
-            if (!isDotOrColonCompletion) {
-                // Fall through to generic word completion
-            } else {
-                // Split by . or : to get parts. Warning: String literals might contain dots/colons.
-                // Simple split won't work for strings.
-                // Robust split: split by . or : but respect quotes?
-                // For simplified fix, let's assume standard identifier chains first, 
-                // and special case the string literal at the start.
-
-                // Let's rely on resolveLuaType to handle the array. 
-                // We need to parse the chain string into parts.
-                // Regex to split by . or :
-                const parts = fullChainPrefix.split(/[:.]/).filter(p => p.length > 0);
-
-                // Check if the first part is a string literal (rudimentary check)
-                // If fullChainPrefix starts with quote, the first part is the string.
-                if (fullChainPrefix.startsWith('"') || fullChainPrefix.startsWith("'")) {
-                    // Find closing quote
-                    const quote = fullChainPrefix[0];
-                    const closeIndex = fullChainPrefix.indexOf(quote, 1);
-                    if (closeIndex !== -1) {
-                        parts[0] = fullChainPrefix.slice(0, closeIndex + 1);
-                        // The rest are properties
-                        const rest = fullChainPrefix.slice(closeIndex + 2).split(/[:.]/).filter(p => p.length > 0);
-                        parts.splice(1, parts.length - 1, ...rest);
-                    }
-                }
-
-                // If chain is empty (e.g. typing "word"), skip
-                if (parts.length > 0) {
-                    const resolvedType = resolveLuaType(parts, variables);
-
-                    if (resolvedType) {
-                        let completions: Completion[] = [];
-
-                        if (resolvedType.kind === "context" && resolvedType.contextObject) {
-                            const ctxObj = resolvedType.contextObject;
-                            const typeMap: Record<string, string> = {
-                                user: "PipelineUser",
-                                session: "PipelineSession",
-                                apikey: "PipelineApiKey",
-                                client: "OAuthClient",
-                                request: "RequestInfo",
-                            };
-                            const typeName = typeMap[ctxObj];
-                            if (typeName) {
-                                completions = getNestedObjectCompletions(typeName);
-                            }
-                        } else if (resolvedType.kind === "global") {
-                            if (resolvedType.name === "context") completions = getContextCompletions(hookName);
-                            else if (resolvedType.name === "helpers") completions = getHelperCompletions();
-                            else if (resolvedType.name === "prev") completions = getPrevCompletions(prevSchema);
-                            else if (resolvedType.name === "prev") completions = getPrevCompletions(prevSchema);
-                            else if (resolvedType.name && ["string", "math", "table"].includes(resolvedType.name)) {
-                                completions = getBuiltinLibraryCompletions(resolvedType.name);
-                            }
-                        } else if (resolvedType.kind === "primitive" && resolvedType.name === "string") {
-                            // String methods
-                            completions = getBuiltinLibraryCompletions("string");
-                        } else if (resolvedType.kind === "table" && resolvedType.fields) {
-                            completions = Array.from(resolvedType.fields.keys()).map((field: string) => ({
-                                label: field,
-                                type: "property",
-                                detail: "table field",
-                                boost: 8,
-                            }));
-                        }
-
-                        if (completions.length > 0) {
-                            return {
-                                from: context.pos - partialWord.length,
-                                options: completions,
-                                validFor: /^\w*$/,
-                            };
-                        }
-                    }
-                }
-            }
-        }
-
-        // -------------------------------------------------------------------------
-        // 2. Specialized Access (Context, Output Arrays)
-        // -------------------------------------------------------------------------
-
-        // Check for context.outputs["xxx"].yyy (Dynamic Script Outputs)
-        const outputsWithIdMatch = textBefore.match(/context\.outputs\["([\w-]+)"\]\.(\w*)$/);
-        if (outputsWithIdMatch && scriptOutputs) {
-            const [, scriptId, partial] = outputsWithIdMatch;
-            const schema = scriptOutputs.get(scriptId);
-            if (schema) {
-                return {
-                    from: context.pos - partial.length,
-                    options: [
-                        ...schema.fields.map((field) => ({
-                            label: field,
-                            type: "property" as const,
-                            detail: `from script "${scriptId}"`,
-                            boost: 10,
-                        })),
-                    ],
-                    validFor: /^\w*$/,
-                };
-            }
-        }
-
-        // Check for context.outputs["xxx"].data.yyy
-        const outputsDataMatch = textBefore.match(/context\.outputs\["([\w-]+)"\]\.data\.(\w*)$/);
-        if (outputsDataMatch && scriptOutputs) {
-            const [, scriptId, partial] = outputsDataMatch;
-            const schema = scriptOutputs.get(scriptId);
-            if (schema?.dataFields) {
-                return {
-                    from: context.pos - partial.length,
-                    options: schema.dataFields.map((field) => ({
-                        label: field,
-                        type: "property" as const,
-                        detail: `data from "${scriptId}"`,
-                        boost: 10,
-                    })),
-                    validFor: /^\w*$/,
-                };
-            }
-        }
-
-        // Fallback: generic outputs completions for context.outputs[...]
-        const outputsMatch = textBefore.match(/context\.outputs\[?"?[\w-]*"?\]?\.(\w*)$/);
-        if (outputsMatch) {
-            return {
-                from: context.pos - outputsMatch[1].length,
-                options: [
-                    { label: "allowed", type: "property", detail: "boolean", info: "Whether the script allowed the action", boost: 10 },
-                    { label: "data", type: "property", detail: "table", info: "Data returned by the script", boost: 9 },
-                    { label: "error", type: "property", detail: "string?", info: "Error message if blocked", boost: 8 },
-                ],
-                validFor: /^\w*$/,
-            };
-        }
-
-        // -------------------------------------------------------------------------
-        // 3. Global/Local Word Completion
-        // -------------------------------------------------------------------------
-
-        const wordMatch = textBefore.match(/(\w+)$/);
-        if (wordMatch || context.explicit) {
-            const word = wordMatch ? wordMatch[1] : "";
-
-            // If we are typing a dot logic fell through, don't show globals
-            if (textBefore.trim().endsWith(".")) return null;
-
-            const allCompletions: Completion[] = [];
-
-            // Add local variables FIRST with highest priority
-            for (const [name, info] of variables) {
-                const type = info.inferredType;
-                let detail = "local";
-
-                if (type.kind === "context" && type.contextObject) detail = `context.${type.contextObject}`;
-                else if (type.kind === "global") detail = type.name || "global";
-                else if (type.kind === "primitive") detail = type.name || "local";
-                else if (type.kind === "table") detail = "table";
-                else if (type.kind === "function") detail = "function";
-
-                let infoFn: (() => HTMLElement) | undefined;
-                let apply: Completion["apply"] | undefined;
-
-                if (type.kind === "function") {
-                    const params = (type.params || []).map(p => p.name || "arg");
-                    detail = `function(${params.join(", ")})`;
-
-                    // Create snippet string: name(${1:param1}, ${2:param2})
-                    const snippetArgs = params.map((p, i) => `\${${i + 1}:${p}}`).join(", ");
-                    const snippetText = `${name}(${snippetArgs})`;
-                    apply = snippet(snippetText);
-
-                    if (info.doc) {
-                        infoFn = () => {
-                            const div = document.createElement("div");
-                            div.className = "cm-completion-info-lua";
-                            div.innerHTML = `
-                                <div style="font-weight: 600; margin-bottom: 4px;">${name}(${params.join(", ")})</div>
-                                <div style="margin-bottom: 8px;">${info.doc!.description || ""}</div>
-                            `;
-                            return div;
-                        };
-                    }
-                }
-
-                allCompletions.push({
-                    label: name,
-                    type: type.kind === "function" ? "function" : "variable",
-                    detail,
-                    info: infoFn,
-                    apply,
-                    boost: 15, // Higher than everything else
-                });
-            }
-
-            // Add globals and builtins
-            allCompletions.push(
-                { label: "helpers", type: "variable", detail: "Pipeline helpers API", boost: 10 },
-                { label: "context", type: "variable", detail: "Hook context object", boost: 10 },
-                ...getKeywordCompletions(),
-                ...getBuiltinCompletions(),
-                ...getSnippetCompletions(),
-            );
-
-            // Filter if word exists
-            const filtered = word.length > 0
-                ? allCompletions.filter((c) => c.label.toLowerCase().startsWith(word.toLowerCase()))
-                : allCompletions;
-
-            if (filtered.length === 0) return null;
-
-            return {
-                from: context.pos - word.length,
-                options: filtered,
-                validFor: /^\w*$/,
-            };
-        }
-
-        return null;
-    };
-}
-
-// =============================================================================
-// HELPER: Get context.prev completions with dynamic schema
+// HELPERS
 // =============================================================================
 
 function getPrevCompletions(prevSchema: ReturnType<typeof extractReturnSchema>): Completion[] {
@@ -565,4 +216,299 @@ function getPrevCompletions(prevSchema: ReturnType<typeof extractReturnSchema>):
     }
 
     return completions;
+}
+
+// =============================================================================
+// MAIN COMPLETION SOURCE
+// =============================================================================
+
+export interface LuaCompletionOptions {
+    hookName?: string;
+    /**
+     * Code from the previous script layer (if any).
+     * Used to infer context.prev schema for dynamic completions.
+     */
+    previousScriptCode?: string;
+    /**
+     * Map of script IDs to their return schemas.
+     * Used for context.outputs["id"].* completions.
+     */
+    scriptOutputs?: Map<string, ReturnSchema>;
+}
+
+export function createLuaCompletionSource(options: LuaCompletionOptions = {}) {
+    const { hookName, previousScriptCode, scriptOutputs } = options;
+
+    // Pre-compute previous script schema if available
+    const prevSchema = previousScriptCode ? extractReturnSchema(previousScriptCode) : null;
+
+    return function luaCompletionSource(context: CompletionContext): CompletionResult | null {
+        // Don't trigger on empty (unless explicit?)
+        if (context.pos === 0 && !context.explicit) return null;
+
+        const code = context.state.doc.toString();
+        const line = context.state.doc.lineAt(context.pos);
+        const textBefore = line.text.slice(0, context.pos - line.from);
+
+        // ---------------------------------------------------------------------
+        // 1. Repair Code (for AST parsing)
+        // ---------------------------------------------------------------------
+        let codeToParse = code;
+        const isStatementStart = /^\s*[\w\.:]+$/.test(textBefore) && !/^\s*(local|function|return|break|goto|do|while|repeat|if|for)\b/.test(textBefore);
+        const isWhitespace = /^\s*$/.test(textBefore);
+
+        let placeholderPos = context.pos; // Where we will infer type at
+
+        if (textBefore.endsWith(".")) {
+            // "obj." -> "obj.placeholder = 0" 
+            // placeholderInserted = true;
+            // Insert placeholder "placeholder"
+            const insertion = "placeholder" + (isStatementStart ? " = 0" : "");
+            codeToParse = code.slice(0, context.pos) + insertion + code.slice(context.pos);
+            // We want to resolve the inserted placeholder
+            // 'placeholder' is 11 chars. We want the position of 'placeholder' start.
+            // Wait, resolveNodeAtPosition expects position of the node.
+            // If we insert "placeholder", the node starts at context.pos.
+            // So resolving at context.pos should work as it hits the identifier.
+            placeholderPos = context.pos + 1; // +1 to be safely inside
+        } else if (textBefore.endsWith(":")) {
+            // "obj:" -> "obj:placeholder()"
+            // placeholderInserted = true;
+            const insertion = "placeholder()";
+            codeToParse = code.slice(0, context.pos) + insertion + code.slice(context.pos);
+            placeholderPos = context.pos + 1;
+        } else if (isStatementStart) {
+            // "abc" -> "abc = 0" (if just a word at start of statement)
+            const insertion = " = 0";
+            codeToParse = code.slice(0, context.pos) + insertion + code.slice(context.pos);
+        } else if (isWhitespace) {
+            // Empty document or new line start -> treat as explicit request for globals
+            const insertion = "placeholder = 0";
+            codeToParse = code.slice(0, context.pos) + insertion + code.slice(context.pos);
+            placeholderPos = context.pos + 1;
+        }
+
+        // ---------------------------------------------------------------------
+        // 2. Resolve AST
+        // ---------------------------------------------------------------------
+
+        // Use resolveNodeAtPosition to find what we are looking at.
+        const resolved = resolveNodeAtPosition(codeToParse, placeholderPos);
+
+        if (!resolved) {
+            // Fallback
+            return null;
+        }
+
+        const { node, path, scope } = resolved;
+
+        // ---------------------------------------------------------------------
+        // 3. Determine Context based on Node
+        // ---------------------------------------------------------------------
+
+        // Case A: Property Access (MemberExpression)
+        if (node.type === "Identifier") {
+            const parent = path[path.length - 2];
+
+            // Check if we are the Property (right side) of a MemberExpression
+            if (parent && (parent.type === "MemberExpression" || parent.type === "TableKeyString") && parent.identifier === node) {
+                // We are completing a property.
+                // Resolve the BASE.
+                const baseType = inferExpressionType(parent.base, scope);
+
+                let completions: Completion[] = [];
+
+                if (baseType.kind === "context" && baseType.contextObject) {
+                    // context.[nested].*
+                    const typeMap: Record<string, string> = {
+                        user: "PipelineUser",
+                        session: "PipelineSession",
+                        apikey: "PipelineApiKey",
+                        client: "OAuthClient",
+                        request: "RequestInfo",
+                    };
+                    const typeName = typeMap[baseType.contextObject];
+                    if (typeName) completions = getNestedObjectCompletions(typeName);
+
+                } else if (baseType.kind === "global") {
+                    // context.* or helpers.*
+                    if (baseType.name === "context") completions = getContextCompletions(hookName);
+                    else if (baseType.name === "helpers") completions = getHelperCompletions();
+                    else if (baseType.name === "prev") completions = getPrevCompletions(prevSchema);
+                    else if (baseType.name === "outputs") {
+                        // Fallback/Generic outputs
+                        completions = [
+                            { label: "allowed", type: "property", detail: "boolean", info: "Whether script allowed", boost: 10 },
+                            { label: "data", type: "property", detail: "table", info: "Script data", boost: 9 },
+                            { label: "error", type: "property", detail: "string?", info: "Error message", boost: 8 },
+                        ];
+                    }
+                    else if (baseType.name && ["string", "math", "table"].includes(baseType.name)) {
+                        completions = getBuiltinLibraryCompletions(baseType.name);
+                    }
+                } else if (baseType.kind === "primitive" && baseType.name === "string") {
+                    completions = getBuiltinLibraryCompletions("string");
+                } else if (baseType.kind === "table" && baseType.fields) {
+                    completions = Array.from(baseType.fields.keys()).map((field: string) => ({
+                        label: field,
+                        type: "property",
+                        detail: "table field",
+                        boost: 8,
+                    }));
+                }
+
+                if (completions.length > 0) {
+                    // Match against word being typed
+                    const wordMatch = textBefore.match(/(\w*)$/);
+                    const partialWord = wordMatch ? wordMatch[1] : "";
+
+                    // Filter completions
+                    const filtered = partialWord.length > 0
+                        ? completions.filter(c => c.label.toLowerCase().startsWith(partialWord.toLowerCase()))
+                        : completions;
+
+                    if (filtered.length > 0) {
+                        return {
+                            from: context.pos - partialWord.length,
+                            options: filtered,
+                            validFor: /^\w*$/,
+                        };
+                    }
+                }
+            }
+
+            // Case B: Variable/Global Completion
+            const isMemberProperty = parent && (parent.type === "MemberExpression" || parent.type === "TableKeyString") && parent.identifier === node;
+
+            if (!isMemberProperty && !textBefore.endsWith(".")) {
+                // Regular variable completion
+
+                const wordMatch = textBefore.match(/(\w*)$/);
+                const word = wordMatch ? wordMatch[1] : "";
+
+                const allCompletions: Completion[] = [];
+
+                // Locals - Walk up scope
+                const variables = new Map<string, VariableType>();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let currentScope: any = scope; // Simplify type checking for linked list
+                while (currentScope) {
+                    if (currentScope.variables) {
+                        for (const [k, v] of currentScope.variables) {
+                            if (!variables.has(k)) variables.set(k, v);
+                        }
+                    }
+                    currentScope = currentScope.parent;
+                }
+
+                for (const [name, info] of variables) {
+                    const type = info.inferredType;
+                    let detail = "local";
+                    if (type.kind === "context" && type.contextObject) detail = `context.${type.contextObject}`;
+                    else if (type.kind === "global") detail = type.name || "global";
+                    else if (type.kind === "primitive") detail = type.name || "local";
+                    else if (type.kind === "table") detail = "table";
+                    else if (type.kind === "function") detail = "function";
+
+                    allCompletions.push({
+                        label: name,
+                        type: type.kind === "function" ? "function" : "variable",
+                        detail,
+                        boost: 15
+                    });
+                }
+
+                // Globals
+                allCompletions.push(
+                    { label: "helpers", type: "variable", detail: "Pipeline helpers API", boost: 10 },
+                    { label: "context", type: "variable", detail: "Hook context object", boost: 10 },
+                    ...getKeywordCompletions(),
+                    ...getBuiltinCompletions(),
+                    ...getSnippetCompletions(),
+                );
+
+                const filtered = word.length > 0
+                    ? allCompletions.filter(c => c.label.toLowerCase().startsWith(word.toLowerCase()))
+                    : allCompletions;
+
+                if (filtered.length > 0) {
+                    return {
+                        from: context.pos - word.length,
+                        options: filtered,
+                        validFor: /^\w*$/,
+                    };
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // 4. Fallback: Dynamic Outputs (AST based)
+        // ---------------------------------------------------------------------
+        // context.outputs["xxx"].yyy or context.outputs["xxx"].data.yyy
+
+        if (scriptOutputs && node.type === "Identifier") {
+            const parent = path[path.length - 2];
+            // Check if we are a property of usage
+            if (parent && (parent.type === "MemberExpression" || parent.type === "TableKeyString") && parent.identifier === node) {
+                // Check base: context.outputs["xxx"] or context.outputs["xxx"].data
+                const base = parent.base;
+
+                // Helper to check for context.outputs["id"]
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const getOutputScriptId = (n: any): string | null => {
+                    // Expecting IndexExpression: base=MemberExpr(context.outputs), index=StringLiteral
+                    if (n.type === "IndexExpression" && n.index.type === "StringLiteral") {
+                        const innerBase = n.base;
+                        if (innerBase.type === "MemberExpression" &&
+                            innerBase.identifier.name === "outputs" &&
+                            innerBase.base.type === "Identifier" && innerBase.base.name === "context") {
+                            return n.index.value;
+                        }
+                    }
+                    return null;
+                };
+
+                // Case 1: context.outputs["id"].FIELD
+                const scriptId1 = getOutputScriptId(base);
+                if (scriptId1) {
+                    const schema = scriptOutputs.get(scriptId1);
+                    if (schema) {
+                        return {
+                            from: context.pos - textBefore.match(/(\w*)$/)![1].length,
+                            options: schema.fields.map(field => ({
+                                label: field,
+                                type: "property",
+                                detail: `from script "${scriptId1}"`,
+                                boost: 10,
+                            })),
+                            validFor: /^\w*$/,
+                        };
+                    }
+                }
+
+                // Case 2: context.outputs["id"].data.FIELD
+                // base is "context.outputs["id"].data" (MemberExpression)
+                if (base.type === "MemberExpression" && base.identifier.name === "data") {
+                    const scriptId2 = getOutputScriptId(base.base);
+                    if (scriptId2) {
+                        const schema = scriptOutputs.get(scriptId2);
+                        if (schema?.dataFields) {
+                            return {
+                                from: context.pos - textBefore.match(/(\w*)$/)![1].length,
+                                options: schema.dataFields.map(field => ({
+                                    label: field,
+                                    type: "property",
+                                    detail: `data from "${scriptId2}"`,
+                                    boost: 10,
+                                })),
+                                validFor: /^\w*$/,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    };
 }

@@ -10,7 +10,7 @@ import { lua } from "@codemirror/legacy-modes/mode/lua";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { closeBrackets, closeBracketsKeymap, completionKeymap, closeCompletion } from "@codemirror/autocomplete";
 import type { HookExecutionMode } from "@/schemas/pipelines";
-import { createLuaExtensions, LUA_TOOLTIP_STYLES } from "./lua-extensions";
+import { createLuaExtensions, LUA_TOOLTIP_STYLES, closeSignatureHelp, signatureHelpField } from "./lua-extensions";
 
 interface CodeEditorProps {
     value: string;
@@ -90,9 +90,6 @@ export function CodeEditor({
                 },
                 ".cm-content": {
                     padding: "12px 0",
-                },
-                ".cm-line": {
-                    padding: "0 12px",
                 },
                 // Lint gutter styling
                 ".cm-gutter-lint": {
@@ -198,16 +195,26 @@ export function CodeEditor({
 
         const handleEscapeCapture = (e: KeyboardEvent) => {
             if (e.key === "Escape" && viewRef.current) {
-                // Check if there's an open tooltip/autocomplete
-                const hasOpenTooltip = document.querySelector(".cm-tooltip, .cm-tooltip-autocomplete");
-                if (hasOpenTooltip) {
-                    // Programmatically close the completion
-                    const closed = closeCompletion(viewRef.current);
-                    if (closed) {
-                        // Prevent modal from closing since we handled the ESC
-                        e.stopPropagation();
-                        e.preventDefault();
-                    }
+                const view = viewRef.current;
+                let handled = false;
+
+                // Try to close autocomplete first
+                const closedCompletion = closeCompletion(view);
+                if (closedCompletion) {
+                    handled = true;
+                }
+
+                // Try to close signature help tooltip
+                const signatureState = view.state.field(signatureHelpField, false);
+                if (signatureState?.tooltip) {
+                    view.dispatch({ effects: closeSignatureHelp.of(null) });
+                    handled = true;
+                }
+
+                // If we handled any tooltip, prevent modal from closing
+                if (handled) {
+                    e.stopPropagation();
+                    e.preventDefault();
                 }
             }
         };

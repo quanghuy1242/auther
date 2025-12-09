@@ -8,7 +8,6 @@ import {
     WidgetType,
 } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
-import * as luaparse from "luaparse";
 import { inferVariableTypes, formatLuaType, type VariableType } from "./type-inference";
 
 // =============================================================================
@@ -74,17 +73,8 @@ export const luaInlayHints = ViewPlugin.fromClass(
             const pending: PendingHintDecoration[] = [];
 
             try {
-                // Use the full type inference system
-                const { variables, rootScope } = inferVariableTypes(code);
-                if (!rootScope) return new RangeSetBuilder<Decoration>().finish();
-
-                // Parse AST to get positions
-                const ast = luaparse.parse(code, {
-                    ranges: true,
-                    locations: false,
-                    luaVersion: "5.3"
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                }) as any;
+                const { variables, rootScope, ast } = inferVariableTypes(code);
+                if (!rootScope || !ast) return new RangeSetBuilder<Decoration>().finish();
 
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const visit = (node: any) => {
@@ -122,6 +112,7 @@ export const luaInlayHints = ViewPlugin.fromClass(
                     }
 
                     // Traverse children
+                    // Generic traverse is needed because structure varies
                     for (const key in node) {
                         if (key === "type" || key === "loc" || key === "range") continue;
                         const child = node[key];

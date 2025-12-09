@@ -47,27 +47,7 @@ const referenceHighlightField = StateField.define<DecorationSet>({
 /**
  * Find all occurrences of a word in the document
  */
-function findAllOccurrences(
-    text: string,
-    word: string
-): Array<{ from: number; to: number }> {
-    const occurrences: Array<{ from: number; to: number }> = [];
-    const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, "g");
-
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-        occurrences.push({
-            from: match.index,
-            to: match.index + word.length,
-        });
-    }
-
-    return occurrences;
-}
-
-function escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+// (Removed regex-based helpers)
 
 // =============================================================================
 // GET WORD AT CURSOR
@@ -100,37 +80,88 @@ function getWordAtCursor(view: EditorView): string | null {
 // FIND REFERENCES COMMAND
 // =============================================================================
 
+// -----------------------------------------------------------------------------
+// HELPER: Find Definitions / References
+// -----------------------------------------------------------------------------
+
+import { inferVariableTypes, findNodePathAtPosition, type LuaNode } from "./type-inference";
+
+function findReferencesInCode(
+    code: string,
+    pos: number
+): Array<{ from: number; to: number }> {
+    const { ast } = inferVariableTypes(code);
+    if (!ast) return [];
+
+    const path = findNodePathAtPosition(ast as LuaNode, pos);
+    if (path.length === 0) return [];
+
+    const node = path[path.length - 1];
+    if (node.type !== "Identifier") return [];
+
+    // The node should have a scope attached (from type-inference traverse)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scope = (node as any).scope;
+    if (!scope) {
+        // Fallback: If no scope attached (shouldn't happen if traverse ran),
+        // we can't accurately find references.
+        return [];
+    }
+
+    // Look up variable in the scope
+    // Use the name from the identifier
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const variable = scope.get((node as any).name);
+
+    if (!variable) return [];
+
+    // Collect ranges from declarations (?) and references
+    const ranges: Array<{ from: number; to: number }> = [];
+
+    // Add references
+    if (variable.references) {
+        variable.references.forEach((ref: LuaNode) => {
+            if (ref.range) {
+                ranges.push({ from: ref.range[0], to: ref.range[1] });
+            }
+        });
+    }
+
+    // Add initNode if it is the identifier itself (sometimes initNode is the value)
+    // Actually VariableType.references should include the declaration identifier if we implemented it right
+    // We did init references=[nameIdentifier] for functions.
+    // For locals, we rely on generic handler.
+    // So references array should be complete.
+
+    return ranges;
+}
+
 /**
  * Find and highlight all references to the word under cursor.
  * Returns true if references were found, false otherwise.
  */
 function findReferences(view: EditorView): boolean {
+    const pos = view.state.selection.main.head;
+    const code = view.state.doc.toString();
+
+    // Quick check if we are on a word
     const word = getWordAtCursor(view);
     if (!word) {
-        // Clear any existing highlights
-        view.dispatch({
-            effects: clearReferenceHighlights.of(null),
-        });
+        view.dispatch({ effects: clearReferenceHighlights.of(null) });
         return false;
     }
 
-    // Don't highlight keywords
-    const keywords = [
-        "local", "function", "if", "then", "else", "elseif", "end",
-        "for", "do", "while", "repeat", "until", "return", "break",
-        "and", "or", "not", "in", "nil", "true", "false",
-    ];
-    if (keywords.includes(word)) return false;
+    const ranges = findReferencesInCode(code, pos);
 
-    // Find all occurrences
-    const text = view.state.doc.toString();
-    const occurrences = findAllOccurrences(text, word);
-
-    if (occurrences.length === 0) return false;
+    if (ranges.length === 0) {
+        // Fallback or just clear
+        view.dispatch({ effects: clearReferenceHighlights.of(null) });
+        return false;
+    }
 
     // Create decorations
     const decorations = Decoration.set(
-        occurrences.map((occ) => referenceMark.range(occ.from, occ.to))
+        ranges.sort((a, b) => a.from - b.from).map((r) => referenceMark.range(r.from, r.to))
     );
 
     // Update state with new decorations
@@ -192,4 +223,4 @@ export function luaFindReferences(): Extension {
 }
 
 // Export for advanced usage
-export { findReferences, clearReferences, findAllOccurrences };
+export { findReferences, clearReferences, findReferencesInCode };

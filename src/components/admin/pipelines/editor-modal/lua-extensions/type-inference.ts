@@ -36,6 +36,8 @@ export interface LuaType {
     helperName?: string;    // "fetch", "log"
     // For metatable support
     bases?: LuaType[];
+    // Documentation
+    doc?: LuaDocComment;
 }
 
 export interface VariableType {
@@ -46,6 +48,7 @@ export interface VariableType {
     doc?: LuaDocComment;
     line: number;
     initNode?: LuaNode;
+    references?: LuaNode[];
 }
 
 /**
@@ -96,9 +99,11 @@ export interface LuaDocComment {
     /** Description from --- comment */
     description?: string;
     /** @param annotations */
-    params: Array<{ name: string; type: string; description: string }>;
+    params: Array<{ name: string; type: string; description: string; optional?: boolean }>;
     /** @return annotation */
     returns?: { type: string; description: string };
+    /** Full signature string if available */
+    signature?: string;
 }
 
 export interface InferenceResult {
@@ -109,6 +114,8 @@ export interface InferenceResult {
     parseError?: string;
     /** The root scope of the parsed AST */
     rootScope?: Scope;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ast?: any; // LuaAST or Chunk
 }
 
 // =============================================================================
@@ -150,6 +157,14 @@ export function inferExpressionType(
         if (expr.name === "context") return { kind: "global", name: "context" };
         if (expr.name === "helpers") return { kind: "global", name: "helpers" };
 
+        // Standard Lua Globals
+        if (["string", "math", "table", "os", "io", "package", "debug", "coroutine"].includes(expr.name)) {
+            return { kind: "global", name: expr.name };
+        }
+        if (["print", "type", "tostring", "tonumber", "error", "assert", "ipairs", "pairs", "next", "pcall", "xpcall", "select", "unpack", "require", "load", "loadstring"].includes(expr.name)) {
+            return { kind: "function", name: expr.name, params: [], returns: { kind: "unknown" } };
+        }
+
         // Look up variable in scope
         if (scope) {
             const v = scope.get(expr.name);
@@ -165,6 +180,7 @@ export function inferExpressionType(
         const identifier = member.identifier as Identifier;
 
         const baseType = inferExpressionType(base, scope);
+
 
         // Handle context.xxx
         if (baseType.kind === "global" && baseType.name === "context") {
@@ -188,6 +204,30 @@ export function inferExpressionType(
                 if (univField.type.includes("table")) return { kind: "table", name: "table" };
             }
         }
+
+        // Handle helpers.xxx
+        if (baseType.kind === "global" && baseType.name === "helpers") {
+            const helperName = identifier.name;
+            const def = HELPERS_DEFINITIONS.find(h => h.name === helperName);
+            if (def) {
+                // Map definition to LuaType params
+                const params: LuaType[] = def.params.map(p => ({
+                    kind: "primitive", // Simplified, we rely on name for display
+                    name: p.name
+                }));
+                // Create a synthetic doc for consistent signature help
+                const doc: LuaDocComment = {
+                    name: helperName,
+                    line: 0,
+                    description: def.description,
+                    params: def.params,
+                    signature: def.signature,
+                    returns: def.returns ? { type: def.returns, description: "" } : undefined
+                };
+                return { kind: "function", name: helperName, params, doc };
+            }
+        }
+
 
         // Nested context types
         if (baseType.kind === "context" && baseType.contextObject) {
@@ -372,210 +412,265 @@ export class Scope {
 // MAIN INFERENCE FUNCTION
 // =============================================================================
 
+// Update inferVariableTypes to utilize the new parseLuaDocComments
 export function inferVariableTypes(code: string): InferenceResult {
-    const docs = parseLuaDocComments(code);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const collectedNodes: any[] = [];
+    let ast: Chunk | null = null;
+    let parseError: string | undefined;
+
+    try {
+        ast = luaparse.parse(code, {
+            locations: true,
+            ranges: true,
+            scope: true,
+            comments: true,
+            luaVersion: "5.3",
+            onCreateNode: (node) => collectedNodes.push(node)
+        }) as Chunk;
+    } catch (e) {
+        parseError = e instanceof Error ? e.message : "Parse error";
+    }
+
+    // Recover partial AST if needed
+    if (!ast && collectedNodes.length > 0) {
+        // ... (existing recovery logic, but we need comments? 
+        // luaparse usually doesn't return comments in onCreateNode calls easily unless mapped)
+        // Actually, if parse fails, we might lose comments.
+        // But for now let's persist standard AST usage.
+    }
+
+    // Parse docs from AST if available
+    // We map by Line Number (end of comment block) -> Doc
+    const docsByLine = ast ? parseLuaDocComments(ast) : new Map<number, LuaDocComment>();
+    const docsByName = new Map<string, LuaDocComment>();
+
     const allVariables = new Map<string, VariableType>(); // Flat map for legacy consumers
 
     // Root scope covers entire file
     const rootScope = new Scope({ start: 0, end: code.length });
     let currentScope = rootScope;
 
-    try {
-        const ast = luaparse.parse(code, {
-            locations: true,
-            ranges: true, // IMPORTANT: Needed for scope ranges
-            scope: true,
-            comments: false,
-            luaVersion: "5.3",
-        }) as Chunk;
+    // ... define traverse ...
 
-        // Simplified recursive walker
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const traverse = (node: any) => {
-            if (!node) return;
+    // Simplified recursive walker
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const traverse = (node: any) => {
 
-            let scopePushed = false;
-            // Nodes that create a new scope
-            // Nodes that create a new scope
-            const blockCreatingNodes = ["FunctionDeclaration", "FunctionExpression", "DoStatement", "WhileStatement", "RepeatStatement", "IfStatement", "ForNumericStatement", "ForGenericStatement"];
+        if (!node) return;
 
-            if (blockCreatingNodes.includes(node.type)) {
-                // If the node has a body block, we could use that, or just use the node's range.
-                // Using node's range is safer.
-                const range: ScopeRange = node.range ? { start: node.range[0], end: node.range[1] } : { start: 0, end: 0 };
-                currentScope = new Scope(range, currentScope);
-                scopePushed = true;
-            }
+        let scopePushed = false;
+        // Nodes that create a new scope
+        // Nodes that create a new scope
+        const blockCreatingNodes = ["FunctionDeclaration", "FunctionExpression", "DoStatement", "WhileStatement", "RepeatStatement", "IfStatement", "ForNumericStatement", "ForGenericStatement"];
 
-            // --- Process Definitions ---
+        if (blockCreatingNodes.includes(node.type)) {
+            // If the node has a body block, we could use that, or just use the node's range.
+            // Using node's range is safer.
+            const range: ScopeRange = node.range ? { start: node.range[0], end: node.range[1] } : { start: 0, end: 0 };
+            currentScope = new Scope(range, currentScope);
+            scopePushed = true;
+        }
 
-            // Local Statement
-            if (node.type === "LocalStatement") {
-                const vars = node.variables || [];
-                const inits = node.init || [];
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                vars.forEach((v: any, i: number) => {
-                    if (v.type === "Identifier") {
-                        const name = v.name;
-                        const init = inits[i];
-                        const type = inferExpressionType(init, currentScope);
-                        const variable: VariableType = {
-                            name,
-                            kind: "local",
-                            inferredType: type,
-                            line: v.loc?.start.line || 0,
-                            initNode: init
-                        };
-                        currentScope.add(name, variable);
-                        allVariables.set(name, variable);
-                    }
-                });
-            }
+        // --- Process Definitions ---
 
-            // Assignment
-            if (node.type === "AssignmentStatement") {
-                const vars = node.variables || [];
-                const inits = node.init || [];
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                vars.forEach((v: any, i: number) => {
+        // Local Statement
+        if (node.type === "LocalStatement") {
+            const vars = node.variables || [];
+            const inits = node.init || [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vars.forEach((v: any, i: number) => {
+                if (v.type === "Identifier") {
+                    const name = v.name;
                     const init = inits[i];
-
-                    if (v.type === "Identifier") {
-                        const name = v.name;
-                        // Check if exists in scope chain
-                        if (currentScope.get(name)) {
-                            const type = inferExpressionType(init, currentScope);
-                            if (type.kind !== "unknown") {
-                                currentScope.update(name, old => ({ ...old, inferredType: type, initNode: init }));
-                                // Update global map too if it's there
-                                if (allVariables.has(name)) allVariables.set(name, currentScope.get(name)!);
-                            }
-                        }
-                    } else if (v.type === "MemberExpression") {
-                        // Handle t.field = value or t["field"] = value
-                        const baseType = inferExpressionType(v.base, currentScope);
-                        if (baseType.kind === "table") {
-                            let keyName: string | undefined;
-                            if (v.identifier.type === "Identifier") keyName = v.identifier.name;
-                            // Note: MemberExpression identifier is always Identifier or not? 
-                            // luaparse: MemberExpression { base, identifier, indexer }
-                            // if indexer is '.', identifier is Identifier. 
-                            // if indexer is '[]', identifier is Expression (StringLiteral etc)
-                            // Actually luaparse definition: identifier is LuaNode.
-                            else if (v.identifier.type === "StringLiteral") keyName = v.identifier.value;
-
-                            if (keyName && baseType.fields) {
-                                const valueType = inferExpressionType(init, currentScope);
-                                baseType.fields.set(keyName, valueType);
-                            }
-                        }
-                    }
-                });
-            }
-
-            // Function Declaration or Expression
-            if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") {
-                const isLocal = node.isLocal;
-                const nameIdentifier = node.identifier;
-                const name = nameIdentifier?.name;
-
-                // Handle 'FunctionDeclaration' name binding
-                if (node.type === "FunctionDeclaration" && name) {
-                    // "local function f()" adds 'f' to enclosing scope (before entering new scope??)
-                    // Wait, usually declaration name is visible in outer scope.
-                    // But we already pushed a new scope for the function body!
-                    // So we must add the function variable to the PARENT scope.
-                    const targetScopeForName = isLocal ? (currentScope.parent || currentScope) : rootScope;
-
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const params = (node.parameters || []).map((p: any) => p.name || p.value) as string[];
-                    const doc = docs.get(name);
-
-                    // Reconstruct param types from docs
-                    const paramTypes: LuaType[] = params.map(p => ({ kind: "unknown", name: p }));
-                    if (doc) {
-                        doc.params.forEach((docParam) => {
-                            const idx = params.indexOf(docParam.name);
-                            if (idx !== -1) {
-                                paramTypes[idx] = { kind: "primitive", name: docParam.type }; // Simplification
-                            }
-                        });
-                    }
-
-                    const returnType: LuaType = doc?.returns ? { kind: "primitive", name: doc.returns.type } : { kind: "unknown" };
-
-                    const funcVar: VariableType = {
+                    const type = inferExpressionType(init, currentScope);
+                    const variable: VariableType = {
                         name,
-                        kind: isLocal ? "function" : "global",
-                        inferredType: { kind: "function", params: paramTypes, returns: returnType },
-                        doc,
-                        line: nameIdentifier.loc?.start.line || 0,
-                        initNode: node
+                        kind: "local",
+                        inferredType: type,
+                        line: v.loc?.start.line || 0,
+                        initNode: init
                     };
-                    targetScopeForName.add(name, funcVar);
-                    allVariables.set(name, funcVar);
+                    currentScope.add(name, variable);
+                    allVariables.set(name, variable);
                 }
+            });
+        }
 
-                // Handle Parameters (add to CURRENT scope - the function body)
+        // Assignment
+        if (node.type === "AssignmentStatement") {
+            const vars = node.variables || [];
+            const inits = node.init || [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vars.forEach((v: any, i: number) => {
+                const init = inits[i];
+
+                if (v.type === "Identifier") {
+                    const name = v.name;
+                    // Check if exists in scope chain
+                    if (currentScope.get(name)) {
+                        const type = inferExpressionType(init, currentScope);
+                        if (type.kind !== "unknown") {
+                            currentScope.update(name, old => ({ ...old, inferredType: type, initNode: init }));
+                            // Update global map too if it's there
+                            if (allVariables.has(name)) allVariables.set(name, currentScope.get(name)!);
+                        }
+                    }
+                } else if (v.type === "MemberExpression") {
+                    // Handle t.field = value or t["field"] = value
+                    const baseType = inferExpressionType(v.base, currentScope);
+                    if (baseType.kind === "table") {
+                        let keyName: string | undefined;
+                        if (v.identifier.type === "Identifier") keyName = v.identifier.name;
+                        // Note: MemberExpression identifier is always Identifier or not? 
+                        // luaparse: MemberExpression { base, identifier, indexer }
+                        // if indexer is '.', identifier is Identifier. 
+                        // if indexer is '[]', identifier is Expression (StringLiteral etc)
+                        // Actually luaparse definition: identifier is LuaNode.
+                        else if (v.identifier.type === "StringLiteral") keyName = v.identifier.value;
+
+                        if (keyName && baseType.fields) {
+                            const valueType = inferExpressionType(init, currentScope);
+                            baseType.fields.set(keyName, valueType);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Function Declaration or Expression
+        if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") {
+            const isLocal = node.isLocal;
+            const nameIdentifier = node.identifier;
+            const name = nameIdentifier?.name;
+
+            // Handle 'FunctionDeclaration' name binding
+            if (node.type === "FunctionDeclaration" && name) {
+                // "local function f()" adds 'f' to enclosing scope (before entering new scope??)
+                // Wait, usually declaration name is visible in outer scope.
+                // But we already pushed a new scope for the function body!
+                // So we must add the function variable to the PARENT scope.
+                const targetScopeForName = isLocal ? (currentScope.parent || currentScope) : rootScope;
+
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const params = (node.parameters || []).map((p: any) => p.name || p.value) as string[];
-                params.forEach((p) => {
+
+                // Find doc: Check line before function start
+                const funcStartLine = node.loc ? node.loc.start.line : 0;
+                const doc = docsByLine.get(funcStartLine - 1); // Comment ends on line before function
+
+                if (doc) {
+                    doc.name = name;
+                    doc.line = funcStartLine;
+                    docsByName.set(name, doc);
+                }
+
+                // Reconstruct param types from docs
+                const paramTypes: LuaType[] = params.map(p => ({ kind: "unknown", name: p }));
+                if (doc) {
+                    doc.params.forEach((docParam) => {
+                        const idx = params.indexOf(docParam.name);
+                        if (idx !== -1) {
+                            paramTypes[idx] = { kind: "primitive", name: docParam.type }; // Simplification
+                        }
+                    });
+                }
+
+                const returnType: LuaType = doc?.returns ? { kind: "primitive", name: doc.returns.type } : { kind: "unknown" };
+
+                const funcVar: VariableType = {
+                    name,
+                    kind: isLocal ? "function" : "global",
+                    inferredType: { kind: "function", params: paramTypes, returns: returnType, doc },
+                    doc,
+                    line: nameIdentifier.loc?.start.line || 0,
+                    initNode: node,
+                    references: [nameIdentifier]
+                };
+                targetScopeForName.add(name, funcVar);
+                allVariables.set(name, funcVar);
+            }
+
+            // Handle Parameters (add to CURRENT scope - the function body)
+            const paramNodes = node.parameters || [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            paramNodes.forEach((p: any) => {
+                if (p.type === "Identifier") {
+                    const paramName = p.name;
                     const paramVar: VariableType = {
-                        name: p,
+                        name: paramName,
                         kind: "parameter",
                         inferredType: { kind: "unknown", name: "any" },
-                        line: node.loc?.start.line || 0, // Fallback if no ident loc
-                        initNode: node
+                        line: p.loc?.start.line || 0,
+                        initNode: p,
+                        references: [p]
                     };
-                    currentScope.add(p, paramVar);
-                    allVariables.set(p, paramVar);
-                });
-
-                // Handle Varargs (...)
-                if (node.isVararg) {
+                    currentScope.add(paramName, paramVar);
+                    allVariables.set(paramName, paramVar);
+                } else if (p.type === "VarargLiteral") {
                     const varargVar: VariableType = {
                         name: "...",
                         kind: "parameter",
                         inferredType: { kind: "unknown", name: "..." },
-                        line: node.loc?.start.line || 0,
-                        initNode: node
+                        line: p.loc?.start.line || 0,
+                        initNode: p,
+                        references: [p]
                     };
                     currentScope.add("...", varargVar);
                 }
+            });
+
+            // Handle Vararg flag if not in parameters (legacy luaparse behavior?)
+            // If VarargLiteral was not in parameters but isVararg is true
+            // Modern luaparse usually puts it in parameters. 
+            // We'll skip separate isVararg check if we handled it in loop.
+            // But let's check if "..." is in scope
+            if (node.isVararg && !currentScope.get("...")) {
+                // Fallback if not found in parameters
+                // We don't have a specific node for "..." then? use function node
+                const varargVar: VariableType = {
+                    name: "...",
+                    kind: "parameter",
+                    inferredType: { kind: "unknown", name: "..." },
+                    line: node.loc?.start.line || 0,
+                    initNode: node,
+                    references: [node]
+                };
+                currentScope.add("...", varargVar);
             }
+        }
 
-            // Metatable detection in CallExpression
-            if (node.type === "CallExpression") {
-                if (node.base.type === "Identifier" && node.base.name === "setmetatable") {
-                    const args = node.arguments;
-                    if (args && args.length >= 2) {
-                        const targetObj = args[0];
-                        const metaObj = args[1];
+        // Metatable detection in CallExpression
+        if (node.type === "CallExpression") {
+            if (node.base.type === "Identifier" && node.base.name === "setmetatable") {
+                const args = node.arguments;
+                if (args && args.length >= 2) {
+                    const targetObj = args[0];
+                    const metaObj = args[1];
 
-                        // We primarily care if targetObj is an identifier and metaObj is a table literal with __index
-                        if (targetObj.type === "Identifier") {
-                            const targetName = targetObj.name;
-                            const targetVar = currentScope.get(targetName);
+                    // We primarily care if targetObj is an identifier and metaObj is a table literal with __index
+                    if (targetObj.type === "Identifier") {
+                        const targetName = targetObj.name;
+                        const targetVar = currentScope.get(targetName);
 
-                            if (targetVar && targetVar.inferredType.kind === "table") {
-                                // Inspect metaObj
-                                if (metaObj.type === "TableConstructorExpression") {
-                                    // Look for __index field
-                                    const fields = metaObj.fields || [];
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    const indexField = fields.find((f: any) =>
-                                        (f.type === "TableKey" || f.type === "TableKeyString") &&
-                                        (f.key.name === "__index" || f.key.value === "__index")
-                                    );
+                        if (targetVar && targetVar.inferredType.kind === "table") {
+                            // Inspect metaObj
+                            if (metaObj.type === "TableConstructorExpression") {
+                                // Look for __index field
+                                const fields = metaObj.fields || [];
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const indexField = fields.find((f: any) =>
+                                    (f.type === "TableKey" || f.type === "TableKeyString") &&
+                                    (f.key.name === "__index" || f.key.value === "__index")
+                                );
 
-                                    if (indexField) {
-                                        const indexValueType = inferExpressionType(indexField.value, currentScope);
-                                        if (indexValueType.kind === "table") {
-                                            // Set as base!
-                                            // We need to modify the existing Type object in memory
-                                            if (!targetVar.inferredType.bases) targetVar.inferredType.bases = [];
-                                            targetVar.inferredType.bases.push(indexValueType);
-                                        }
+                                if (indexField) {
+                                    const indexValueType = inferExpressionType(indexField.value, currentScope);
+                                    if (indexValueType.kind === "table") {
+                                        // Set as base!
+                                        // We need to modify the existing Type object in memory
+                                        if (!targetVar.inferredType.bases) targetVar.inferredType.bases = [];
+                                        targetVar.inferredType.bases.push(indexValueType);
                                     }
                                 }
                             }
@@ -583,136 +678,274 @@ export function inferVariableTypes(code: string): InferenceResult {
                     }
                 }
             }
+        }
 
-            // For Generic Statement (for k, v in pairs(t))
-            if (node.type === "ForGenericStatement") {
-                const vars = node.variables || [];
-                const iterators = node.iterators || [];
+        // For Generic Statement (for k, v in pairs(t))
+        if (node.type === "ForGenericStatement") {
+            const vars = node.variables || [];
+            const iterators = node.iterators || [];
 
-                // Try to interpret the iterator
-                let keyType: LuaType = { kind: "unknown" };
-                let valueType: LuaType = { kind: "unknown" };
+            // Try to interpret the iterator
+            let keyType: LuaType = { kind: "unknown" };
+            let valueType: LuaType = { kind: "unknown" };
 
-                if (iterators.length > 0 && iterators[0].type === "CallExpression") {
-                    const call = iterators[0];
-                    if (call.base.type === "Identifier") {
-                        const funcName = call.base.name;
-                        const args = call.arguments || [];
-                        if (args.length > 0) {
-                            const targetType = inferExpressionType(args[0], currentScope);
+            if (iterators.length > 0 && iterators[0].type === "CallExpression") {
+                const call = iterators[0];
+                if (call.base.type === "Identifier") {
+                    const funcName = call.base.name;
+                    const args = call.arguments || [];
+                    if (args.length > 0) {
+                        const targetType = inferExpressionType(args[0], currentScope);
 
-                            if (funcName === "pairs" && targetType.kind === "table") {
-                                // pairs: key is unknown/string, value is known (union of field types? or unknown)
-                                // Simple approach: if table has fields, try to union them?
-                                // For now: key=string, value=unknown
-                                keyType = { kind: "primitive", name: "string" };
-                                valueType = { kind: "unknown" };
+                        if (funcName === "pairs" && targetType.kind === "table") {
+                            // pairs: key is unknown/string, value is known (union of field types? or unknown)
+                            // Simple approach: if table has fields, try to union them?
+                            // For now: key=string, value=unknown
+                            keyType = { kind: "primitive", name: "string" };
+                            valueType = { kind: "unknown" };
 
-                                // Advanced: If table has well defined fields, v is union of them.
-                                if (targetType.fields && targetType.fields.size > 0) {
-                                    // Create union of all field values
-                                    const types: LuaType[] = Array.from(targetType.fields.values());
-                                    // Dedupe would be good
-                                    if (types.length === 1) valueType = types[0];
-                                    else valueType = { kind: "union", types };
-                                }
-                            } else if (funcName === "ipairs" && targetType.kind === "table") {
-                                // ipairs: key=number, value=unknown
-                                keyType = { kind: "primitive", name: "number" };
-                                // Similar logic for value type if it's an array-like table
-                                // But we don't track array element types explicitly yet (just fields)
+                            // Advanced: If table has well defined fields, v is union of them.
+                            if (targetType.fields && targetType.fields.size > 0) {
+                                // Create union of all field values
+                                const types: LuaType[] = Array.from(targetType.fields.values());
+                                // Dedupe would be good
+                                if (types.length === 1) valueType = types[0];
+                                else valueType = { kind: "union", types };
                             }
+                        } else if (funcName === "ipairs" && targetType.kind === "table") {
+                            // ipairs: key=number, value=unknown
+                            keyType = { kind: "primitive", name: "number" };
+                            // Similar logic for value type if it's an array-like table
+                            // But we don't track array element types explicitly yet (just fields)
                         }
                     }
                 }
-
-                // Assign types to variables
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                vars.forEach((v: any, i: number) => {
-                    if (v.type === "Identifier") {
-                        let type = { kind: "unknown" } as LuaType;
-                        if (i === 0) type = keyType;
-                        if (i === 1) type = valueType;
-
-                        const variable: VariableType = {
-                            name: v.name,
-                            kind: "local",
-                            inferredType: type,
-                            line: v.loc?.start.line || 0,
-                            initNode: node
-                        };
-                        currentScope.add(v.name, variable);
-                        allVariables.set(v.name, variable);
-                    }
-                });
             }
 
-            // --- Traverse children ---
-            if (node.body) {
-                if (Array.isArray(node.body)) node.body.forEach(traverse);
-                else traverse(node.body);
-            }
-            if (node.clauses) node.clauses.forEach(traverse);
-            if (node.expression) traverse(node.expression);
-            if (node.base) traverse(node.base);
-            if (node.arguments) node.arguments.forEach(traverse);
-            if (node.fields) node.fields.forEach(traverse);
-            if (node.key) traverse(node.key);
-            if (node.value) traverse(node.value);
-            if (node.variables) node.variables.forEach(traverse);
-            if (node.init) node.init.forEach(traverse);
-            if (node.left) traverse(node.left);
-            if (node.right) traverse(node.right);
-            if (node.operand) traverse(node.operand);
-            if (node.block) traverse(node.block);
-            if (node.variable) traverse(node.variable);
-            if (node.start) traverse(node.start);
-            if (node.end) traverse(node.end);
-            if (node.step) traverse(node.step);
-            if (node.iterators) node.iterators.forEach(traverse);
+            // Assign types to variables
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vars.forEach((v: any, i: number) => {
+                if (v.type === "Identifier") {
+                    let type = { kind: "unknown" } as LuaType;
+                    if (i === 0) type = keyType;
+                    if (i === 1) type = valueType;
 
-            if (scopePushed) {
-                currentScope = currentScope.parent!;
+                    const variable: VariableType = {
+                        name: v.name,
+                        kind: "local",
+                        inferredType: type,
+                        line: v.loc?.start.line || 0,
+                        initNode: node
+                    };
+                    currentScope.add(v.name, variable);
+                    allVariables.set(v.name, variable);
+                }
+            });
+        }
+
+        // For Numeric Statement (for i=1, 10 do)
+        if (node.type === "ForNumericStatement") {
+            if (node.variable && node.variable.type === "Identifier") {
+                const name = node.variable.name;
+                const variable: VariableType = {
+                    name,
+                    kind: "local",
+                    inferredType: { kind: "primitive", name: "number" },
+                    line: node.variable.loc?.start.line || 0,
+                    initNode: node.start
+                };
+                currentScope.add(name, variable);
+                allVariables.set(name, variable);
+            }
+        }
+
+        // Generic Identifier Reference Tracking
+        if (node.type === "Identifier") {
+            const v = currentScope.get(node.name);
+            if (v) {
+                if (!v.references) v.references = [];
+                v.references.push(node);
+            }
+        }
+
+        // --- Traverse children ---
+        if (node.body) {
+            if (Array.isArray(node.body)) node.body.forEach(traverse);
+            else traverse(node.body);
+        }
+        if (node.clauses) node.clauses.forEach(traverse);
+        if (node.expression) traverse(node.expression);
+        if (node.base) traverse(node.base);
+        if (node.arguments) node.arguments.forEach(traverse);
+        if (node.fields) node.fields.forEach(traverse);
+        if (node.key) traverse(node.key);
+        if (node.value) traverse(node.value);
+        if (node.variables) node.variables.forEach(traverse);
+        if (node.init) node.init.forEach(traverse);
+        if (node.left) traverse(node.left);
+        if (node.right) traverse(node.right);
+        if (node.operand) traverse(node.operand);
+        if (node.block) traverse(node.block);
+        if (node.variable) traverse(node.variable);
+        if (node.start) traverse(node.start);
+        if (node.end) traverse(node.end);
+        if (node.step) traverse(node.step);
+        if (node.iterators) node.iterators.forEach(traverse);
+
+        if (scopePushed) {
+            currentScope = currentScope.parent!;
+        }
+    };
+
+
+
+    // AST parsing moved to top of function to support docs
+    // (Redundant block removed)
+
+    if (ast) {
+        traverse(ast);
+    } else if (collectedNodes.length > 0) {
+        // Recover with partial AST
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const visited = new Set<any>();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const roots: any[] = [];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const markVisited = (n: any) => {
+            if (!n || typeof n !== "object") return;
+            if (visited.has(n)) return;
+            visited.add(n);
+            for (const key in n) {
+                if (key === "loc" || key === "range" || key === "type" || key === "isLocal") continue;
+                const child = n[key];
+                if (Array.isArray(child)) child.forEach(markVisited);
+                else if (child && typeof child === "object" && child.type) markVisited(child);
             }
         };
 
-        traverse(ast);
+        // Iterate reverse to find roots
+        for (let i = collectedNodes.length - 1; i >= 0; i--) {
+            const node = collectedNodes[i];
+            if (!visited.has(node)) {
+                roots.push(node);
+                markVisited(node);
+            }
+        }
 
-        return { variables: allVariables, functionDocs: docs, rootScope };
-    } catch (e) {
-        const msg = e instanceof Error ? e.message : "Parse error";
-        return { variables: allVariables, parseError: msg, rootScope };
+        // Traverse roots as if they were in a block
+        roots.forEach(traverse);
+
+        // Construct partial AST chunk for consumers
+        ast = {
+            type: "Chunk",
+            body: roots,
+            comments: [],
+            globals: [],
+            loc: { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } },
+            range: [0, code.length]
+        } as Chunk;
     }
+
+    return { variables: allVariables, functionDocs: docsByName, rootScope, parseError, ast: ast || undefined };
 }
 
 
+
 /**
- * Find the AST node at a specific position
+ * Find the AST node path at a specific position (Root -> ... -> Leaf)
  */
-export function findNodeAtPosition(node: LuaNode, pos: number): LuaNode | null {
-    if (!node || !node.range) return null;
+export function findNodePathAtPosition(node: LuaNode, pos: number): LuaNode[] {
+    if (!node || !node.range) return [];
     const [start, end] = node.range;
-    if (pos < start || pos > end) return null;
+    if (pos < start || pos > end) return [];
+
+    const path: LuaNode[] = [node];
 
     // Check children (more specific first)
     // We need to iterate over all keys
     for (const key in node) {
         if (Object.prototype.hasOwnProperty.call(node, key)) {
-            const child = node[key];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const child = (node as any)[key];
             if (Array.isArray(child)) {
                 for (const c of child) {
                     if (c && typeof c === "object" && c.type) {
-                        const found = findNodeAtPosition(c, pos);
-                        if (found) return found;
+                        const subPath = findNodePathAtPosition(c, pos);
+                        if (subPath.length > 0) {
+                            return [...path, ...subPath];
+                        }
                     }
                 }
             } else if (child && typeof child === "object" && child.type) {
-                const found = findNodeAtPosition(child, pos);
-                if (found) return found;
+                const subPath = findNodePathAtPosition(child, pos);
+                if (subPath.length > 0) {
+                    return [...path, ...subPath];
+                }
             }
         }
     }
-    return node;
+    return path;
+}
+
+/**
+ * Result of resolving a node at a position
+ */
+export interface ResolvedNode {
+    type: LuaType;
+    node: LuaNode;
+    path: LuaNode[];
+    scope: Scope;
+    // Contextual info
+    contextChain?: string[]; // e.g. ["context", "user", "id"]
+}
+
+/**
+ * Resolve variable/expression at position using AST
+ */
+export function resolveNodeAtPosition(code: string, pos: number): ResolvedNode | null {
+    try {
+        const { rootScope, ast: partialAst } = inferVariableTypes(code);
+        if (!rootScope) return null;
+
+        const ast = partialAst as Chunk;
+        if (!ast) return null;
+
+        const path = findNodePathAtPosition(ast, pos);
+        if (path.length === 0) return null;
+
+        const node = path[path.length - 1];
+        const scope = rootScope.findScopeAt(pos);
+
+        // 1. Resolve Type
+        const type = inferExpressionType(node, scope);
+
+        // 2. Determine Context Chain
+        const parent = path.length >= 2 ? path[path.length - 2] : undefined;
+
+        // Case 1: MemberExpression property (e.g. context.user)
+        if (parent && parent.type === "MemberExpression" && parent.identifier === node) {
+            const parentType = inferExpressionType(parent, scope);
+            return { type: parentType, node, path, scope };
+        }
+
+        // Case 2: Table Key (e.g. { a = 1 })
+        if (parent && (parent.type === "TableKey" || parent.type === "TableKeyString") && parent.key === node) {
+            const valueType = inferExpressionType(parent.value, scope);
+            return { type: valueType, node, path, scope };
+        }
+
+        return {
+            type,
+            node,
+            path,
+            scope,
+        };
+
+    } catch (e) {
+        console.error("Resolve error", e);
+        return null;
+    }
 }
 
 /**
@@ -727,64 +960,36 @@ export function resolveTableKeyAtPosition(code: string, pos: number): { name: st
             luaVersion: "5.3",
         }) as Chunk;
 
-        const node = findNodeAtPosition(ast, pos);
-        if (!node) return null;
+        const path = findNodePathAtPosition(ast, pos);
+        if (path.length === 0) return null;
 
-        // Check if node is a TableKeyString (e.g. { a = 1 }) or TableKey
-        if (node.type === "TableKeyString" && node.key && node.key.type === "Identifier") {
-            // Check if pos is within the key
-            const [kStart, kEnd] = node.key.range!;
-            if (pos >= kStart && pos <= kEnd) {
-                // It's the key. Infer the value.
-                // We need the scope at this position to correctly infer the value if it references variables
-                const scope = rootScope?.findScopeAt(pos);
-                const type = inferExpressionType(node.value, scope);
-                return { name: node.key.name, type };
-            }
-        }
+        const node = path[path.length - 1];
 
-        // Also check if we are just on the identifier of the TableKeyString (if findNode went deep)
+        // Case 1: We are on the key identifier of a TableKeyString
+        // Path: ... -> TableKeyString -> Identifier (key)
         if (node.type === "Identifier") {
-            // We don't have parent pointer easily here without walking with parent stack.
-            // But we can rely on findNodeAtPosition returning the deepest node.
-            // A TableKeyString structure is: { type: "TableKeyString", key: Identifier, value: Expression }
-            // So findNodeAtPosition will return the Identifier, NOT the TableKeyString.
-            // We need parent pointers.
+            const parent = path[path.length - 2];
+            if (parent && parent.type === "TableKeyString" && parent.key === node) {
+                const scope = rootScope?.findScopeAt(pos);
+                const type = inferExpressionType(parent.value, scope);
+                return { name: node.name, type };
+            }
         }
 
-        // Let's rewrite findNodeAtPosition to return path or handle the check better.
-        // Or simpler: Use a visitor pattern that looks for TableKeyString and checks if we are in its key.
-
-        let foundKey: { name: string; type: LuaType } | null = null;
-
-        const visit = (n: LuaNode) => {
-            if (foundKey) return;
-
-            if (n.type === "TableKeyString" && n.key && n.key.type === "Identifier") {
-                const [kStart, kEnd] = n.key.range!;
-                if (pos >= kStart && pos <= kEnd) {
-                    const scope = rootScope?.findScopeAt(pos);
-                    const type = inferExpressionType(n.value, scope);
-                    foundKey = { name: n.key.name, type };
-                    return;
-                }
+        // Case 2: We are on the key StringLiteral of a TableKey
+        // Path: ... -> TableKey -> StringLiteral (key) (or Identifier if parsed as such?)
+        // luaparse uses TableKeyString for { a = 1 } and TableKey for { ["a"] = 1 }
+        // For { ["a"] = 1 }, node is StringLiteral. Parent is TableKey.
+        if (node.type === "StringLiteral") {
+            const parent = path[path.length - 2];
+            if (parent && parent.type === "TableKey" && parent.key === node) {
+                const scope = rootScope?.findScopeAt(pos);
+                const type = inferExpressionType(parent.value, scope);
+                return { name: node.value, type };
             }
+        }
 
-            // Recurse
-            for (const key in n) {
-                if (key === 'parent') continue;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const child = (n as any)[key];
-                if (Array.isArray(child)) {
-                    child.forEach(c => { if (c && typeof c === "object" && c.type) visit(c); });
-                } else if (child && typeof child === "object" && child.type) {
-                    visit(child);
-                }
-            }
-        };
-
-        visit(ast);
-        return foundKey;
+        return null;
 
     } catch {
         return null;
@@ -903,42 +1108,89 @@ export function extractReturnSchema(code: string): ReturnSchema | null {
     }
 }
 
-export function parseLuaDocComments(code: string): Map<string, LuaDocComment> {
-    const docs = new Map<string, LuaDocComment>();
-    const lines = code.split("\n");
+// Helper to parse comment block content
+function parseCommentBlock(comments: string[]): LuaDocComment | undefined {
+    let description = "";
+    const params: Array<{ name: string; type: string; description: string; optional?: boolean }> = [];
+    let returns: { type: string; description: string } | undefined;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const funcMatch = line.match(/^local\s+function\s+(\w+)\s*\(/);
-        if (!funcMatch) continue;
-
-        const funcName = funcMatch[1];
-        const funcLine = i + 1;
-        let description: string | undefined;
-        const params: Array<{ name: string; type: string; description: string }> = [];
-        let returns: { type: string; description: string } | undefined;
-
-        let j = i - 1;
-        while (j >= 0 && lines[j].trim().startsWith("---")) {
-            const commentLine = lines[j].trim();
-            const paramMatch = commentLine.match(/^---\s*@param\s+(\w+)\s+(\w+)\s*(.*)?$/);
-            if (paramMatch) {
-                params.unshift({ name: paramMatch[1], type: paramMatch[2], description: paramMatch[3]?.trim() || "" });
-                j--; continue;
-            }
-            const returnMatch = commentLine.match(/^---\s*@return\s+(\w+)\s*(.*)?$/);
-            if (returnMatch) {
-                returns = { type: returnMatch[1], description: returnMatch[2]?.trim() || "" };
-                j--; continue;
-            }
-            const descMatch = commentLine.match(/^---\s*([^@].*)$/);
-            if (descMatch) {
-                description = descMatch[1].trim() + (description ? " " + description : "");
-            }
-            j--;
+    for (const line of comments) {
+        const content = line.replace(/^-+\s*/, "").trim(); // Remove leading dashes
+        const paramMatch = content.match(/^@param\s+(\w+)\s+(\w+)\s*(.*)?$/);
+        if (paramMatch) {
+            params.push({
+                name: paramMatch[1],
+                type: paramMatch[2],
+                description: paramMatch[3]?.trim() || "",
+                optional: false
+            });
+            continue;
         }
-        if (description || params.length > 0 || returns) {
-            docs.set(funcName, { name: funcName, line: funcLine, description, params, returns });
+
+        const returnMatch = content.match(/^@return\s+(\w+)\s*(.*)?$/);
+        if (returnMatch) {
+            returns = { type: returnMatch[1], description: returnMatch[2]?.trim() || "" };
+            continue;
+        }
+
+        if (!content.startsWith("@")) {
+            description += (description ? " " : "") + content;
+        }
+    }
+
+    if (!description && params.length === 0 && !returns) return undefined;
+
+    return {
+        name: "", // Assigned later
+        line: 0,
+        description,
+        params,
+        returns
+    };
+}
+
+export function parseLuaDocComments(ast: Chunk): Map<number, LuaDocComment> {
+    const docs = new Map<number, LuaDocComment>();
+    if (!ast.comments) return docs;
+
+    // Group contiguous comments
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const commentGroups: any[][] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let currentGroup: any[] = [];
+    let lastLine = -1;
+
+    for (const c of ast.comments) {
+        // Only care about lines starting with --- (LuaDoc style commonly)
+        // luaparse returns raw value. value usually excludes the -- prefix but we need to check raw?
+        // Actually luaparse 'value' is content. 
+        // We assume -- comments. LuaDoc uses ---. 
+        // We can just rely on contiguous blocks for now and parse content.
+
+        const line = c.loc ? c.loc.start.line : 0;
+        if (lastLine !== -1 && line !== lastLine + 1) {
+            if (currentGroup.length > 0) commentGroups.push(currentGroup);
+            currentGroup = [];
+        }
+        currentGroup.push(c);
+        lastLine = line;
+    }
+    if (currentGroup.length > 0) commentGroups.push(currentGroup);
+
+    // Map end-line of comment group to the comment block
+    for (const group of commentGroups) {
+        const lastComment = group[group.length - 1];
+        const endLine = lastComment.loc ? lastComment.loc.end.line : 0;
+
+        // Check if content looks like LuaDoc (starts with --- or contains @param)
+        // We filter for "---" style if strict, or just accept all comment blocks above functions
+        const rawContent = group.map(c => c.value);
+        // luaparse strips '--'. If it was '---', value starts with '-'?
+        // Let's assume standard LuaDoc '--[[ ... ]]' or '--- ...'
+
+        const doc = parseCommentBlock(rawContent);
+        if (doc) {
+            docs.set(endLine, doc);
         }
     }
     return docs;

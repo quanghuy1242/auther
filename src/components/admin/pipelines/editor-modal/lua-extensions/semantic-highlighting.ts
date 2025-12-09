@@ -562,6 +562,7 @@ export const luaSemanticHighlighting = ViewPlugin.fromClass(
         computeDecorations(view: EditorView): DecorationSet {
             const code = view.state.doc.toString();
             const pending: PendingDecoration[] = [];
+            const collectedNodes: LuaNode[] = [];
 
             try {
                 // We parse entire doc. For huge files this is slow, but 5KB limit is enforced.
@@ -569,29 +570,61 @@ export const luaSemanticHighlighting = ViewPlugin.fromClass(
                     ranges: true,
                     locations: false,
                     luaVersion: "5.3",
+                    onCreateNode: (node) => {
+                        collectedNodes.push(node as unknown as LuaNode);
+                    }
                 }) as unknown as LuaNode; // Cast to LuaNode
 
                 const rootScope = new Scope({ start: 0, end: code.length });
                 // Pre-populate globals
-                rootScope.add("context", { name: "context", kind: "global", inferredType: { kind: "global" }, line: 0 });
-                rootScope.add("helpers", { name: "helpers", kind: "global", inferredType: { kind: "global" }, line: 0 });
-                rootScope.add("prev", { name: "prev", kind: "global", inferredType: { kind: "global" }, line: 0 });
-                rootScope.add("outputs", { name: "outputs", kind: "global", inferredType: { kind: "global" }, line: 0 });
+                this.populateGlobals(rootScope);
 
                 walkForHighlighting(ast, rootScope, pending);
 
-                // DEBUG: Log decorations being created
-                if (pending.length > 0) {
-                    console.log("[Semantic Highlighting] Created", pending.length, "decorations");
-                    console.log("[Semantic Highlighting] Sample:", pending.slice(0, 5).map(p => ({
-                        start: p.start,
-                        end: p.end,
-                        text: code.slice(p.start, p.end)
-                    })));
-                }
             } catch (e) {
-                // Parse error - ignore (syntax highlighting survives)
-                console.log("[Semantic Highlighting] Parse error:", e);
+                // Parse error - fallback to partial AST
+                // We have collected nodes so far. We need to process the "roots" of these disconnected subtrees.
+                console.log("[Semantic Highlighting] Parse error, using partial AST", e);
+
+                if (collectedNodes.length > 0) {
+                    const rootScope = new Scope({ start: 0, end: code.length });
+                    this.populateGlobals(rootScope);
+
+                    // Identify roots: iterate reverse, if not visited, it's a root.
+                    const visited = new Set<LuaNode>();
+                    const roots: LuaNode[] = [];
+
+                    // Helper to mark descendants
+                    const markVisited = (n: LuaNode) => {
+                        if (!n || typeof n !== "object") return;
+                        if (visited.has(n)) return;
+                        visited.add(n);
+                        for (const key in n) {
+                            if (key === "loc" || key === "range" || key === "type") continue;
+                            const child = n[key];
+                            if (Array.isArray(child)) {
+                                child.forEach(c => markVisited(c as LuaNode));
+                            } else if (child && typeof child === "object") {
+                                markVisited(child as LuaNode);
+                            }
+                        }
+                    };
+
+                    // Iterate in reverse to find largest subtrees first
+                    for (let i = collectedNodes.length - 1; i >= 0; i--) {
+                        const node = collectedNodes[i];
+                        if (!visited.has(node)) {
+                            // This is a root of a subtree (or a leaf not belonging to any parent seen yet)
+                            roots.push(node);
+                            markVisited(node);
+                        }
+                    }
+
+                    // Process roots
+                    roots.forEach(root => {
+                        walkForHighlighting(root, rootScope, pending);
+                    });
+                }
             }
 
             // Sort decorations by position (required by RangeSetBuilder)
@@ -604,6 +637,13 @@ export const luaSemanticHighlighting = ViewPlugin.fromClass(
             }
 
             return builder.finish();
+        }
+
+        populateGlobals(scope: Scope) {
+            scope.add("context", { name: "context", kind: "global", inferredType: { kind: "global" }, line: 0 });
+            scope.add("helpers", { name: "helpers", kind: "global", inferredType: { kind: "global" }, line: 0 });
+            scope.add("prev", { name: "prev", kind: "global", inferredType: { kind: "global" }, line: 0 });
+            scope.add("outputs", { name: "outputs", kind: "global", inferredType: { kind: "global" }, line: 0 });
         }
     },
     {

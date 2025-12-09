@@ -85,10 +85,12 @@ function walkAST(node: LuaNode, callback: (node: LuaNode) => void): void {
 }
 
 // =============================================================================
-// SYNTAX ERROR DETECTION
+// SYNTAX ERROR DETECTION & PARTIAL PARSING
 // =============================================================================
 
-function parseLuaCode(code: string): { ast: LuaAST | null; syntaxError: Diagnostic | null } {
+function parseLuaCode(code: string): { ast: LuaAST | null; syntaxError: Diagnostic | null; partialAst: LuaAST | null } {
+    const collectedNodes: LuaNode[] = [];
+
     try {
         const ast = luaparse.parse(code, {
             locations: true,
@@ -96,9 +98,12 @@ function parseLuaCode(code: string): { ast: LuaAST | null; syntaxError: Diagnost
             scope: true,
             comments: false,
             luaVersion: "5.3",
+            onCreateNode: (node) => {
+                collectedNodes.push(node as unknown as LuaNode);
+            }
         }) as LuaAST;
 
-        return { ast, syntaxError: null };
+        return { ast, syntaxError: null, partialAst: null };
     } catch (e: unknown) {
         const error = e as { index?: number; line?: number; column?: number; message?: string };
 
@@ -111,8 +116,50 @@ function parseLuaCode(code: string): { ast: LuaAST | null; syntaxError: Diagnost
         // Remove the position info that luaparse adds
         message = message.replace(/\s*\[\d+:\d+\]\s*$/, "").trim();
 
+        // Construct partial AST from collected nodes
+        let partialAst: LuaAST | null = null;
+        if (collectedNodes.length > 0) {
+            // Identify roots: iterate reverse, if not visited, it's a root.
+            const visited = new Set<LuaNode>();
+            const roots: LuaNode[] = [];
+
+            // Helper to mark descendants
+            const markVisited = (n: LuaNode) => {
+                if (!n || typeof n !== "object") return;
+                if (visited.has(n)) return;
+                visited.add(n);
+
+                // Walk all properties to be robust
+                for (const key in n) {
+                    if (key === "loc" || key === "range" || key === "type" || key === "isLocal") continue;
+                    const child = n[key];
+                    if (Array.isArray(child)) {
+                        child.forEach(c => markVisited(c as LuaNode));
+                    } else if (child && typeof child === "object" && (child as LuaNode).type) {
+                        markVisited(child as LuaNode);
+                    }
+                }
+            };
+
+            // Iterate in reverse to find largest subtrees first
+            for (let i = collectedNodes.length - 1; i >= 0; i--) {
+                const node = collectedNodes[i];
+                if (!visited.has(node)) {
+                    roots.push(node);
+                    markVisited(node);
+                }
+            }
+
+            partialAst = {
+                type: "Chunk",
+                body: roots,
+                range: [0, code.length],
+            };
+        }
+
         return {
             ast: null,
+            partialAst,
             syntaxError: {
                 from,
                 to,
@@ -257,116 +304,376 @@ function validateReturnShape(
 }
 
 // =============================================================================
-// UNDEFINED VARIABLE DETECTION (Basic)
+// UNDEFINED VARIABLE DETECTION (Scope-Aware)
 // =============================================================================
 
 function findUndefinedVariables(ast: LuaAST): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
-    const definedVariables = new Set<string>(["helpers", "context", "true", "false", "nil"]);
 
-    // Add Lua builtins
-    const builtins = [
-        "assert",
-        "collectgarbage",
-        "error",
-        "getmetatable",
-        "ipairs",
-        "next",
-        "pairs",
-        "pcall",
-        "print",
-        "select",
-        "setmetatable",
-        "tonumber",
-        "tostring",
-        "type",
-        "unpack",
-        "xpcall",
-        "string",
-        "table",
-        "math",
-        "_G",
-    ];
-    builtins.forEach((b) => definedVariables.add(b));
+    // Built-in globals
+    const globalBuiltins = new Set([
+        "assert", "collectgarbage", "error", "getmetatable", "ipairs", "next",
+        "pairs", "pcall", "print", "select", "setmetatable", "tonumber",
+        "tostring", "type", "unpack", "xpcall", "string", "table", "math",
+        "_G", "helpers", "context", "await", "true", "false", "nil", "_VERSION"
+    ]);
 
-    // First pass: collect all local variable declarations
-    walkAST(ast as unknown as LuaNode, (node: LuaNode) => {
-        if (node.type === "LocalStatement") {
-            (node.variables || []).forEach((v: LuaNode) => {
-                if (v.type === "Identifier") {
-                    definedVariables.add(v.name);
-                }
-            });
+    // Scope tracking
+    interface VarScope {
+        variables: Set<string>;
+        parent?: VarScope;
+    }
+
+    let currentScope: VarScope = { variables: new Set(globalBuiltins) };
+
+    const enterScope = () => {
+        currentScope = { variables: new Set(), parent: currentScope };
+    };
+
+    const exitScope = () => {
+        if (currentScope.parent) {
+            currentScope = currentScope.parent;
         }
+    };
+
+    const declareVar = (name: string) => {
+        currentScope.variables.add(name);
+    };
+
+    const isVarDefined = (name: string): boolean => {
+        let scope: VarScope | undefined = currentScope;
+        while (scope) {
+            if (scope.variables.has(name)) return true;
+            scope = scope.parent;
+        }
+        return false;
+    };
+
+    // Collect positions to skip (member properties, table keys)
+    const skipPositions = new Set<string>();
+    walkAST(ast as unknown as LuaNode, (node: LuaNode) => {
+        // Skip member expression properties (e.g., helpers.fetch -> "fetch")
+        if (node.type === "MemberExpression" && node.identifier?.range) {
+            skipPositions.add(`${node.identifier.range[0]}-${node.identifier.range[1]}`);
+        }
+        // Skip table key literals (e.g., { allowed = true } -> "allowed")
+        if (node.type === "TableKeyString" && node.key?.type === "Identifier" && node.key.range) {
+            skipPositions.add(`${node.key.range[0]}-${node.key.range[1]}`);
+        }
+        // Skip function declaration identifiers (they're definitions handled separately)
+        if (node.type === "FunctionDeclaration" && node.identifier?.range) {
+            skipPositions.add(`${node.identifier.range[0]}-${node.identifier.range[1]}`);
+        }
+    });
+
+    // Scope-aware traversal
+    const traverse = (node: LuaNode) => {
+        if (!node || typeof node !== "object") return;
+
+        // Handle function declarations FIRST (before entering scope)
         if (node.type === "FunctionDeclaration") {
-            // Function parameters
+            // Declare function name in CURRENT scope (before entering function body)
+            if (node.isLocal && node.identifier?.name) {
+                declareVar(node.identifier.name);
+            }
+            // Now enter function body scope
+            enterScope();
+            // Parameters declared in function scope
             (node.parameters || []).forEach((p: LuaNode) => {
-                if (p.type === "Identifier") {
-                    definedVariables.add(p.name);
-                }
+                if (p.type === "Identifier") declareVar(p.name);
+                else if (p.type === "VarargLiteral") declareVar("...");
             });
-            // Function name if local
-            if (node.identifier && node.identifier.type === "Identifier") {
-                definedVariables.add(node.identifier.name);
-            }
+            // Traverse body
+            (node.body || []).forEach(traverse);
+            exitScope();
+            return;
         }
-        if (node.type === "ForNumericStatement" || node.type === "ForGenericStatement") {
+
+        const isBlockNode = [
+            "FunctionExpression", "DoStatement",
+            "WhileStatement", "RepeatStatement", "IfStatement",
+            "ForNumericStatement", "ForGenericStatement"
+        ].includes(node.type);
+
+        if (isBlockNode) enterScope();
+
+        // Handle declarations
+        if (node.type === "LocalStatement") {
+            // Process init expressions first (they see outer scope)
+            (node.init || []).forEach(traverse);
+            // Then declare variables in current scope
             (node.variables || []).forEach((v: LuaNode) => {
-                if (v.type === "Identifier") {
-                    definedVariables.add(v.name);
+                if (v.type === "Identifier") declareVar(v.name);
+            });
+            // Don't traverse children again
+            if (isBlockNode) exitScope();
+            return;
+        }
+
+        if (node.type === "FunctionExpression") {
+            // Parameters in function scope
+            (node.parameters || []).forEach((p: LuaNode) => {
+                if (p.type === "Identifier") declareVar(p.name);
+                else if (p.type === "VarargLiteral") declareVar("...");
+            });
+            (node.body || []).forEach(traverse);
+            exitScope();
+            return;
+        }
+
+        if (node.type === "ForNumericStatement") {
+            // Loop variable
+            if (node.variable?.type === "Identifier") {
+                declareVar(node.variable.name);
+            }
+            // Traverse range expressions first
+            if (node.start) traverse(node.start);
+            if (node.end) traverse(node.end);
+            if (node.step) traverse(node.step);
+            // Then body
+            (node.body || []).forEach(traverse);
+            exitScope();
+            return;
+        }
+
+        if (node.type === "ForGenericStatement") {
+            // Declare loop variables
+            (node.variables || []).forEach((v: LuaNode) => {
+                if (v.type === "Identifier") declareVar(v.name);
+            });
+            // Traverse iterators and body
+            (node.iterators || []).forEach(traverse);
+            (node.body || []).forEach(traverse);
+            exitScope();
+            return;
+        }
+
+        // Special handling for table constructor
+        if (node.type === "TableConstructorExpression") {
+            // Handle each field explicitly to avoid checking table keys as variables
+            (node.fields || []).forEach((field: LuaNode) => {
+                if (field.type === "TableKeyString") {
+                    // For { key = value }, only traverse value, skip key
+                    if (field.value) traverse(field.value);
+                } else if (field.type === "TableKey") {
+                    // For { [expr] = value }, traverse both
+                    if (field.key) traverse(field.key);
+                    if (field.value) traverse(field.value);
+                } else if (field.type === "TableValue") {
+                    // For array-like { value }
+                    if (field.value) traverse(field.value);
                 }
             });
+            if (isBlockNode) exitScope();
+            return;
         }
-    });
 
-    // Collect all identifiers that are property names in member expressions
-    // These should NOT be flagged as undefined (e.g., helpers.matches -> matches is a property)
-    const memberPropertyPositions = new Set<string>();
-    walkAST(ast as unknown as LuaNode, (node: LuaNode) => {
-        if (node.type === "MemberExpression") {
-            const identifier = node.identifier;
-            if (identifier && identifier.type === "Identifier" && identifier.range) {
-                // Mark this position as a member property
-                memberPropertyPositions.add(`${identifier.range[0]}-${identifier.range[1]}`);
-            }
-        }
-        // Also skip identifiers that are keys in table constructors
-        if (node.type === "TableKeyString" || node.type === "TableKey") {
-            const key = node.key;
-            if (key && key.type === "Identifier" && key.range) {
-                memberPropertyPositions.add(`${key.range[0]}-${key.range[1]}`);
-            }
-        }
-    });
-
-    // Second pass: find usages of undefined variables
-    // Note: This is a simplified check - real scope analysis is complex
-    walkAST(ast as unknown as LuaNode, (node: LuaNode) => {
+        // Check identifier usage
         if (node.type === "Identifier" && node.name && node.range) {
-            const name = node.name;
             const posKey = `${node.range[0]}-${node.range[1]}`;
+            if (!skipPositions.has(posKey) && !isVarDefined(node.name)) {
+                // Skip disabled globals (handled separately)
+                if (DISABLED_GLOBALS.includes(node.name as typeof DISABLED_GLOBALS[number])) {
+                    // Already handled by findDisabledGlobals
+                } else if (node.name.length > 1) { // Skip single-letter vars
+                    diagnostics.push({
+                        from: node.range[0],
+                        to: node.range[1],
+                        severity: "error",
+                        message: `Variable '${node.name}' is not defined`,
+                        source: "lua-undefined",
+                    });
+                }
+            }
+        }
 
-            // Skip if it's a member property (e.g., helpers.matches -> matches)
-            if (memberPropertyPositions.has(posKey)) return;
+        // Traverse children (but not fields, already handled above for TableConstructor)
+        const childKeys = [
+            "body", "init", "base", "index", "argument", "arguments", "expression",
+            "expressions", "values", "clauses", "condition", "consequent",
+            "alternative", "iterators", "left", "right", "operand"
+        ];
 
-            // Skip if it's defined
-            if (definedVariables.has(name)) return;
+        // Only traverse fields if NOT a TableConstructorExpression (already handled)
+        if (node.type !== "TableConstructorExpression" && node.fields) {
+            (node.fields as LuaNode[]).forEach(traverse);
+        }
 
-            // Skip disabled globals (already handled separately)
-            if (DISABLED_GLOBALS.includes(name as typeof DISABLED_GLOBALS[number])) return;
+        for (const key of childKeys) {
+            const child = node[key];
+            if (Array.isArray(child)) {
+                child.forEach(traverse);
+            } else if (child && typeof child === "object" && child.type) {
+                traverse(child);
+            }
+        }
 
-            // Skip single-letter variables (often loop vars)
-            if (name.length === 1) return;
+        if (isBlockNode) exitScope();
+    };
 
-            // Add warning for potentially undefined variable
-            const [from, to] = node.range;
-            diagnostics.push({
-                from,
-                to,
-                severity: "warning",
-                message: `'${name}' may be undefined`,
-                source: "lua-undefined",
-            });
+    traverse(ast as unknown as LuaNode);
+    return diagnostics;
+}
+
+// =============================================================================
+// COMMON ERROR DETECTION
+// =============================================================================
+
+function checkCommonErrors(ast: LuaAST): Diagnostic[] {
+    const diagnostics: Diagnostic[] = [];
+
+    walkAST(ast as unknown as LuaNode, (node: LuaNode) => {
+        // 1. String concatenation with potentially nil values
+        if (node.type === "BinaryExpression" && node.operator === "..") {
+            // Check if either side could be nil or non-string
+            const checkOperand = (operand: LuaNode) => {
+                if (operand.type === "NilLiteral") {
+                    diagnostics.push({
+                        from: operand.range?.[0] ?? 0,
+                        to: operand.range?.[1] ?? 0,
+                        severity: "error",
+                        message: `Cannot concatenate nil value`,
+                        source: "lua-type-error",
+                    });
+                }
+            };
+            if (node.left) checkOperand(node.left);
+            if (node.right) checkOperand(node.right);
+        }
+
+        // 2. Division by zero literal
+        if (node.type === "BinaryExpression" && (node.operator === "/" || node.operator === "%")) {
+            if (node.right?.type === "NumericLiteral" && node.right.value === 0) {
+                diagnostics.push({
+                    from: node.right.range?.[0] ?? 0,
+                    to: node.right.range?.[1] ?? 0,
+                    severity: "error",
+                    message: `Division by zero`,
+                    source: "lua-math-error",
+                });
+            }
+        }
+
+        // 3. Calling non-function values
+        if (node.type === "CallExpression") {
+            const base = node.base;
+            // Check for obvious non-callable types
+            if (base.type === "NumericLiteral" || base.type === "StringLiteral" ||
+                base.type === "BooleanLiteral" || base.type === "NilLiteral") {
+                diagnostics.push({
+                    from: base.range?.[0] ?? 0,
+                    to: base.range?.[1] ?? 0,
+                    severity: "error",
+                    message: `Attempting to call a ${base.type.replace("Literal", "").toLowerCase()} value`,
+                    source: "lua-type-error",
+                });
+            }
+        }
+
+        // 4. Indexing non-table literals
+        if (node.type === "IndexExpression") {
+            const base = node.base;
+            if (base.type === "NumericLiteral" || base.type === "BooleanLiteral" || base.type === "NilLiteral") {
+                diagnostics.push({
+                    from: base.range?.[0] ?? 0,
+                    to: base.range?.[1] ?? 0,
+                    severity: "error",
+                    message: `Attempting to index a ${base.type.replace("Literal", "").toLowerCase()} value`,
+                    source: "lua-type-error",
+                });
+            }
+        }
+
+        // 5. Comparing incompatible types
+        if (node.type === "BinaryExpression" && ["==", "~=", "<", ">", "<=", ">="].includes(node.operator)) {
+            const left = node.left;
+            const right = node.right;
+
+            // Only flag obvious type mismatches
+            const getSimpleType = (n: LuaNode): string | null => {
+                if (n.type === "NumericLiteral") return "number";
+                if (n.type === "StringLiteral") return "string";
+                if (n.type === "BooleanLiteral") return "boolean";
+                if (n.type === "NilLiteral") return "nil";
+                if (n.type === "TableConstructorExpression") return "table";
+                return null;
+            };
+
+            const leftType = getSimpleType(left);
+            const rightType = getSimpleType(right);
+
+            if (leftType && rightType && leftType !== rightType &&
+                leftType !== "nil" && rightType !== "nil" &&
+                ["<", ">", "<=", ">="].includes(node.operator)) {
+                // Comparison operators require compatible types
+                if ((leftType === "number" && rightType === "string") ||
+                    (leftType === "string" && rightType === "number") ||
+                    leftType === "table" || rightType === "table" ||
+                    leftType === "boolean" || rightType === "boolean") {
+                    diagnostics.push({
+                        from: node.range?.[0] ?? 0,
+                        to: node.range?.[1] ?? 0,
+                        severity: "warning",
+                        message: `Comparing incompatible types: ${leftType} ${node.operator} ${rightType}`,
+                        source: "lua-type-warning",
+                    });
+                }
+            }
+        }
+
+        // 6. Using # operator on non-table/non-string
+        if (node.type === "UnaryExpression" && node.operator === "#") {
+            const operand = node.argument;
+            if (operand.type === "NumericLiteral" || operand.type === "BooleanLiteral" || operand.type === "NilLiteral") {
+                diagnostics.push({
+                    from: operand.range?.[0] ?? 0,
+                    to: operand.range?.[1] ?? 0,
+                    severity: "error",
+                    message: `Cannot get length of ${operand.type.replace("Literal", "").toLowerCase()} value`,
+                    source: "lua-type-error",
+                });
+            }
+        }
+
+        // 7. Assignment to literal or expression result
+        if (node.type === "AssignmentStatement") {
+            for (const target of node.variables || []) {
+                if (target.type === "NumericLiteral" || target.type === "StringLiteral" ||
+                    target.type === "BooleanLiteral" || target.type === "NilLiteral") {
+                    diagnostics.push({
+                        from: target.range?.[0] ?? 0,
+                        to: target.range?.[1] ?? 0,
+                        severity: "error",
+                        message: `Cannot assign to literal value`,
+                        source: "lua-syntax-error",
+                    });
+                }
+                // Check for function call result assignment
+                if (target.type === "CallExpression") {
+                    diagnostics.push({
+                        from: target.range?.[0] ?? 0,
+                        to: target.range?.[1] ?? 0,
+                        severity: "error",
+                        message: `Cannot assign to function call result`,
+                        source: "lua-syntax-error",
+                    });
+                }
+            }
+        }
+
+        // 10. Using 'local' in wrong context
+        if (node.type === "LocalStatement" && node.variables) {
+            for (const v of node.variables) {
+                if (v.type === "Identifier" && v.name === "_G") {
+                    diagnostics.push({
+                        from: v.range?.[0] ?? 0,
+                        to: v.range?.[1] ?? 0,
+                        severity: "warning",
+                        message: `Shadowing global '_G' with local variable`,
+                        source: "lua-shadowing",
+                    });
+                }
+            }
         }
     });
 
@@ -897,38 +1204,48 @@ export function createLuaLinter(options: LuaLinterOptions = {}) {
         const diagnostics: Diagnostic[] = [];
 
         // Parse the code
-        const { ast, syntaxError } = parseLuaCode(code);
+        // Parse the code
+        const { ast, syntaxError, partialAst } = parseLuaCode(code);
 
-        // If syntax error, return just that
+        // Always include syntax error if present
         if (syntaxError) {
-            return [syntaxError];
+            diagnostics.push(syntaxError);
         }
 
-        if (!ast) return [];
+        // Use valid AST or partial AST fallback
+        const targetAst = ast || partialAst;
+
+        if (!targetAst) return diagnostics;
 
         // Check for disabled globals
-        diagnostics.push(...findDisabledGlobals(ast));
+        diagnostics.push(...findDisabledGlobals(targetAst));
 
         // Check advanced rules (ReadOnly, Shadowing)
-        diagnostics.push(...checkAdvancedRules(ast));
+        diagnostics.push(...checkAdvancedRules(targetAst));
 
         // Check complexity (Nested Loops)
-        diagnostics.push(...checkComplexity(ast));
+        diagnostics.push(...checkComplexity(targetAst));
 
-        // Check return statements
-        if (checkReturnType) {
-            diagnostics.push(...validateReturnStatements(ast, executionMode));
+        // Check return statements (only if full AST, to avoid noise during typing?)
+        // Actually, partial AST might be "valid" enough. Let's run it but maybe suppress if syntax error?
+        // If syntax error exists, "missing return" might just be because they haven't typed it yet.
+        // So we skip return type check if syntax error exists.
+        if (checkReturnType && !syntaxError) {
+            diagnostics.push(...validateReturnStatements(targetAst, executionMode));
         }
 
-        // Check unused variables
+        // Check undefined variables (errors for truly undefined)
         if (checkUndefinedVariables) {
-            diagnostics.push(...findUnusedVariables(ast));
+            diagnostics.push(...findUndefinedVariables(targetAst));
         }
 
-        // Check undefined variables
+        // Check unused variables (warnings for declared but unused)
         if (checkUndefinedVariables) {
-            diagnostics.push(...findUndefinedVariables(ast));
+            diagnostics.push(...findUnusedVariables(targetAst));
         }
+
+        // Check for common errors (type mismatches, nil access, etc.)
+        diagnostics.push(...checkCommonErrors(targetAst));
 
         return diagnostics;
     };

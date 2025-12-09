@@ -23,10 +23,10 @@ import type { ReturnSchema } from "./type-inference";
 export { createLuaCompletionSource } from "./autocomplete";
 export { createLuaLinter } from "./linter";
 export { createLuaHoverTooltip } from "./hover";
-export { luaSignatureHelp } from "./signature-help";
+export { luaSignatureHelp, closeSignatureHelp, signatureHelpField } from "./signature-help";
 export { luaFormatter, formatLuaCode } from "./formatter";
-export { luaGotoDefinition, findDefinitions } from "./goto-definition";
-export { luaFindReferences, findAllOccurrences } from "./find-references";
+export { luaGotoDefinition } from "./goto-definition";
+export { luaFindReferences, findReferencesInCode } from "./find-references";
 export { luaSemanticHighlighting } from "./semantic-highlighting";
 export { luaInlayHints } from "./inlay-hints";
 export { parseLuaDocComments, type LuaDocComment, type ReturnSchema } from "./type-inference";
@@ -170,14 +170,15 @@ export function createLuaExtensions(options: LuaExtensionsOptions = {}): Extensi
 
     // Autocomplete extension
     if (enableAutocomplete) {
+        // Signature help (High precedence for keymap)
+        extensions.push(luaSignatureHelp());
+
         extensions.push(
             autocompletion({
                 override: [createLuaCompletionSource({ hookName, previousScriptCode, scriptOutputs })],
                 activateOnTyping: true,
                 maxRenderedOptions: 50,
-            }),
-            // Signature help for function parameters
-            luaSignatureHelp()
+            })
         );
     }
 
