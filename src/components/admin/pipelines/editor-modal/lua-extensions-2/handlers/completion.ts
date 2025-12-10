@@ -14,6 +14,7 @@ import type {
     LuaType,
     LuaFunctionType,
     LuaTableType,
+    LuaRefType,
 } from "../analysis/type-system";
 import { LuaTypeKind, LuaTypes, formatType, parseTypeString, functionType } from "../analysis/type-system";
 import type { LuaFunctionParam } from "../analysis/type-system";
@@ -265,11 +266,23 @@ class MemberProvider implements CompletionProvider {
     }
 
     private findMemberType(type: LuaType, memberName: string): LuaType {
+        const definitionLoader = getDefinitionLoader();
+
         if (type.kind === LuaTypeKind.TableType) {
             const tableType = type as LuaTableType;
             const field = tableType.fields.get(memberName);
             if (field) return field.type;
         }
+
+        // Handle Ref types by looking up custom type definitions
+        if (type.kind === LuaTypeKind.Ref) {
+            const refTypeName = (type as LuaRefType).name;
+            const typeFields = definitionLoader.getTypeFields(refTypeName);
+            if (typeFields?.[memberName]) {
+                return parseTypeString(typeFields[memberName].type);
+            }
+        }
+
         return LuaTypes.Unknown;
     }
 
@@ -380,6 +393,8 @@ class MemberProvider implements CompletionProvider {
     }
 
     private resolveMemberType(baseType: LuaType, memberName: string): LuaType {
+        const definitionLoader = getDefinitionLoader();
+
         if (baseType.kind === LuaTypeKind.TableType) {
             const tableType = baseType as LuaTableType;
             const field = tableType.fields.get(memberName);
@@ -388,10 +403,22 @@ class MemberProvider implements CompletionProvider {
             }
         }
 
+        // Handle Ref types by looking up custom type definitions
+        if (baseType.kind === LuaTypeKind.Ref) {
+            const refTypeName = (baseType as LuaRefType).name;
+            const typeFields = definitionLoader.getTypeFields(refTypeName);
+            if (typeFields?.[memberName]) {
+                return parseTypeString(typeFields[memberName].type);
+            }
+        }
+
         return LuaTypes.Unknown;
     }
 
     private addMemberCompletions(builder: CompletionBuilder, type: LuaType, colonCall = false): void {
+        const definitionLoader = getDefinitionLoader();
+
+        // Handle TableType directly
         if (type.kind === LuaTypeKind.TableType) {
             const tableType = type as LuaTableType;
 
@@ -405,6 +432,26 @@ class MemberProvider implements CompletionProvider {
                 );
                 builder.addItem(item);
             });
+            return;
+        }
+
+        // Handle Ref types by looking up custom type definitions
+        if (type.kind === LuaTypeKind.Ref) {
+            const refTypeName = (type as LuaRefType).name;
+            const typeFields = definitionLoader.getTypeFields(refTypeName);
+            if (typeFields) {
+                for (const [name, fieldInfo] of Object.entries(typeFields)) {
+                    const fieldType = parseTypeString(fieldInfo.type);
+                    const isFunction = fieldType.kind === LuaTypeKind.FunctionType;
+                    const item = this.createMemberCompletionItem(
+                        name,
+                        fieldType,
+                        isFunction,
+                        colonCall
+                    );
+                    builder.addItem(item);
+                }
+            }
         }
     }
 
