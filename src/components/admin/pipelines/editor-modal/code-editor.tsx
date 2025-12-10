@@ -10,7 +10,8 @@ import { lua } from "@codemirror/legacy-modes/mode/lua";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { closeBrackets, closeBracketsKeymap, completionKeymap, closeCompletion } from "@codemirror/autocomplete";
 import type { HookExecutionMode } from "@/schemas/pipelines";
-import { createLuaExtensions, LUA_TOOLTIP_STYLES, closeSignatureHelp, signatureHelpField } from "./lua-extensions";
+// Use new LSP-style Lua extensions
+import { createLuaExtensions, LUA_TOOLTIP_STYLES, closeSignatureHelp, signatureHelpField } from "./lua-extensions-2";
 
 interface CodeEditorProps {
     value: string;
@@ -57,7 +58,7 @@ export function CodeEditor({
             StreamLanguage.define(lua),
             syntaxHighlighting(defaultHighlightStyle),
             oneDark,
-            // Lua intelligence extensions
+            // Lua intelligence extensions (new LSP-style)
             ...createLuaExtensions({
                 hookName,
                 executionMode,
@@ -65,10 +66,10 @@ export function CodeEditor({
                 autocomplete: true,
                 linting: true,
                 hover: true,
-                semanticHighlighting: true,
-                inlayHints: false,
+                signatureHelp: true,
+                gotoDefinition: true,
+                findReferences: true,
                 lintDelay: 300,
-                checkReturnType: true,
             }),
             EditorView.updateListener.of((update) => {
                 if (update.docChanged && !isUpdatingRef.current) {
@@ -204,11 +205,15 @@ export function CodeEditor({
                     handled = true;
                 }
 
-                // Try to close signature help tooltip
-                const signatureState = view.state.field(signatureHelpField, false);
-                if (signatureState?.tooltip) {
-                    view.dispatch({ effects: closeSignatureHelp.of(null) });
-                    handled = true;
+                // Try to close signature help tooltip (new API)
+                try {
+                    const signatureState = view.state.field(signatureHelpField);
+                    if (signatureState?.help) {
+                        closeSignatureHelp(view);
+                        handled = true;
+                    }
+                } catch {
+                    // Field not registered, ignore
                 }
 
                 // If we handled any tooltip, prevent modal from closing

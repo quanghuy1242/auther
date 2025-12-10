@@ -1,0 +1,755 @@
+{
+    "description": "Pipeline sandbox definitions extracted from definitions.ts",
+    "sandbox": {
+        "helpers": {
+            "kind": "table",
+            "semanticType": "namespace",
+            "isBuiltin": true,
+            "builtinUri": "builtin://sandbox/helpers",
+            "description": "Global helper functions for sandbox scripts.",
+            "fields": {
+                "log": {
+                    "kind": "function",
+                    "signature": "helpers.log(data)",
+                    "description": "Write data to the execution log for debugging.",
+                    "params": [
+                        {
+                            "name": "data",
+                            "type": "any",
+                            "description": "Data to log (string, table, etc.)"
+                        }
+                    ],
+                    "returns": {
+                        "type": "nil"
+                    },
+                    "example": "helpers.log(\"User email: \" .. context.email)"
+                },
+                "now": {
+                    "kind": "function",
+                    "signature": "helpers.now()",
+                    "description": "Get current Unix timestamp in milliseconds.",
+                    "params": [],
+                    "returns": {
+                        "type": "integer",
+                        "description": "Current time in milliseconds"
+                    },
+                    "example": "local timestamp = helpers.now()"
+                },
+                "hash": {
+                    "kind": "function",
+                    "signature": "helpers.hash(text, algo?)",
+                    "description": "Generate a cryptographic hash of the input text.",
+                    "params": [
+                        {
+                            "name": "text",
+                            "type": "string",
+                            "description": "Text to hash"
+                        },
+                        {
+                            "name": "algo",
+                            "type": "'sha256' | 'md5'",
+                            "optional": true,
+                            "description": "Hash algorithm (default: sha256)"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string",
+                        "description": "Hexadecimal hash string"
+                    },
+                    "example": "local hashed = helpers.hash(context.email, \"sha256\")"
+                },
+                "env": {
+                    "kind": "function",
+                    "signature": "helpers.env(key)",
+                    "description": "Get an allowed environment variable (whitelist only: NODE_ENV, NEXT_PUBLIC_APP_URL).",
+                    "params": [
+                        {
+                            "name": "key",
+                            "type": "string",
+                            "description": "Environment variable name"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string | nil",
+                        "description": "Value or nil if not allowed/found"
+                    },
+                    "example": "local env = helpers.env(\"NODE_ENV\")"
+                },
+                "secret": {
+                    "kind": "function",
+                    "signature": "helpers.secret(key)",
+                    "description": "Get a secret from encrypted storage (async).",
+                    "params": [
+                        {
+                            "name": "key",
+                            "type": "string",
+                            "description": "Secret name (configured in admin)"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string | nil",
+                        "description": "Decrypted secret value"
+                    },
+                    "async": true,
+                    "example": "local apiKey = await(helpers.secret(\"STRIPE_KEY\"))"
+                },
+                "fetch": {
+                    "kind": "function",
+                    "signature": "helpers.fetch(url, options?)",
+                    "description": "Make an HTTPS request (SSRF-protected, HTTPS-only).",
+                    "params": [
+                        {
+                            "name": "url",
+                            "type": "string",
+                            "description": "Target URL (must be HTTPS)"
+                        },
+                        {
+                            "name": "options",
+                            "type": "FetchOptions",
+                            "optional": true,
+                            "description": "Request options: method, headers, body"
+                        }
+                    ],
+                    "returns": {
+                        "type": "FetchResponse",
+                        "description": "Response object with status, ok, and body"
+                    },
+                    "async": true,
+                    "example": "local resp = await(helpers.fetch(\"https://api.example.com/check\", {\n  method = \"POST\",\n  body = '{\"email\":\"' .. context.email .. '\"}'\n}))"
+                },
+                "matches": {
+                    "kind": "function",
+                    "signature": "helpers.matches(str, pattern)",
+                    "description": "Check if a string matches a Lua pattern (converted to regex). Supports %d, %w, %s, etc.",
+                    "params": [
+                        {
+                            "name": "str",
+                            "type": "string",
+                            "description": "String to test"
+                        },
+                        {
+                            "name": "pattern",
+                            "type": "string",
+                            "description": "Lua pattern (e.g. '@blocked%.com$')"
+                        }
+                    ],
+                    "returns": {
+                        "type": "boolean",
+                        "description": "True if match found"
+                    },
+                    "example": "if helpers.matches(context.email, \"@blocked%.com$\") then ... end"
+                },
+                "trace": {
+                    "kind": "function",
+                    "signature": "helpers.trace(name, [attributes,] fn)",
+                    "description": "Create a custom tracing span. Max 2 nesting levels.",
+                    "overloads": [
+                        {
+                            "params": [
+                                {
+                                    "name": "name",
+                                    "type": "string",
+                                    "description": "Span name"
+                                },
+                                {
+                                    "name": "fn",
+                                    "type": "function",
+                                    "description": "Work to trace"
+                                }
+                            ],
+                            "returns": {
+                                "type": "any",
+                                "description": "Return value of fn"
+                            }
+                        },
+                        {
+                            "params": [
+                                {
+                                    "name": "name",
+                                    "type": "string",
+                                    "description": "Span name"
+                                },
+                                {
+                                    "name": "attributes",
+                                    "type": "table",
+                                    "description": "Key-value metadata"
+                                },
+                                {
+                                    "name": "fn",
+                                    "type": "function",
+                                    "description": "Work to trace"
+                                }
+                            ],
+                            "returns": {
+                                "type": "any",
+                                "description": "Return value of fn"
+                            }
+                        }
+                    ],
+                    "example": "helpers.trace(\"Validate\", { userId = context.userId }, function()\n  helpers.log(\"Validating...\")\nend)"
+                },
+                "getLastAsync": {
+                    "kind": "function",
+                    "signature": "helpers.getLastAsync()",
+                    "description": "Internal: Retrieve result of last async operation.",
+                    "params": [],
+                    "returns": {
+                        "type": "any"
+                    },
+                    "internal": true
+                }
+            }
+        },
+        "context": {
+            "kind": "table",
+            "semanticType": "namespace",
+            "isBuiltin": true,
+            "isReadonly": true,
+            "builtinUri": "builtin://sandbox/context",
+            "hasHookVariants": true,
+            "description": "Execution context containing event data, user info, and previous outputs.",
+            "fields": {
+                "trigger_event": {
+                    "kind": "property",
+                    "type": "string",
+                    "description": "Current hook name (e.g. 'before_signup')"
+                },
+                "prev": {
+                    "kind": "property",
+                    "type": "table | nil",
+                    "description": "Merged result data from the previous script layer."
+                },
+                "outputs": {
+                    "kind": "property",
+                    "type": "table<string, ScriptOutput>",
+                    "description": "Outputs from all previous scripts, keyed by script ID."
+                }
+            },
+            "hookVariants": {
+                "before_signup": {
+                    "description": "Called before user registration.",
+                    "fields": {
+                        "email": {
+                            "kind": "property",
+                            "type": "string",
+                            "description": "User's email address"
+                        },
+                        "name": {
+                            "kind": "property",
+                            "type": "string",
+                            "optional": true,
+                            "description": "User's display name"
+                        },
+                        "request": {
+                            "kind": "property",
+                            "type": "RequestInfo",
+                            "description": "Request metadata (IP, User Agent)"
+                        }
+                    }
+                },
+                "after_signup": {
+                    "description": "Called after successful user registration.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "Created user object"
+                        },
+                        "request": {
+                            "kind": "property",
+                            "type": "RequestInfo",
+                            "description": "Request metadata"
+                        }
+                    }
+                },
+                "before_signin": {
+                    "description": "Called before login.",
+                    "fields": {
+                        "email": {
+                            "kind": "property",
+                            "type": "string",
+                            "description": "User's email address"
+                        },
+                        "request": {
+                            "kind": "property",
+                            "type": "RequestInfo",
+                            "description": "Request metadata"
+                        }
+                    }
+                },
+                "after_signin": {
+                    "description": "Called after successful login.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "Authenticated user object"
+                        },
+                        "session": {
+                            "kind": "property",
+                            "type": "PipelineSession",
+                            "description": "Created session object"
+                        }
+                    }
+                },
+                "before_signout": {
+                    "description": "Called before logout.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "Current user object"
+                        },
+                        "session": {
+                            "kind": "property",
+                            "type": "PipelineSession",
+                            "description": "Session being terminated"
+                        }
+                    }
+                },
+                "token_build": {
+                    "description": "Called during JWT token generation.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "User for token generation"
+                        },
+                        "token": {
+                            "kind": "property",
+                            "type": "table",
+                            "description": "Existing token claims"
+                        }
+                    }
+                },
+                "apikey_before_create": {
+                    "description": "Called before API key creation.",
+                    "fields": {
+                        "userId": {
+                            "kind": "property",
+                            "type": "string",
+                            "description": "Owner user ID"
+                        },
+                        "name": {
+                            "kind": "property",
+                            "type": "string",
+                            "optional": true,
+                            "description": "API key name"
+                        },
+                        "permissions": {
+                            "kind": "property",
+                            "type": "string[]",
+                            "optional": true,
+                            "description": "Requested permissions"
+                        }
+                    }
+                },
+                "apikey_after_create": {
+                    "description": "Called after API key creation.",
+                    "fields": {
+                        "apikey": {
+                            "kind": "property",
+                            "type": "PipelineApiKey",
+                            "description": "Created API key object"
+                        },
+                        "userId": {
+                            "kind": "property",
+                            "type": "string",
+                            "description": "Owner user ID"
+                        }
+                    }
+                },
+                "apikey_before_exchange": {
+                    "description": "Called before exchanging API key for session.",
+                    "fields": {
+                        "apikey": {
+                            "kind": "property",
+                            "type": "PipelineApiKey",
+                            "description": "API key being exchanged"
+                        },
+                        "request": {
+                            "kind": "property",
+                            "type": "RequestInfo",
+                            "description": "Request metadata"
+                        }
+                    }
+                },
+                "apikey_after_exchange": {
+                    "description": "Called after successful API key exchange.",
+                    "fields": {
+                        "apikey": {
+                            "kind": "property",
+                            "type": "PipelineApiKey",
+                            "description": "Exchanged API key"
+                        }
+                    }
+                },
+                "apikey_before_revoke": {
+                    "description": "Called before API key revocation.",
+                    "fields": {
+                        "apikey": {
+                            "kind": "property",
+                            "type": "PipelineApiKey",
+                            "description": "API key to revoke"
+                        }
+                    }
+                },
+                "client_before_register": {
+                    "description": "Called before OAuth client registration.",
+                    "fields": {
+                        "name": {
+                            "kind": "property",
+                            "type": "string",
+                            "description": "OAuth client name"
+                        },
+                        "redirectUrls": {
+                            "kind": "property",
+                            "type": "string[]",
+                            "description": "Redirect URLs"
+                        },
+                        "type": {
+                            "kind": "property",
+                            "type": "'public' | 'confidential'",
+                            "optional": true,
+                            "description": "Client type"
+                        }
+                    }
+                },
+                "client_after_register": {
+                    "description": "Called after OAuth client registration.",
+                    "fields": {
+                        "client": {
+                            "kind": "property",
+                            "type": "OAuthClient",
+                            "description": "Created OAuth client"
+                        }
+                    }
+                },
+                "client_before_authorize": {
+                    "description": "Called before OAuth client authorization.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "User authorizing"
+                        },
+                        "client": {
+                            "kind": "property",
+                            "type": "OAuthClient",
+                            "description": "OAuth client requesting access"
+                        },
+                        "scopes": {
+                            "kind": "property",
+                            "type": "string[]",
+                            "description": "Requested scopes"
+                        }
+                    }
+                },
+                "client_after_authorize": {
+                    "description": "Called after OAuth client authorization.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "User who authorized"
+                        },
+                        "client": {
+                            "kind": "property",
+                            "type": "OAuthClient",
+                            "description": "Authorized client"
+                        },
+                        "grant": {
+                            "kind": "property",
+                            "type": "{ scopes: string[] }",
+                            "description": "Granted permissions"
+                        }
+                    }
+                },
+                "client_access_change": {
+                    "description": "Called when client access is granted or revoked.",
+                    "fields": {
+                        "user": {
+                            "kind": "property",
+                            "type": "PipelineUser",
+                            "description": "Affected user"
+                        },
+                        "client": {
+                            "kind": "property",
+                            "type": "OAuthClient",
+                            "description": "OAuth client"
+                        },
+                        "action": {
+                            "kind": "property",
+                            "type": "'grant' | 'revoke'",
+                            "description": "Action performed"
+                        }
+                    }
+                }
+            }
+        },
+        "await": {
+            "kind": "function",
+            "semanticType": "function",
+            "isBuiltin": true,
+            "builtinUri": "builtin://sandbox/await",
+            "signature": "await(promise)",
+            "description": "Waits for an async operation (like helpers.fetch) to complete.",
+            "params": [
+                {
+                    "name": "promise",
+                    "type": "Promise<T>",
+                    "description": "Async operation to await"
+                }
+            ],
+            "returns": {
+                "type": "T",
+                "description": "Resolved value"
+            },
+            "example": "local response = await(helpers.fetch(\"https://api.example.com/check\"))"
+        }
+    },
+    "disabledGlobals": {
+        "os": {
+            "message": "The 'os' module is disabled. Use helpers.now() for timestamps."
+        },
+        "io": {
+            "message": "The 'io' module is disabled. Use helpers.fetch() for HTTP requests."
+        },
+        "package": {
+            "message": "The 'package' module is disabled. External modules cannot be loaded."
+        },
+        "require": {
+            "message": "require() is disabled. External modules cannot be loaded."
+        },
+        "loadfile": {
+            "message": "loadfile() is disabled. Scripts cannot load external files."
+        },
+        "dofile": {
+            "message": "dofile() is disabled. Scripts cannot execute external files."
+        },
+        "loadstring": {
+            "message": "loadstring() is disabled. Dynamic code execution is not allowed."
+        },
+        "load": {
+            "message": "load() is disabled. Dynamic code execution is not allowed."
+        },
+        "rawset": {
+            "message": "rawset() is disabled to prevent metatable bypasses."
+        },
+        "rawget": {
+            "message": "rawget() is disabled to prevent metatable bypasses."
+        },
+        "getfenv": {
+            "message": "getfenv() is disabled for security."
+        },
+        "setfenv": {
+            "message": "setfenv() is disabled for security."
+        },
+        "newproxy": {
+            "message": "newproxy() is disabled for security."
+        }
+    },
+    "types": {
+        "RequestInfo": {
+            "kind": "table",
+            "description": "HTTP request metadata",
+            "fields": {
+                "ip": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Client IP address"
+                },
+                "userAgent": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "User agent string"
+                },
+                "origin": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Request origin"
+                }
+            }
+        },
+        "PipelineUser": {
+            "kind": "table",
+            "description": "User object in pipeline context",
+            "fields": {
+                "id": {
+                    "type": "string",
+                    "description": "User ID"
+                },
+                "email": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "User email address"
+                },
+                "name": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Display name"
+                },
+                "role": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "User role"
+                }
+            }
+        },
+        "PipelineSession": {
+            "kind": "table",
+            "description": "Session object in pipeline context",
+            "fields": {
+                "id": {
+                    "type": "string",
+                    "description": "Session ID"
+                },
+                "userId": {
+                    "type": "string",
+                    "description": "User ID"
+                },
+                "expiresAt": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Expiration timestamp"
+                }
+            }
+        },
+        "PipelineApiKey": {
+            "kind": "table",
+            "description": "API key object in pipeline context",
+            "fields": {
+                "id": {
+                    "type": "string",
+                    "description": "API key ID"
+                },
+                "name": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Key name"
+                },
+                "userId": {
+                    "type": "string",
+                    "description": "Owner user ID"
+                },
+                "permissions": {
+                    "type": "string[]",
+                    "optional": true,
+                    "description": "Permissions array"
+                }
+            }
+        },
+        "OAuthClient": {
+            "kind": "table",
+            "description": "OAuth client object",
+            "fields": {
+                "clientId": {
+                    "type": "string",
+                    "description": "OAuth client ID"
+                },
+                "name": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Client name"
+                },
+                "type": {
+                    "type": "'public' | 'confidential'",
+                    "optional": true,
+                    "description": "Client type"
+                },
+                "redirectUri": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Redirect URI"
+                }
+            }
+        },
+        "FetchOptions": {
+            "kind": "table",
+            "description": "Options for helpers.fetch()",
+            "fields": {
+                "method": {
+                    "type": "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'",
+                    "optional": true,
+                    "description": "HTTP method"
+                },
+                "headers": {
+                    "type": "table",
+                    "optional": true,
+                    "description": "Request headers"
+                },
+                "body": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Request body"
+                }
+            }
+        },
+        "FetchResponse": {
+            "kind": "table",
+            "description": "Response from helpers.fetch()",
+            "fields": {
+                "status": {
+                    "type": "number",
+                    "description": "HTTP status code"
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Response body"
+                },
+                "headers": {
+                    "type": "table",
+                    "description": "Response headers"
+                }
+            }
+        },
+        "ScriptOutput": {
+            "kind": "table",
+            "description": "Output from a previous script in the DAG",
+            "fields": {
+                "allowed": {
+                    "type": "boolean",
+                    "description": "Whether script allowed the action"
+                },
+                "error": {
+                    "type": "string",
+                    "optional": true,
+                    "description": "Error message if blocked"
+                },
+                "data": {
+                    "type": "table",
+                    "optional": true,
+                    "description": "Custom data returned by script"
+                }
+            }
+        }
+    },
+    "returnTypes": {
+        "blocking": {
+            "description": "Return { allowed = true/false } to allow or block the action",
+            "requiredFields": [
+                "allowed"
+            ],
+            "optionalFields": [
+                "error"
+            ],
+            "example": "return { allowed = false, error = \"Domain not allowed\" }"
+        },
+        "enrichment": {
+            "description": "Return { allowed = true, data = {...} } to enrich the response",
+            "requiredFields": [
+                "allowed"
+            ],
+            "optionalFields": [
+                "data"
+            ],
+            "example": "return { allowed = true, data = { customClaim = \"value\" } }"
+        },
+        "async": {
+            "description": "No return value required (fire-and-forget)",
+            "requiredFields": [],
+            "optionalFields": [],
+            "example": "-- No return needed"
+        }
+    }
+}
