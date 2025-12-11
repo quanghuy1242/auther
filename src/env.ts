@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { z } from "zod";
 
-loadEnv({ path: ".env" });
+loadEnv({ path: ".env", quiet: true });
 
 function parseCommaSeparatedList(value: string) {
   return value

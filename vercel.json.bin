@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/rotate-jwks",
       "schedule": "0 3 1 * *"
+    },
+    {
+      "path": "/api/internal/cleanup-traces",
+      "schedule": "0 4 * * *"
     }
   ]
 }

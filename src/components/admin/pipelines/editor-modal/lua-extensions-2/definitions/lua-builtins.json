@@ -1,0 +1,1132 @@
+{
+    "$schema": "./lua-definition-schema.json",
+    "version": "5.3",
+    "description": "Lua 5.3 standard library definitions",
+    "globals": {
+        "assert": {
+            "kind": "function",
+            "signature": "assert(v, message?)",
+            "description": "Raises an error if the value of its argument v is false; otherwise, returns all arguments.",
+            "params": [
+                {
+                    "name": "v",
+                    "type": "any",
+                    "description": "Value to assert"
+                },
+                {
+                    "name": "message",
+                    "type": "string",
+                    "optional": true,
+                    "description": "Error message if assertion fails"
+                }
+            ],
+            "returns": {
+                "type": "any",
+                "description": "Returns v if truthy"
+            }
+        },
+        "collectgarbage": {
+            "kind": "function",
+            "signature": "collectgarbage(opt?, arg?)",
+            "description": "Generic interface to the garbage collector.",
+            "params": [
+                {
+                    "name": "opt",
+                    "type": "string",
+                    "optional": true,
+                    "description": "GC operation type"
+                },
+                {
+                    "name": "arg",
+                    "type": "any",
+                    "optional": true,
+                    "description": "Operation argument"
+                }
+            ],
+            "returns": {
+                "type": "any"
+            }
+        },
+        "error": {
+            "kind": "function",
+            "signature": "error(message, level?)",
+            "description": "Terminates the last protected function called and returns message as the error object.",
+            "params": [
+                {
+                    "name": "message",
+                    "type": "any",
+                    "description": "Error message"
+                },
+                {
+                    "name": "level",
+                    "type": "integer",
+                    "optional": true,
+                    "description": "Error level"
+                }
+            ],
+            "returns": {
+                "type": "never"
+            }
+        },
+        "getmetatable": {
+            "kind": "function",
+            "signature": "getmetatable(object)",
+            "description": "Returns the metatable of the given object.",
+            "params": [
+                {
+                    "name": "object",
+                    "type": "any",
+                    "description": "Object to get metatable from"
+                }
+            ],
+            "returns": {
+                "type": "table|nil"
+            }
+        },
+        "ipairs": {
+            "kind": "function",
+            "signature": "ipairs(t)",
+            "description": "Returns an iterator function for numeric indices.",
+            "params": [
+                {
+                    "name": "t",
+                    "type": "table",
+                    "description": "Table to iterate"
+                }
+            ],
+            "returns": {
+                "type": "function, table, integer"
+            }
+        },
+        "next": {
+            "kind": "function",
+            "signature": "next(table, index?)",
+            "description": "Returns the next index-value pair in the table.",
+            "params": [
+                {
+                    "name": "table",
+                    "type": "table",
+                    "description": "Table to traverse"
+                },
+                {
+                    "name": "index",
+                    "type": "any",
+                    "optional": true,
+                    "description": "Current index"
+                }
+            ],
+            "returns": {
+                "type": "any, any"
+            }
+        },
+        "pairs": {
+            "kind": "function",
+            "signature": "pairs(t)",
+            "description": "Returns an iterator function for all key-value pairs.",
+            "params": [
+                {
+                    "name": "t",
+                    "type": "table",
+                    "description": "Table to iterate"
+                }
+            ],
+            "returns": {
+                "type": "function, table, nil"
+            }
+        },
+        "pcall": {
+            "kind": "function",
+            "signature": "pcall(f, ...)",
+            "description": "Calls function f with the given arguments in protected mode.",
+            "params": [
+                {
+                    "name": "f",
+                    "type": "function",
+                    "description": "Function to call"
+                },
+                {
+                    "name": "...",
+                    "type": "any",
+                    "vararg": true,
+                    "description": "Arguments to pass"
+                }
+            ],
+            "returns": {
+                "type": "boolean, any..."
+            }
+        },
+        "print": {
+            "kind": "function",
+            "signature": "print(...)",
+            "description": "Prints values to the output log.",
+            "params": [
+                {
+                    "name": "...",
+                    "type": "any",
+                    "vararg": true,
+                    "description": "Values to print"
+                }
+            ],
+            "returns": {
+                "type": "nil"
+            }
+        },
+        "select": {
+            "kind": "function",
+            "signature": "select(index, ...)",
+            "description": "Returns arguments after index, or count if index is '#'.",
+            "params": [
+                {
+                    "name": "index",
+                    "type": "integer|'#'",
+                    "description": "Index or '#' for count"
+                },
+                {
+                    "name": "...",
+                    "type": "any",
+                    "vararg": true,
+                    "description": "Arguments"
+                }
+            ],
+            "returns": {
+                "type": "any..."
+            }
+        },
+        "setmetatable": {
+            "kind": "function",
+            "signature": "setmetatable(table, metatable)",
+            "description": "Sets the metatable for the given table.",
+            "params": [
+                {
+                    "name": "table",
+                    "type": "table",
+                    "description": "Table to modify"
+                },
+                {
+                    "name": "metatable",
+                    "type": "table|nil",
+                    "description": "New metatable"
+                }
+            ],
+            "returns": {
+                "type": "table"
+            }
+        },
+        "tonumber": {
+            "kind": "function",
+            "signature": "tonumber(e, base?)",
+            "description": "Converts argument to a number.",
+            "params": [
+                {
+                    "name": "e",
+                    "type": "any",
+                    "description": "Value to convert"
+                },
+                {
+                    "name": "base",
+                    "type": "integer",
+                    "optional": true,
+                    "description": "Base for conversion"
+                }
+            ],
+            "returns": {
+                "type": "number|nil"
+            }
+        },
+        "tostring": {
+            "kind": "function",
+            "signature": "tostring(v)",
+            "description": "Converts argument to a string.",
+            "params": [
+                {
+                    "name": "v",
+                    "type": "any",
+                    "description": "Value to convert"
+                }
+            ],
+            "returns": {
+                "type": "string"
+            }
+        },
+        "type": {
+            "kind": "function",
+            "signature": "type(v)",
+            "description": "Returns the type of its argument as a string.",
+            "params": [
+                {
+                    "name": "v",
+                    "type": "any",
+                    "description": "Value to check"
+                }
+            ],
+            "returns": {
+                "type": "string"
+            }
+        },
+        "unpack": {
+            "kind": "function",
+            "signature": "unpack(list, i?, j?)",
+            "description": "Returns elements from a table.",
+            "params": [
+                {
+                    "name": "list",
+                    "type": "table",
+                    "description": "Table to unpack"
+                },
+                {
+                    "name": "i",
+                    "type": "integer",
+                    "optional": true,
+                    "description": "Start index"
+                },
+                {
+                    "name": "j",
+                    "type": "integer",
+                    "optional": true,
+                    "description": "End index"
+                }
+            ],
+            "returns": {
+                "type": "any..."
+            }
+        },
+        "xpcall": {
+            "kind": "function",
+            "signature": "xpcall(f, msgh, ...)",
+            "description": "Calls function f with error handler msgh.",
+            "params": [
+                {
+                    "name": "f",
+                    "type": "function",
+                    "description": "Function to call"
+                },
+                {
+                    "name": "msgh",
+                    "type": "function",
+                    "description": "Error handler"
+                },
+                {
+                    "name": "...",
+                    "type": "any",
+                    "vararg": true,
+                    "description": "Arguments"
+                }
+            ],
+            "returns": {
+                "type": "boolean, any..."
+            }
+        },
+        "_G": {
+            "kind": "table",
+            "description": "Global environment table"
+        },
+        "_VERSION": {
+            "kind": "property",
+            "type": "string",
+            "description": "Lua version string"
+        }
+    },
+    "libraries": {
+        "string": {
+            "kind": "table",
+            "semanticType": "namespace",
+            "isBuiltin": true,
+            "description": "String manipulation library",
+            "fields": {
+                "byte": {
+                    "kind": "function",
+                    "signature": "string.byte(s, i?, j?)",
+                    "description": "Returns the internal numeric codes of the characters.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "i",
+                            "type": "integer",
+                            "optional": true
+                        },
+                        {
+                            "name": "j",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer..."
+                    }
+                },
+                "char": {
+                    "kind": "function",
+                    "signature": "string.char(...)",
+                    "description": "Returns a string from numeric character codes.",
+                    "params": [
+                        {
+                            "name": "...",
+                            "type": "integer",
+                            "vararg": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "find": {
+                    "kind": "function",
+                    "signature": "string.find(s, pattern, init?, plain?)",
+                    "description": "Looks for the first match of pattern in the string.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "pattern",
+                            "type": "string"
+                        },
+                        {
+                            "name": "init",
+                            "type": "integer",
+                            "optional": true
+                        },
+                        {
+                            "name": "plain",
+                            "type": "boolean",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer, integer, string...|nil"
+                    }
+                },
+                "format": {
+                    "kind": "function",
+                    "signature": "string.format(formatstring, ...)",
+                    "description": "Returns a formatted string.",
+                    "params": [
+                        {
+                            "name": "formatstring",
+                            "type": "string"
+                        },
+                        {
+                            "name": "...",
+                            "type": "any",
+                            "vararg": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "gmatch": {
+                    "kind": "function",
+                    "signature": "string.gmatch(s, pattern)",
+                    "description": "Returns an iterator for pattern matches.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "pattern",
+                            "type": "string"
+                        }
+                    ],
+                    "returns": {
+                        "type": "function"
+                    }
+                },
+                "gsub": {
+                    "kind": "function",
+                    "signature": "string.gsub(s, pattern, repl, n?)",
+                    "description": "Replaces pattern matches with replacement.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "pattern",
+                            "type": "string"
+                        },
+                        {
+                            "name": "repl",
+                            "type": "string|table|function"
+                        },
+                        {
+                            "name": "n",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string, integer"
+                    }
+                },
+                "len": {
+                    "kind": "function",
+                    "signature": "string.len(s)",
+                    "description": "Returns the length of the string.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer"
+                    }
+                },
+                "lower": {
+                    "kind": "function",
+                    "signature": "string.lower(s)",
+                    "description": "Returns lowercase version of string.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "match": {
+                    "kind": "function",
+                    "signature": "string.match(s, pattern, init?)",
+                    "description": "Extracts substrings by matching pattern.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "pattern",
+                            "type": "string"
+                        },
+                        {
+                            "name": "init",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string...|nil"
+                    }
+                },
+                "rep": {
+                    "kind": "function",
+                    "signature": "string.rep(s, n, sep?)",
+                    "description": "Returns string s repeated n times.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "n",
+                            "type": "integer"
+                        },
+                        {
+                            "name": "sep",
+                            "type": "string",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "reverse": {
+                    "kind": "function",
+                    "signature": "string.reverse(s)",
+                    "description": "Returns the string reversed.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "sub": {
+                    "kind": "function",
+                    "signature": "string.sub(s, i, j?)",
+                    "description": "Returns substring from i to j.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        },
+                        {
+                            "name": "i",
+                            "type": "integer"
+                        },
+                        {
+                            "name": "j",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "upper": {
+                    "kind": "function",
+                    "signature": "string.upper(s)",
+                    "description": "Returns uppercase version of string.",
+                    "params": [
+                        {
+                            "name": "s",
+                            "type": "string"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "table": {
+            "kind": "table",
+            "semanticType": "namespace",
+            "isBuiltin": true,
+            "description": "Table manipulation library",
+            "fields": {
+                "concat": {
+                    "kind": "function",
+                    "signature": "table.concat(list, sep?, i?, j?)",
+                    "description": "Concatenates table elements.",
+                    "params": [
+                        {
+                            "name": "list",
+                            "type": "table"
+                        },
+                        {
+                            "name": "sep",
+                            "type": "string",
+                            "optional": true
+                        },
+                        {
+                            "name": "i",
+                            "type": "integer",
+                            "optional": true
+                        },
+                        {
+                            "name": "j",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "string"
+                    }
+                },
+                "insert": {
+                    "kind": "function",
+                    "signature": "table.insert(list, pos?, value)",
+                    "description": "Inserts element into table.",
+                    "params": [
+                        {
+                            "name": "list",
+                            "type": "table"
+                        },
+                        {
+                            "name": "pos",
+                            "type": "integer",
+                            "optional": true
+                        },
+                        {
+                            "name": "value",
+                            "type": "any"
+                        }
+                    ],
+                    "returns": {
+                        "type": "nil"
+                    }
+                },
+                "pack": {
+                    "kind": "function",
+                    "signature": "table.pack(...)",
+                    "description": "Returns a table with arguments and n field.",
+                    "params": [
+                        {
+                            "name": "...",
+                            "type": "any",
+                            "vararg": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "table"
+                    }
+                },
+                "remove": {
+                    "kind": "function",
+                    "signature": "table.remove(list, pos?)",
+                    "description": "Removes element from table.",
+                    "params": [
+                        {
+                            "name": "list",
+                            "type": "table"
+                        },
+                        {
+                            "name": "pos",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "any"
+                    }
+                },
+                "sort": {
+                    "kind": "function",
+                    "signature": "table.sort(list, comp?)",
+                    "description": "Sorts table elements in-place.",
+                    "params": [
+                        {
+                            "name": "list",
+                            "type": "table"
+                        },
+                        {
+                            "name": "comp",
+                            "type": "function",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "nil"
+                    }
+                },
+                "unpack": {
+                    "kind": "function",
+                    "signature": "table.unpack(list, i?, j?)",
+                    "description": "Returns elements from table.",
+                    "params": [
+                        {
+                            "name": "list",
+                            "type": "table"
+                        },
+                        {
+                            "name": "i",
+                            "type": "integer",
+                            "optional": true
+                        },
+                        {
+                            "name": "j",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "any..."
+                    }
+                }
+            }
+        },
+        "math": {
+            "kind": "table",
+            "semanticType": "namespace",
+            "isBuiltin": true,
+            "description": "Mathematical functions library",
+            "fields": {
+                "abs": {
+                    "kind": "function",
+                    "signature": "math.abs(x)",
+                    "description": "Returns the absolute value of x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "acos": {
+                    "kind": "function",
+                    "signature": "math.acos(x)",
+                    "description": "Returns the arc cosine of x (in radians).",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "asin": {
+                    "kind": "function",
+                    "signature": "math.asin(x)",
+                    "description": "Returns the arc sine of x (in radians).",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "atan": {
+                    "kind": "function",
+                    "signature": "math.atan(y, x?)",
+                    "description": "Returns the arc tangent of y/x (in radians).",
+                    "params": [
+                        {
+                            "name": "y",
+                            "type": "number"
+                        },
+                        {
+                            "name": "x",
+                            "type": "number",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "ceil": {
+                    "kind": "function",
+                    "signature": "math.ceil(x)",
+                    "description": "Returns the smallest integer >= x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer"
+                    }
+                },
+                "cos": {
+                    "kind": "function",
+                    "signature": "math.cos(x)",
+                    "description": "Returns the cosine of x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "deg": {
+                    "kind": "function",
+                    "signature": "math.deg(x)",
+                    "description": "Converts angle from radians to degrees.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "exp": {
+                    "kind": "function",
+                    "signature": "math.exp(x)",
+                    "description": "Returns e^x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "floor": {
+                    "kind": "function",
+                    "signature": "math.floor(x)",
+                    "description": "Returns the largest integer <= x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer"
+                    }
+                },
+                "fmod": {
+                    "kind": "function",
+                    "signature": "math.fmod(x, y)",
+                    "description": "Returns the remainder of x/y.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        },
+                        {
+                            "name": "y",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "huge": {
+                    "kind": "property",
+                    "type": "number",
+                    "description": "Positive infinity"
+                },
+                "log": {
+                    "kind": "function",
+                    "signature": "math.log(x, base?)",
+                    "description": "Returns the logarithm of x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        },
+                        {
+                            "name": "base",
+                            "type": "number",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "max": {
+                    "kind": "function",
+                    "signature": "math.max(...)",
+                    "description": "Returns the maximum value.",
+                    "params": [
+                        {
+                            "name": "...",
+                            "type": "number",
+                            "vararg": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "maxinteger": {
+                    "kind": "property",
+                    "type": "integer",
+                    "description": "Maximum integer value"
+                },
+                "min": {
+                    "kind": "function",
+                    "signature": "math.min(...)",
+                    "description": "Returns the minimum value.",
+                    "params": [
+                        {
+                            "name": "...",
+                            "type": "number",
+                            "vararg": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "mininteger": {
+                    "kind": "property",
+                    "type": "integer",
+                    "description": "Minimum integer value"
+                },
+                "modf": {
+                    "kind": "function",
+                    "signature": "math.modf(x)",
+                    "description": "Returns integral and fractional parts.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer, number"
+                    }
+                },
+                "pi": {
+                    "kind": "property",
+                    "type": "number",
+                    "description": "Value of π"
+                },
+                "rad": {
+                    "kind": "function",
+                    "signature": "math.rad(x)",
+                    "description": "Converts angle from degrees to radians.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "random": {
+                    "kind": "function",
+                    "signature": "math.random(m?, n?)",
+                    "description": "Returns a random number.",
+                    "params": [
+                        {
+                            "name": "m",
+                            "type": "integer",
+                            "optional": true
+                        },
+                        {
+                            "name": "n",
+                            "type": "integer",
+                            "optional": true
+                        }
+                    ],
+                    "returns": {
+                        "type": "number|integer"
+                    }
+                },
+                "randomseed": {
+                    "kind": "function",
+                    "signature": "math.randomseed(x)",
+                    "description": "Sets the random number seed.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "integer"
+                        }
+                    ],
+                    "returns": {
+                        "type": "nil"
+                    }
+                },
+                "sin": {
+                    "kind": "function",
+                    "signature": "math.sin(x)",
+                    "description": "Returns the sine of x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "sqrt": {
+                    "kind": "function",
+                    "signature": "math.sqrt(x)",
+                    "description": "Returns the square root of x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "tan": {
+                    "kind": "function",
+                    "signature": "math.tan(x)",
+                    "description": "Returns the tangent of x.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "number"
+                        }
+                    ],
+                    "returns": {
+                        "type": "number"
+                    }
+                },
+                "tointeger": {
+                    "kind": "function",
+                    "signature": "math.tointeger(x)",
+                    "description": "Converts x to an integer.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "any"
+                        }
+                    ],
+                    "returns": {
+                        "type": "integer|nil"
+                    }
+                },
+                "type": {
+                    "kind": "function",
+                    "signature": "math.type(x)",
+                    "description": "Returns 'integer', 'float', or nil.",
+                    "params": [
+                        {
+                            "name": "x",
+                            "type": "any"
+                        }
+                    ],
+                    "returns": {
+                        "type": "string|nil"
+                    }
+                },
+                "ult": {
+                    "kind": "function",
+                    "signature": "math.ult(m, n)",
+                    "description": "Returns true if m < n as unsigned integers.",
+                    "params": [
+                        {
+                            "name": "m",
+                            "type": "integer"
+                        },
+                        {
+                            "name": "n",
+                            "type": "integer"
+                        }
+                    ],
+                    "returns": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        }
+    },
+    "keywords": [
+        "and",
+        "break",
+        "do",
+        "else",
+        "elseif",
+        "end",
+        "false",
+        "for",
+        "function",
+        "goto",
+        "if",
+        "in",
+        "local",
+        "nil",
+        "not",
+        "or",
+        "repeat",
+        "return",
+        "then",
+        "true",
+        "until",
+        "while"
+    ]
+}

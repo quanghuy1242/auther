@@ -110,6 +110,11 @@ export interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl"
   showCloseButton?: boolean
   className?: string
+  /**
+   * Prevents the modal from closing when pressing Escape.
+   * Useful for code editors or forms where accidental closure could lose data.
+   */
+  preventCloseOnEscape?: boolean
 }
 
 const sizeStyles = {
@@ -131,10 +136,24 @@ export function Modal({
   size = "md",
   showCloseButton = true,
   className,
+  preventCloseOnEscape = false,
 }: ModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={cn(sizeStyles[size], "w-[calc(100%-2rem)] p-4 sm:p-6", className)}>
+      <DialogContent
+        className={cn(sizeStyles[size], "w-[calc(100%-2rem)] p-4 sm:p-6", className)}
+        onEscapeKeyDown={preventCloseOnEscape ? (e) => {
+          // Only prevent if ESC wasn't already handled by a child (like CodeMirror autocomplete)
+          // Check if the target is within an autocomplete/tooltip that handles ESC
+          const target = e.target as HTMLElement;
+          const isCodeMirrorTooltip = target.closest('.cm-tooltip') ||
+            target.closest('.cm-tooltip-autocomplete');
+          if (!isCodeMirrorTooltip) {
+            e.preventDefault();
+          }
+        } : undefined}
+        onPointerDownOutside={preventCloseOnEscape ? (e) => e.preventDefault() : undefined}
+      >
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             {title && <DialogTitle>{title}</DialogTitle>}

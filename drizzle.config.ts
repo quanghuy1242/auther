@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-config({ path: ".env" });
+config({ path: ".env", quiet: true });
 
 const databaseUrl = process.env.BETTER_AUTH_DATABASE_URL;
 if (!databaseUrl) {

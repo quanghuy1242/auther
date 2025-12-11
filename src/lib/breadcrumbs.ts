@@ -13,6 +13,7 @@ const routeLabels: Record<string, string> = {
   "/admin/profile": "Profile Settings",
   "/admin/webhooks": "Webhooks",
   "/admin/webhooks/create": "Create Webhook",
+  "/admin/pipelines": "Pipelines",
   "/components-demo": "Component Showcase",
 };
 

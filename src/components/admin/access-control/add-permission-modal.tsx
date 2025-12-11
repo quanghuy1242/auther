@@ -204,7 +204,6 @@ export function AddPermissionModal({
     rules.forEach((rule, index) => {
       // Try to preserve the permission ID if editing the same index
       const originalPerm = initialPermissions?.[index];
-      const isEditing = !!initialPermissions && initialPermissions.length > 0;
 
       const commonSubject = {
         id: selectedSubject.id,
