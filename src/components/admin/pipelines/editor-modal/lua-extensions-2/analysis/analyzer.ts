@@ -1043,8 +1043,10 @@ export class SemanticAnalyzer {
         const baseType = this.analyzeExpression(call.base as LuaExpression);
 
         // Analyze arguments to ensure references are tracked
-        for (const arg of call.arguments) {
-            this.analyzeExpression(arg);
+        if (call.arguments && Array.isArray(call.arguments)) {
+            for (const arg of call.arguments) {
+                this.analyzeExpression(arg);
+            }
         }
 
         if (baseType.kind === LuaTypeKind.FunctionType) {
