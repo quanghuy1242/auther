@@ -36,6 +36,7 @@ export interface SymbolAttributes {
     isClose?: boolean;
     isImplicitSelf?: boolean;
     isVararg?: boolean;
+    isDeprecated?: boolean; // Phase F Item 13: Mark deprecated symbols
 }
 
 // =============================================================================
@@ -596,10 +597,9 @@ export function createSandboxSymbols(): Map<string, Symbol> {
     addGlobal("_G", LuaTypes.Table, "Global environment table");
     addGlobal("_VERSION", LuaTypes.String, "Lua version string");
 
-    // Standard libraries
-    addGlobal("string", LuaTypes.Table, "String manipulation library");
-    addGlobal("table", LuaTypes.Table, "Table manipulation library");
-    addGlobal("math", LuaTypes.Table, "Mathematical functions library");
+    // NOTE: Standard libraries (string, table, math) are NOT added to the symbol table
+    // They are resolved dynamically via getGlobalType() which builds proper TableTypes
+    // with library method completions from lua-builtins.json
 
     // Boolean constants
     addGlobal("true", LuaTypes.Boolean, "Boolean true");

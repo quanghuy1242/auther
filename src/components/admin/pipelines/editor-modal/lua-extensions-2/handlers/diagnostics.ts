@@ -12,9 +12,10 @@ import type { AnalysisResult } from "../analysis/analyzer";
 import { analyzeDocument, type AnalyzerOptions } from "../analysis/analyzer";
 import { DiagnosticCode } from "../analysis/diagnostics";
 import { getDefinitionLoader } from "../definitions/definition-loader";
-import { walkAST, isReturnStatement, isIdentifier } from "../core/luaparse-types";
-import type { LuaChunk, LuaReturnStatement, LuaNode, LuaIdentifier } from "../core/luaparse-types";
+import { walkAST, isReturnStatement, isIdentifier, isMemberExpression, isCallExpression } from "../core/luaparse-types";
+import type { LuaChunk, LuaReturnStatement, LuaNode, LuaIdentifier, LuaMemberExpression, LuaCallExpression } from "../core/luaparse-types";
 import { SymbolKind } from "../analysis/symbol-table";
+import { LuaTypeKind, type LuaType, type LuaTableType, type LuaFunctionType } from "../analysis/type-system";
 
 // =============================================================================
 // DIAGNOSTIC OPTIONS
@@ -297,6 +298,8 @@ class NestedLoopProvider implements DiagnosticProvider {
 // -----------------------------------------------------------------------------
 // ASYNC USAGE PROVIDER
 // -----------------------------------------------------------------------------
+// ASYNC USAGE PROVIDER
+// -----------------------------------------------------------------------------
 
 /**
  * Checks for async operations without await
@@ -307,6 +310,122 @@ class AsyncUsageProvider implements DiagnosticProvider {
         // whether async calls are properly awaited
         // For now, this is a placeholder
         return [];
+    }
+}
+
+// -----------------------------------------------------------------------------
+// FIELD VALIDATION PROVIDER (Phase F Item 11)
+// -----------------------------------------------------------------------------
+
+/**
+ * Validates field access on typed objects
+ * Warns when accessing undefined fields
+ */
+class FieldValidationProvider implements DiagnosticProvider {
+    provide(context: DiagnosticContext): Diagnostic[] {
+        const diagnostics: Diagnostic[] = [];
+        const ast = context.document.getAST();
+        if (!ast) return diagnostics;
+
+        walkAST(ast, (node: LuaNode, _parent: LuaNode | null) => {
+            if (isMemberExpression(node)) {
+                const memberExpr = node as LuaMemberExpression;
+                const fieldName = memberExpr.identifier?.name;
+                if (!fieldName || !memberExpr.base?.range) return;
+
+                // Get the type of the base expression
+                const baseType = context.analysisResult.types.get(memberExpr.base.range[0]);
+                if (!baseType || baseType.kind !== LuaTypeKind.Table) return;
+
+                const tableType = baseType as unknown as LuaTableType;
+                if (!tableType.fields) return;
+
+                // Check if field exists
+                if (!tableType.fields.has(fieldName)) {
+                    const range = memberExpr.identifier.range;
+                    if (range) {
+                        diagnostics.push({
+                            range: context.document.offsetRangeToRange(range[0], range[1]),
+                            severity: DiagnosticSeverity.Warning,
+                            code: DiagnosticCode.UndefinedField,
+                            source: "lua",
+                            message: `Field '${fieldName}' does not exist on this type`,
+                        });
+                    }
+                }
+            }
+        });
+
+        return diagnostics;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// ARGUMENT COUNT PROVIDER (Phase F Item 12)
+// -----------------------------------------------------------------------------
+
+/**
+ * Validates function call argument counts
+ * Checks if call has correct number of arguments
+ */
+class ArgumentCountProvider implements DiagnosticProvider {
+    provide(context: DiagnosticContext): Diagnostic[] {
+        const diagnostics: Diagnostic[] = [];
+        const ast = context.document.getAST();
+        if (!ast) return diagnostics;
+
+        walkAST(ast, (node: LuaNode, _parent: LuaNode | null) => {
+            if (isCallExpression(node)) {
+                const callExpr = node as LuaCallExpression;
+                if (!callExpr.base?.range) return;
+
+                // Get the type of the function being called
+                const fnType = context.analysisResult.types.get(callExpr.base.range[0]);
+                if (!fnType || fnType.kind !== LuaTypeKind.FunctionType) return;
+
+                const funcType = fnType as LuaFunctionType;
+                
+                // Check overloads if available (Phase E integration)
+                const signatures = funcType.overloads ? [funcType, ...funcType.overloads] : [funcType];
+                
+                const argCount = callExpr.arguments?.length ?? 0;
+                let matchesAnySignature = false;
+
+                for (const sig of signatures) {
+                    const requiredParams = sig.params.filter(p => !p.optional).length;
+                    const totalParams = sig.params.length;
+                    const hasVariadic = sig.params.some(p => p.vararg);
+
+                    if (hasVariadic) {
+                        // With variadic, any count >= required is ok
+                        if (argCount >= requiredParams) {
+                            matchesAnySignature = true;
+                            break;
+                        }
+                    } else {
+                        // Check if arg count is within range
+                        if (argCount >= requiredParams && argCount <= totalParams) {
+                            matchesAnySignature = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!matchesAnySignature && callExpr.range) {
+                    const funcType = fnType as LuaFunctionType;
+                    const expected = funcType.params.filter(p => !p.optional).length;
+                    diagnostics.push({
+                        range: context.document.offsetRangeToRange(callExpr.range[0], callExpr.range[1]),
+                        severity: DiagnosticSeverity.Error,
+                        code: DiagnosticCode.WrongArgumentCount,
+                        source: "lua",
+                        message: `Expected ${expected} argument(s), but got ${argCount}`,
+                    });
+                }
+            }
+        });
+
+        return diagnostics;
     }
 }
 
@@ -341,6 +460,8 @@ export function getDiagnostics(
         new ReturnValidationProvider(),
         new NestedLoopProvider(),
         new AsyncUsageProvider(),
+        new FieldValidationProvider(),      // Phase F Item 11
+        new ArgumentCountProvider(),        // Phase F Item 12
     ];
 
     for (const provider of providers) {
@@ -401,4 +522,6 @@ export {
     ReturnValidationProvider,
     NestedLoopProvider,
     AsyncUsageProvider,
+    FieldValidationProvider,
+    ArgumentCountProvider,
 };

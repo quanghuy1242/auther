@@ -189,6 +189,7 @@ export interface LuaFunctionType extends LuaTypeBase {
     isAsync?: boolean;
     isMethod?: boolean; // Uses : instead of .
     description?: string;
+    overloads?: LuaFunctionType[]; // Phase E Item 8: Support for function overloads
 }
 
 /**
@@ -584,6 +585,97 @@ export function mayBeNil(type: LuaType): boolean {
         return (type as LuaUnionType).types.some((t) => t.kind === LuaTypeKind.Nil);
     }
     return false;
+}
+
+/**
+ * Remove nil and false from a type (used for truthy narrowing)
+ * Port of EmmyLua's remove_false_or_nil
+ * 
+ * Example: string | nil -> string
+ * Example: boolean -> true (literal)
+ */
+export function removeFalseOrNil(type: LuaType): LuaType {
+    switch (type.kind) {
+        case LuaTypeKind.Nil:
+            // nil becomes unknown (removed entirely)
+            return LuaTypes.Unknown;
+
+        case LuaTypeKind.BooleanLiteral:
+            // false literal becomes unknown (removed)
+            if (!(type as LuaBooleanLiteralType).value) {
+                return LuaTypes.Unknown;
+            }
+            return type;
+
+        case LuaTypeKind.Boolean:
+            // boolean narrows to true literal
+            return booleanLiteral(true);
+
+        case LuaTypeKind.Union: {
+            const union = type as LuaUnionType;
+            const narrowed: LuaType[] = [];
+
+            for (const t of union.types) {
+                // Skip nil and false
+                if (t.kind === LuaTypeKind.Nil) continue;
+                if (t.kind === LuaTypeKind.BooleanLiteral && !(t as LuaBooleanLiteralType).value) continue;
+
+                // Narrow boolean to true
+                if (t.kind === LuaTypeKind.Boolean) {
+                    narrowed.push(booleanLiteral(true));
+                } else {
+                    narrowed.push(t);
+                }
+            }
+
+            // Return appropriate type
+            if (narrowed.length === 0) return LuaTypes.Never;
+            if (narrowed.length === 1) return narrowed[0];
+            return { kind: LuaTypeKind.Union, types: narrowed };
+        }
+
+        default:
+            return type;
+    }
+}
+
+/**
+ * Narrow type to only nil/false (used for falsy narrowing)
+ * Port of EmmyLua's narrow_false_or_nil
+ * 
+ * Example: string | nil -> nil
+ * Example: boolean -> false (literal)
+ */
+export function narrowFalseOrNil(type: LuaType): LuaType {
+    if (type.kind === LuaTypeKind.Boolean) {
+        return booleanLiteral(false);
+    }
+
+    if (type.kind === LuaTypeKind.Nil) {
+        return LuaTypes.Nil;
+    }
+
+    if (type.kind === LuaTypeKind.Union) {
+        const union = type as LuaUnionType;
+        const narrowed: LuaType[] = [];
+
+        for (const t of union.types) {
+            if (t.kind === LuaTypeKind.Nil) {
+                narrowed.push(LuaTypes.Nil);
+            } else if (t.kind === LuaTypeKind.Boolean) {
+                narrowed.push(booleanLiteral(false));
+            } else if (t.kind === LuaTypeKind.BooleanLiteral && !(t as LuaBooleanLiteralType).value) {
+                narrowed.push(t);
+            }
+        }
+
+        if (narrowed.length === 0) return LuaTypes.Never;
+        if (narrowed.length === 1) return narrowed[0];
+        return { kind: LuaTypeKind.Union, types: narrowed };
+    }
+
+    // For non-nilable types, return never (shouldn't be falsy)
+    return LuaTypes.Never;
 }
 
 // =============================================================================

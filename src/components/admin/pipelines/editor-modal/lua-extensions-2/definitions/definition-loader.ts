@@ -342,12 +342,24 @@ export class DefinitionLoader {
 
     /**
      * Get the member definition for a namespace.member access
+     * Enhanced to also check hook-variant fields for items like context
      */
-    getMemberDefinition(namespace: string, member: string): FieldDefinition | undefined {
+    getMemberDefinition(namespace: string, member: string, hookName?: string): FieldDefinition | undefined {
         // Check sandbox items first
         const sandboxItem = this.getSandboxItem(namespace);
-        if (sandboxItem?.fields) {
-            return sandboxItem.fields[member];
+        if (sandboxItem) {
+            // Check base fields first
+            if (sandboxItem.fields?.[member]) {
+                return sandboxItem.fields[member];
+            }
+
+            // Check hook-variant fields for items like context
+            if (this.hasHookVariants(namespace)) {
+                const contextFields = this.getContextFieldsForHook(hookName);
+                if (contextFields[member]) {
+                    return contextFields[member];
+                }
+            }
         }
 
         // Check libraries

@@ -16,6 +16,7 @@ import type {
     LuaFunctionType,
 } from "../analysis/type-system";
 import { LuaTypeKind, formatType } from "../analysis/type-system";
+import { getTypeAtFlow, type NarrowingContext } from "../analysis/condition-flow";
 import {
     findNodePathAtOffset,
     isMemberExpression,
@@ -38,6 +39,33 @@ import type {
     PropertyDefinition,
     GlobalDefinition,
 } from "../definitions/definition-loader";
+import type { LuaTableType, LuaRefType } from "../analysis/type-system";
+import { LuaTypes, parseTypeString, tableType } from "../analysis/type-system";
+import type { LuaExpression, LuaTableConstructorExpression } from "../core/luaparse-types";
+import { isTableConstructor } from "../core/luaparse-types";
+// New EmmyLua-style semantic modules
+import { isTableLike, findMemberType as findMemberTypeHelper, isFunctionLike } from "../analysis/type-helpers";
+import { getSemanticInfo as getSemanticInfoNew, type SemanticInfo as SemanticInfoNew, type SemanticDecl } from "../analysis/semantic-info";
+import { findMemberByKey, findMembers, getMemberMap, type MemberInfo } from "../analysis/member-resolution";
+
+// =============================================================================
+// SEMANTIC INFO (EmmyLua pattern)
+// =============================================================================
+
+/**
+ * Semantic information for a token/node
+ * Following EmmyLua's SemanticInfo struct from semantic_model
+ */
+interface SemanticInfo {
+    /** The inferred type */
+    type: LuaType;
+    /** Symbol if this is a declaration reference */
+    symbol?: Symbol;
+    /** Whether this is a table field */
+    isTableField?: boolean;
+    /** Field name if table field */
+    fieldName?: string;
+}
 
 // =============================================================================
 // HOVER BUILDER
@@ -190,16 +218,55 @@ function buildDeclHover(
     // Check if it's a function
     if (type.kind === LuaTypeKind.FunctionType) {
         const fnType = type as LuaFunctionType;
-        const signature = formatFunctionSignature(symbol.name, fnType);
-        builder.setTypeDescription(prefix + signature);
+        
+        // Phase E Item 8: Show overloads if available
+        if (fnType.overloads && fnType.overloads.length > 0) {
+            // Show all signatures as overloads
+            const signatures = [fnType, ...fnType.overloads];
+            const overloadText = signatures.map((sig, index) => {
+                const signature = formatFunctionSignature(symbol.name, sig);
+                return signatures.length > 1 ? `(${index + 1}) ${signature}` : signature;
+            }).join('\n');
+            builder.setTypeDescription(prefix + overloadText);
+        } else {
+            const signature = formatFunctionSignature(symbol.name, fnType);
+            builder.setTypeDescription(prefix + signature);
+        }
     } else {
-        const typeStr = formatType(type, { multiline: true });
+        // Phase E Item 7: Unwrap multi-return types in assignment context
+        const unwrappedType = unwrapMultiReturn(type);
+        const typeStr = formatType(unwrappedType, { multiline: true });
         builder.setTypeDescription(`${prefix}${symbol.name}: ${typeStr}`);
     }
 
     if (symbol.documentation) {
         builder.setDescription(symbol.documentation);
     }
+}
+
+/**
+ * Phase E Item 7: Unwrap multi-return types to first return value
+ * When hovering over `local x = func()` where func returns (string, integer),
+ * we should show just `string` for x
+ */
+function unwrapMultiReturn(type: LuaType): LuaType {
+    // Check if this is a tuple/multi-return type
+    // In Lua, multi-return is often represented as a tuple or array of types
+    if (type.kind === LuaTypeKind.Table) {
+        const tableType = type as unknown as LuaTableType;
+        // Check if it looks like a tuple (has numeric indices)
+        if (tableType.fields && tableType.fields.has('1')) {
+            // Return just the first element
+            const firstField = tableType.fields.get('1');
+            if (firstField) {
+                return firstField.type;
+            }
+        }
+    }
+    
+    // If it's a union of return types, might need special handling
+    // For now, return as-is
+    return type;
 }
 
 /**
@@ -214,8 +281,19 @@ function buildMemberHover(
 ): void {
     if (type.kind === LuaTypeKind.FunctionType) {
         const fnType = type as LuaFunctionType;
-        const signature = formatFunctionSignature(memberName, fnType);
-        builder.setTypeDescription(`(method) ${signature}`);
+        
+        // Phase E Item 8: Show overloads if available
+        if (fnType.overloads && fnType.overloads.length > 0) {
+            const signatures = [fnType, ...fnType.overloads];
+            const overloadText = signatures.map((sig, index) => {
+                const signature = formatFunctionSignature(memberName, sig);
+                return signatures.length > 1 ? `(${index + 1}) ${signature}` : signature;
+            }).join('\n');
+            builder.setTypeDescription(`(method) ${overloadText}`);
+        } else {
+            const signature = formatFunctionSignature(memberName, fnType);
+            builder.setTypeDescription(`(method) ${signature}`);
+        }
 
         // Add param descriptions from definition
         if (definition && definition.kind === "function") {
@@ -433,6 +511,113 @@ function isKeyword(str: string): boolean {
     return keywords.has(str);
 }
 
+/**
+ * Get the narrowed type at a specific offset using flow analysis
+ * Uses the comprehensive condition-flow.ts port of EmmyLua's narrowing system
+ */
+function getNarrowedTypeAtOffset(
+    analysisResult: AnalysisResult,
+    symbol: Symbol,
+    offset?: number
+): LuaType {
+    const baseType = symbol.type;
+
+    // If no offset or no flow tree, return base type
+    if (offset === undefined || analysisResult.flowTree.isEmpty()) {
+        return baseType;
+    }
+
+    // Get the flow ID at this offset
+    const flowId = analysisResult.flowTree.getFlowId(offset);
+    if (flowId === undefined) {
+        return baseType;
+    }
+
+    // Create narrowing context
+    const ctx: NarrowingContext = {
+        flowTree: analysisResult.flowTree,
+        types: analysisResult.types,
+        lookupSymbol: (name, off) => analysisResult.symbolTable.lookupSymbol(name, off),
+    };
+
+    // Use the comprehensive getTypeAtFlow from condition-flow.ts
+    return getTypeAtFlow(ctx, symbol.name, baseType, flowId);
+}
+
+/**
+ * Infer the type of an expression node
+ * Following EmmyLua's semantic_model.get_type() pattern
+ * This properly handles nested table constructors
+ */
+function inferExpressionType(
+    analysisResult: AnalysisResult,
+    expr: LuaExpression
+): LuaType {
+    if (!expr || !expr.range) {
+        return LuaTypes.Unknown;
+    }
+
+    // First check if we have a cached type
+    const cachedType = analysisResult.types.get(expr.range[0]);
+
+    // For table constructors, always infer recursively to get nested structure
+    if (isTableConstructor(expr)) {
+        return inferTableConstructorType(analysisResult, expr as LuaTableConstructorExpression);
+    }
+
+    // For other expressions, use cached type if available
+    if (cachedType) {
+        return cachedType;
+    }
+
+    // Fallback based on expression type
+    switch (expr.type) {
+        case "StringLiteral":
+            return LuaTypes.String;
+        case "NumericLiteral":
+            return LuaTypes.Number;
+        case "BooleanLiteral":
+            return LuaTypes.Boolean;
+        case "NilLiteral":
+            return LuaTypes.Nil;
+        case "FunctionExpression":
+            return LuaTypes.Function;
+        case "Identifier": {
+            const ident = expr as LuaIdentifier;
+            const symbol = analysisResult.symbolTable.lookupSymbol(ident.name, expr.range[0]);
+            return symbol?.type ?? LuaTypes.Unknown;
+        }
+        default:
+            return LuaTypes.Unknown;
+    }
+}
+
+/**
+ * Infer the type of a table constructor expression
+ * This recursively builds the table type including nested tables
+ */
+function inferTableConstructorType(
+    analysisResult: AnalysisResult,
+    tableExpr: LuaTableConstructorExpression
+): LuaType {
+    const fields: Array<{ name: string; type: LuaType; optional?: boolean }> = [];
+
+    for (const field of tableExpr.fields) {
+        if (field.type === "TableKeyString") {
+            const keyName = (field.key as LuaIdentifier).name;
+            // Recursively infer the value type (handles nested tables)
+            const valueType = inferExpressionType(analysisResult, field.value as LuaExpression);
+            fields.push({ name: keyName, type: valueType });
+        } else if (field.type === "TableValue") {
+            // Array-like entries
+            const valueType = inferExpressionType(analysisResult, field.value as LuaExpression);
+            fields.push({ name: String(fields.length + 1), type: valueType });
+        }
+    }
+
+    return tableType(fields);
+}
+
 // =============================================================================
 // MAIN HOVER HANDLER
 // =============================================================================
@@ -539,16 +724,12 @@ function handleIdentifierHover(
     if (nodePath.length >= 2) {
         const parent = nodePath[nodePath.length - 2];
         if (parent.type === "TableKeyString" && (parent as LuaTableKeyString).key === ident) {
-            // It's a table key. Try to determine the type of the value.
+            // It's a table key. Use inferExpressionType to get proper type (handles nested tables)
             const valueNode = (parent as LuaTableKeyString).value;
-            let typeStr = "unknown";
 
-            if (valueNode && valueNode.range) {
-                const type = analysisResult.types.get(valueNode.range[0]);
-                if (type) {
-                    typeStr = formatType(type, { multiline: true });
-                }
-            }
+            // Use the new inferExpressionType which properly handles nested table constructors
+            const valueType = inferExpressionType(analysisResult, valueNode as LuaExpression);
+            const typeStr = formatType(valueType, { multiline: true, maxDepth: 3 });
 
             return {
                 contents: {
@@ -563,8 +744,11 @@ function handleIdentifierHover(
     // Check symbol table first
     const symbol = analysisResult.symbolTable.lookupSymbol(name, ident.range?.[0]);
     if (symbol) {
+        // Get the flow-narrowed type if available
+        const narrowedType = getNarrowedTypeAtOffset(analysisResult, symbol, ident.range?.[0]);
+
         const builder = new HoverBuilder(document, analysisResult);
-        buildDeclHover(builder, symbol, symbol.type);
+        buildDeclHover(builder, symbol, narrowedType);
         builder.setRange(range);
         return builder.build();
     }
@@ -617,7 +801,7 @@ function handleIdentifierHover(
 }
 
 /**
- * Handle hover for a member expression (e.g., helpers.fetch)
+ * Handle hover for a member expression (e.g., helpers.fetch, t.address)
  */
 function handleMemberExpressionHover(
     document: LuaDocument,
@@ -629,37 +813,65 @@ function handleMemberExpressionHover(
     const memberName = expr.identifier.name;
     const range = getNodeRange(document, expr.identifier);
 
-    // Get base type
-    if (isIdentifier(expr.base)) {
-        const baseName = (expr.base as LuaIdentifier).name;
+    // =========================================================================
+    // NEW: Use SemanticInfo API for unified type resolution
+    // Port of EmmyLua's get_semantic_info pattern
+    // =========================================================================
+    const semanticInfo = getSemanticInfoNew(analysisResult, expr);
+    if (semanticInfo) {
+        const builder = new HoverBuilder(document, analysisResult);
 
-        // Handle sandbox item members (data-driven)
-        const sandboxItem = definitionLoader.getSandboxItem(baseName);
-        if (sandboxItem) {
-            if (definitionLoader.hasHookVariants(baseName)) {
-                // Hook-variant item (like context)
-                const contextFields = definitionLoader.getContextFieldsForHook(options.hookName);
-                const fieldDef = contextFields[memberName];
-                if (fieldDef) {
-                    const hover = buildDefinitionHover(memberName, fieldDef);
-                    return { ...hover, range };
-                }
-            } else if (sandboxItem.fields?.[memberName]) {
-                const fieldDef = sandboxItem.fields[memberName];
-                const hover = buildDefinitionHover(memberName, fieldDef);
-                return { ...hover, range };
+        // If we have a declaration with definition, use it for rich hover info
+        if (semanticInfo.declaration) {
+            switch (semanticInfo.declaration.kind) {
+                case 'member':
+                    // Member has a definition from sandbox/library
+                    if (semanticInfo.declaration.definition) {
+                        const hover = buildDefinitionHover(memberName, semanticInfo.declaration.definition);
+                        return { ...hover, range };
+                    }
+                    // No definition - fall through to LEGACY for hook-variant handling
+                    break;
+
+                case 'global':
+                    // Global definition (sandbox item or library)
+                    if (semanticInfo.declaration.definition) {
+                        const hover = buildDefinitionHover(memberName, semanticInfo.declaration.definition as FieldDefinition);
+                        return { ...hover, range };
+                    }
+                    break;
+
+                case 'tableField':
+                    // Local table field - use type directly
+                    buildMemberHover(builder, memberName, semanticInfo.type);
+                    builder.setRange(range);
+                    return builder.build();
             }
         }
 
-        // Handle library.* hover (e.g., string.sub, math.floor)
-        const libMethod = definitionLoader.getLibraryMethod(baseName, memberName);
-        if (libMethod) {
-            const hover = buildDefinitionHover(memberName, libMethod);
-            return { ...hover, range };
+        // For isTableField flag (local tables), return type-only hover
+        if (semanticInfo.isTableField && semanticInfo.type.kind !== LuaTypeKind.Unknown) {
+            buildMemberHover(builder, memberName, semanticInfo.type);
+            builder.setRange(range);
+            return builder.build();
         }
     }
 
-    // Fallback: use inferred type
+    // Handle chained member expressions (nested access like t.a.b)
+    if (isMemberExpression(expr.base)) {
+        const baseSemanticInfo = getSemanticInfoNew(analysisResult, expr.base);
+        if (baseSemanticInfo && isTableLike(baseSemanticInfo.type)) {
+            const memberType = findMemberTypeHelper(baseSemanticInfo.type, memberName);
+            if (memberType) {
+                const builder = new HoverBuilder(document, analysisResult);
+                buildMemberHover(builder, memberName, memberType);
+                builder.setRange(range);
+                return builder.build();
+            }
+        }
+    }
+
+    // Fallback: use inferred type from cache
     if (expr.range) {
         const type = analysisResult.types.get(expr.range[0]);
         if (type) {
@@ -667,6 +879,44 @@ function handleMemberExpressionHover(
             buildMemberHover(builder, memberName, type);
             builder.setRange(range);
             return builder.build();
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Recursively resolve the type of a member expression chain
+ * e.g., for t.address.street, resolves: t -> t's type -> address field type
+ */
+function resolveMemberExpressionType(
+    analysisResult: AnalysisResult,
+    expr: LuaMemberExpression
+): LuaType | null {
+    const memberName = expr.identifier.name;
+
+    // Base case: identifier base (e.g., t in t.address)
+    if (isIdentifier(expr.base)) {
+        const baseName = (expr.base as LuaIdentifier).name;
+        const baseSymbol = analysisResult.symbolTable.lookupSymbol(baseName, expr.base.range?.[0]);
+        if (baseSymbol && baseSymbol.type) {
+            const baseType = getNarrowedTypeAtOffset(analysisResult, baseSymbol, expr.base.range?.[0]);
+            if (baseType.kind === LuaTypeKind.TableType) {
+                const tblType = baseType as unknown as LuaTableType;
+                const field = tblType.fields?.get(memberName);
+                return field?.type ?? null;
+            }
+        }
+        return null;
+    }
+
+    // Recursive case: member expression base (e.g., t.address in t.address.street)
+    if (isMemberExpression(expr.base)) {
+        const baseType = resolveMemberExpressionType(analysisResult, expr.base as LuaMemberExpression);
+        if (baseType && baseType.kind === LuaTypeKind.TableType) {
+            const tblType = baseType as unknown as LuaTableType;
+            const field = tblType.fields?.get(memberName);
+            return field?.type ?? null;
         }
     }
 

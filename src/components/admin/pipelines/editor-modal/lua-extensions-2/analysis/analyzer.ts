@@ -53,6 +53,9 @@ import {
     LuaTypes,
     LuaFunctionType,
     LuaTableType,
+    LuaTupleType,
+    LuaRefType,
+    LuaUnionType,
     LuaFunctionParam,
     functionType,
     tableType,
@@ -67,6 +70,7 @@ import {
 import { DiagnosticCollector, DiagnosticCode, diagnostic } from "./diagnostics";
 import { getDefinitionLoader } from "../definitions/definition-loader";
 import type { FieldDefinition, FunctionDefinition, TableDefinition, GlobalDefinition, ParamDefinition } from "../definitions/definition-loader";
+import { FlowTree, FlowBinder, FlowId, FlowNodeKind, finishFlowLabel } from "./flow-graph";
 
 // =============================================================================
 // ANALYZER OPTIONS
@@ -122,6 +126,9 @@ export interface AnalysisResult {
     /** Return statements found */
     returns: Array<{ range: Range; type: LuaType }>;
 
+    /** Flow graph for control flow analysis */
+    flowTree: FlowTree;
+
     /** Whether analysis completed successfully */
     success: boolean;
 }
@@ -144,6 +151,10 @@ export class SemanticAnalyzer {
     private loopDepth: number = 0;
     private definitionLoader = getDefinitionLoader();
 
+    // Flow graph building
+    private flowBinder: FlowBinder;
+    private currentFlowId: FlowId;
+
     // Track symbol references for unused detection
     private usedSymbols: Set<number> = new Set();
 
@@ -154,6 +165,10 @@ export class SemanticAnalyzer {
         this.diagnostics = new DiagnosticCollector();
         this.types = new Map();
         this.returns = [];
+
+        // Initialize flow graph
+        this.flowBinder = new FlowBinder();
+        this.currentFlowId = this.flowBinder.start;
 
         // Register sandbox globals
         this.registerGlobals();
@@ -198,6 +213,7 @@ export class SemanticAnalyzer {
             diagnostics: this.diagnostics,
             types: this.types,
             returns: this.returns,
+            flowTree: this.flowBinder.finish(),
             success: !this.diagnostics.hasErrors(),
         };
     }
@@ -428,7 +444,7 @@ export class SemanticAnalyzer {
                 break;
 
             case "CallStatement":
-                this.analyzeExpression((stmt as { expression: LuaExpression }).expression);
+                this.analyzeCallStatement(stmt as { expression: LuaExpression });
                 break;
 
             case "ReturnStatement":
@@ -501,17 +517,83 @@ export class SemanticAnalyzer {
             range: this.nodeToRange(stmt),
             type: returnType,
         });
+
+        // Create Return flow node - marks code after as unreachable within branch
+        const returnFlowId = this.flowBinder.createReturn();
+        this.flowBinder.addAntecedent(returnFlowId, this.currentFlowId);
+        this.currentFlowId = this.flowBinder.unreachable;
     }
 
     private analyzeIfStatement(stmt: LuaIfStatement): void {
-        for (const clause of stmt.clauses) {
+        const postIfLabel = this.flowBinder.createBranchLabel();
+        let currentFlow = this.currentFlowId;
+
+        for (let i = 0; i < stmt.clauses.length; i++) {
+            const clause = stmt.clauses[i];
+            const isElse = !clause.condition;
+
             if (clause.condition) {
+                // Analyze condition expression
                 this.analyzeExpression(clause.condition);
-            }
-            if (clause.body) {
-                this.analyzeStatements(clause.body);
+
+                // Create TrueCondition for then-branch
+                const thenLabel = this.flowBinder.createBranchLabel();
+                const elseLabel = this.flowBinder.createBranchLabel();
+
+                // Create TrueCondition node (binds condition to truthy path)
+                const trueCondition = this.flowBinder.createTrueCondition(clause.condition);
+                this.flowBinder.addAntecedent(trueCondition, currentFlow);
+                this.flowBinder.addAntecedent(thenLabel, trueCondition);
+
+                // Bind the condition expression offset to the true condition flow
+                if (clause.condition.range) {
+                    this.flowBinder.bindOffset(clause.condition.range[0], trueCondition);
+                }
+
+                // Create FalseCondition node (binds condition to falsy path)
+                const falseCondition = this.flowBinder.createFalseCondition(clause.condition);
+                this.flowBinder.addAntecedent(falseCondition, currentFlow);
+                this.flowBinder.addAntecedent(elseLabel, falseCondition);
+
+                // Analyze then-body with truthy flow
+                const savedFlow = this.currentFlowId;
+                this.currentFlowId = finishFlowLabel(this.flowBinder, thenLabel, currentFlow);
+
+                if (clause.body) {
+                    this.analyzeStatements(clause.body);
+                }
+
+                // Connect to post-if if not unreachable
+                if (!this.flowBinder.isUnreachable(this.currentFlowId)) {
+                    this.flowBinder.addAntecedent(postIfLabel, this.currentFlowId);
+                }
+
+                // Move to else branch for next iteration
+                currentFlow = finishFlowLabel(this.flowBinder, elseLabel, savedFlow);
+            } else {
+                // This is an else clause (no condition)
+                this.currentFlowId = currentFlow;
+
+                if (clause.body) {
+                    this.analyzeStatements(clause.body);
+                }
+
+                // Connect to post-if
+                if (!this.flowBinder.isUnreachable(this.currentFlowId)) {
+                    this.flowBinder.addAntecedent(postIfLabel, this.currentFlowId);
+                }
             }
         }
+
+        // If no else clause, the else path flows to post-if
+        const lastClause = stmt.clauses[stmt.clauses.length - 1];
+        if (lastClause?.condition) {
+            // No else clause - add fallthrough
+            this.flowBinder.addAntecedent(postIfLabel, currentFlow);
+        }
+
+        // Continue with merged flow after if
+        this.currentFlowId = finishFlowLabel(this.flowBinder, postIfLabel, currentFlow);
     }
 
     private analyzeWhileStatement(stmt: LuaWhileStatement): void {
@@ -532,6 +614,40 @@ export class SemanticAnalyzer {
 
     private analyzeDoStatement(stmt: LuaDoStatement): void {
         this.analyzeStatements(stmt.body);
+    }
+
+    /**
+     * Analyze call statements with special handling for assert() and error()
+     * Port of EmmyLua's assert/error narrowing from infer_call/
+     */
+    private analyzeCallStatement(stmt: { expression: LuaExpression }): void {
+        const expr = stmt.expression;
+        this.analyzeExpression(expr);
+
+        // Check for assert() and error() calls
+        if (expr.type === 'CallExpression') {
+            const callExpr = expr as LuaCallExpression;
+            const base = callExpr.base;
+
+            // Check if it's an assert() call
+            if (base?.type === 'Identifier' && (base as LuaIdentifier).name === 'assert') {
+                // assert(x) means x is truthy after this point
+                // Create a TrueCondition flow node for the first argument
+                const args = callExpr.arguments;
+                if (Array.isArray(args) && args.length > 0) {
+                    const firstArg = args[0];
+                    // Create a TrueCondition node - after assert(x), x is truthy
+                    const conditionFlowId = this.flowBinder.createTrueCondition(firstArg);
+                    this.currentFlowId = conditionFlowId;
+                }
+            }
+
+            // Check if it's an error() call
+            if (base?.type === 'Identifier' && (base as LuaIdentifier).name === 'error') {
+                // error() never returns - mark as unreachable
+                this.currentFlowId = this.flowBinder.unreachable;
+            }
+        }
     }
 
     private analyzeForNumericStatement(stmt: LuaForNumericStatement): void {
@@ -582,6 +698,11 @@ export class SemanticAnalyzer {
         // Store inferred type
         if (expr.range) {
             this.types.set(expr.range[0], type);
+
+            // Bind identifier expressions to current flow ID for type narrowing
+            if (isIdentifier(expr)) {
+                this.flowBinder.bindOffset(expr.range[0], this.currentFlowId);
+            }
         }
 
         // Check for specific issues
@@ -822,6 +943,22 @@ export class SemanticAnalyzer {
             return (baseType as { elementType: LuaType }).elementType;
         }
 
+        // Handle tuple with numeric index
+        if (baseType.kind === LuaTypeKind.Tuple) {
+            const tupleType = baseType as LuaTupleType;
+            if (indexType.kind === LuaTypeKind.NumberLiteral) {
+                const index = (indexType as { value: number }).value;
+                // Lua is 1-indexed
+                if (index >= 1 && index <= tupleType.elements.length) {
+                    return tupleType.elements[index - 1];
+                }
+            }
+            // For non-literal index, return union of all element types
+            if (tupleType.elements.length > 0) {
+                return tupleType.elements[0]; // Simplified - could return union
+            }
+        }
+
         // Handle table with index type
         if (baseType.kind === LuaTypeKind.TableType) {
             const tableType = baseType as LuaTableType;
@@ -835,10 +972,68 @@ export class SemanticAnalyzer {
                 }
             }
 
+            // Check for numeric literal index
+            if (indexType.kind === LuaTypeKind.NumberLiteral) {
+                const key = String((indexType as { value: number }).value);
+                const field = tableType.fields.get(key);
+                if (field) {
+                    return field.type;
+                }
+            }
+
             // Generic value type
             if (tableType.valueType) {
                 return tableType.valueType;
             }
+        }
+
+        // Handle Ref types by looking up type definitions
+        if (baseType.kind === LuaTypeKind.Ref) {
+            const refTypeName = (baseType as LuaRefType).name;
+            const typeFields = this.definitionLoader.getTypeFields(refTypeName);
+            if (typeFields && indexType.kind === LuaTypeKind.StringLiteral) {
+                const key = (indexType as { value: string }).value;
+                if (typeFields[key]) {
+                    return parseTypeString(typeFields[key].type);
+                }
+            }
+        }
+
+        // Handle Union types - try each member
+        if (baseType.kind === LuaTypeKind.Union) {
+            const unionType = baseType as LuaUnionType;
+            for (const member of unionType.types) {
+                // Skip nil in union
+                if (member.kind === LuaTypeKind.Nil) continue;
+
+                // Create a fake index expression for recursive call
+                const memberResult = this.inferMemberTypeFromBase(member, indexType);
+                if (memberResult.kind !== LuaTypeKind.Unknown) {
+                    return memberResult;
+                }
+            }
+        }
+
+        return LuaTypes.Unknown;
+    }
+
+    /**
+     * Helper to infer member type from a base type and index type
+     * Used for Union type handling in index expressions
+     */
+    private inferMemberTypeFromBase(baseType: LuaType, indexType: LuaType): LuaType {
+        if (baseType.kind === LuaTypeKind.Array) {
+            return (baseType as { elementType: LuaType }).elementType;
+        }
+
+        if (baseType.kind === LuaTypeKind.TableType) {
+            const tableType = baseType as LuaTableType;
+            if (indexType.kind === LuaTypeKind.StringLiteral) {
+                const key = (indexType as { value: string }).value;
+                const field = tableType.fields.get(key);
+                if (field) return field.type;
+            }
+            if (tableType.valueType) return tableType.valueType;
         }
 
         return LuaTypes.Unknown;

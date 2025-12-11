@@ -455,6 +455,11 @@ function handleStandaloneIdentifier(
             modifiers |= (1 << TOKEN_MODIFIER_MAP.get(SemanticTokenModifier.Declaration)!);
         }
 
+        // Phase G Item 15: Add Deprecated modifier if marked
+        if (symbol.attributes?.isDeprecated) {
+            modifiers |= (1 << TOKEN_MODIFIER_MAP.get(SemanticTokenModifier.Deprecated)!);
+        }
+
     } else {
         // Fallback for globals/libs not in symbol table
         const loader = getDefinitionLoader();
