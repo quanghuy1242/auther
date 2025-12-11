@@ -6,6 +6,10 @@ import { cn } from "@/lib/utils/cn";
 import type { Script } from "@/app/admin/pipelines/actions";
 import type { HookName } from "@/lib/pipelines/definitions";
 
+// Pipeline engine limits (keep in sync with pipeline-engine.ts)
+const MAX_CHAIN_DEPTH = 10; // Max layers in DAG
+const MAX_PARALLEL_NODES = 5; // Max scripts per layer
+
 // Simple inner node types for the subflow
 const InnerForkNode = memo(({ data }: { data: { label: string; color: string } }) => (
     <div className={cn("px-4 py-2 rounded-lg border text-center", data.color)}>
@@ -41,14 +45,19 @@ const InnerScriptNode = memo(({ data }: { data: { script: Script; onOpen: () => 
 ));
 InnerScriptNode.displayName = "InnerScriptNode";
 
-const InnerAddNode = memo(({ data }: { data: { onAdd: () => void; label: string } }) => (
+const InnerAddNode = memo(({ data }: { data: { onAdd: () => void; label: string; disabled?: boolean } }) => (
     <button
-        onClick={data.onAdd}
+        onClick={data.disabled ? undefined : data.onAdd}
+        disabled={data.disabled}
         className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer",
-            "border border-dashed border-gray-600",
-            "text-xs text-gray-400 hover:text-primary hover:border-primary transition-colors"
+            "flex items-center gap-2 px-3 py-1.5 rounded-lg",
+            "border border-dashed",
+            "text-xs transition-colors",
+            data.disabled
+                ? "border-gray-700 text-gray-600 cursor-not-allowed"
+                : "border-gray-600 text-gray-400 hover:text-primary hover:border-primary cursor-pointer"
         )}
+        title={data.disabled ? "Limit reached" : undefined}
     >
         <span className="material-symbols-outlined text-sm">add</span>
         <span>{data.label}</span>
@@ -184,15 +193,21 @@ function HookPointNodeComponent({ data }: NodeProps) {
             currentY += VERTICAL_GAP / 2;
         }
 
-        // Add new layer node
+        // Add new layer node - disabled if at max chain depth
         const addLayerId = "add_layer";
+        const isAtLayerLimit = layers.length >= MAX_CHAIN_DEPTH;
         nodes.push({
             id: addLayerId,
             type: "innerAdd",
             position: { x: CENTER_X - 60, y: currentY },
             data: {
                 onAdd: () => nodeData.onAddScript(nodeData.hookName as HookName),
-                label: totalScripts > 0 ? "Add New Layer" : "Add Script",
+                label: isAtLayerLimit
+                    ? `Max ${MAX_CHAIN_DEPTH} layers`
+                    : totalScripts > 0
+                        ? "Add New Layer"
+                        : "Add Script",
+                disabled: isAtLayerLimit,
             },
             draggable: false,
             selectable: false,

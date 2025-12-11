@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils/cn";
 
 export interface JoinNodeData {
     executionMode: "blocking" | "async" | "enrichment";
+    layout?: { width?: number; height?: number };
 }
 
 const modeStyles = {
@@ -29,6 +30,7 @@ const modeStyles = {
 function JoinNodeComponent({ data }: NodeProps) {
     const nodeData = data as unknown as JoinNodeData;
     const styles = modeStyles[nodeData.executionMode] || modeStyles.blocking;
+    const nodeWidth = nodeData.layout?.width;
 
     return (
         <>
@@ -36,10 +38,11 @@ function JoinNodeComponent({ data }: NodeProps) {
             <div
                 className={cn(
                     "flex items-center justify-center gap-2 px-4 py-2 rounded-lg",
-                    "border min-w-[160px]",
+                    "border",
                     styles.bg,
                     styles.border
                 )}
+                style={nodeWidth ? { width: nodeWidth } : { minWidth: 160 }}
             >
                 <span className={cn("material-symbols-outlined text-base", styles.text)}>
                     call_merge

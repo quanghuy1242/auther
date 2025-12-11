@@ -63,6 +63,10 @@ export enum DiagnosticCode {
     InvalidReturnFormat = 6003,
     AsyncWithoutAwait = 6004,
     InvalidHookAccess = 6005,
+    ExcessiveTraceNesting = 6006,    // helpers.trace() nested > 2 levels
+    MissingAllowedField = 6007,      // blocking/enrichment missing 'allowed'
+    RedundantAsyncReturn = 6008,     // async mode returning values
+    HttpWithoutHttps = 6009,         // non-HTTPS URL in helpers.fetch()
 }
 
 /**
@@ -83,6 +87,7 @@ export function getDefaultSeverity(code: DiagnosticCode): DiagnosticSeverity {
         case DiagnosticCode.MissingRequiredReturn:
         case DiagnosticCode.InvalidReturnFormat:
         case DiagnosticCode.ScriptTooLarge:
+        case DiagnosticCode.MissingAllowedField:
             return DiagnosticSeverity.Error;
 
         // Warnings
@@ -100,6 +105,8 @@ export function getDefaultSeverity(code: DiagnosticCode): DiagnosticSeverity {
         case DiagnosticCode.DeeplyNestedLoop:
         case DiagnosticCode.AsyncWithoutAwait:
         case DiagnosticCode.InvalidHookAccess:
+        case DiagnosticCode.ExcessiveTraceNesting:
+        case DiagnosticCode.HttpWithoutHttps:
             return DiagnosticSeverity.Warning;
 
         // Information
@@ -115,6 +122,7 @@ export function getDefaultSeverity(code: DiagnosticCode): DiagnosticSeverity {
         case DiagnosticCode.DeprecatedUsage:
         case DiagnosticCode.UnsafeOperation:
         case DiagnosticCode.PrivateAccess:
+        case DiagnosticCode.RedundantAsyncReturn:
             return DiagnosticSeverity.Hint;
 
         default:

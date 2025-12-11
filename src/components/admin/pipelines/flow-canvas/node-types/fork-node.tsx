@@ -9,6 +9,7 @@ export interface ForkNodeData {
     executionMode: "blocking" | "async" | "enrichment";
     layerIndex?: number;
     onAddParallel?: () => void;
+    layout?: { width?: number; height?: number };
 }
 
 const modeStyles = {
@@ -36,22 +37,25 @@ function ForkNodeComponent({ data }: NodeProps) {
     const formatLabel = (name: string) =>
         name.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
+    const nodeWidth = nodeData.layout?.width;
+
     return (
         <>
             <Handle type="target" position={Position.Top} className="!bg-gray-600 !w-2 !h-2" />
             <div
                 className={cn(
                     "flex items-center justify-between gap-4 px-4 py-2 rounded-lg",
-                    "border min-w-[200px]",
+                    "border",
                     styles.bg,
                     styles.border
                 )}
+                style={nodeWidth ? { width: nodeWidth } : { minWidth: 200 }}
             >
                 <div className="flex items-center gap-2">
                     <span className={cn("material-symbols-outlined text-base", styles.text)}>
                         call_split
                     </span>
-                    <span className={cn("text-xs font-bold uppercase tracking-wider", styles.text)}>
+                    <span className={cn("text-xs font-bold uppercase tracking-wider text-center break-words", styles.text)}>
                         {nodeData.layerIndex !== undefined && nodeData.layerIndex > 0
                             ? `Fork Layer ${nodeData.layerIndex + 1}`
                             : `Fork: ${formatLabel(nodeData.hookName)}`}

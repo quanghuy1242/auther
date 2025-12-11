@@ -91,14 +91,10 @@ export function createLinter(
         const luaDoc = new LuaDocument(documentUri, code);
         const analysisResult = analyzeDocument(luaDoc, { hookName });
 
-        // Map HookExecutionMode to diagnostics executionMode
-        // blocking -> sequential, non_blocking -> parallel
-        const diagExecutionMode = executionMode === "blocking" ? "sequential" : "parallel";
-
         // Get diagnostics from handler
         const diagnostics = getDiagnostics(luaDoc, analysisResult, {
             hookName,
-            executionMode: diagExecutionMode,
+            executionMode,
         });
 
         // Convert to CodeMirror format

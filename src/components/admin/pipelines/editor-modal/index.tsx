@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Modal, ModalFooter, Button, Input, Label, CollapsibleSection } from "@/components/ui";
 import { CodeEditor } from "./code-editor";
 import type { Script } from "@/app/admin/pipelines/actions";
+import { LuaDocument } from "./lua-extensions-2/core/document";
+import { analyzeDocument } from "./lua-extensions-2/analysis/analyzer";
+import { getDiagnostics } from "./lua-extensions-2/handlers/diagnostics";
+import { DiagnosticSeverity } from "./lua-extensions-2/protocol";
 
 // Mode-specific script templates
 const BLOCKING_TEMPLATE = `-- Blocking Hook Script
@@ -107,10 +111,24 @@ export function ScriptEditorModal({
         setShowDeleteConfirm(false);
     }, [script, open, executionMode]);
 
+    // Check if script has errors (for disabling save button)
+    const hasErrors = useCallback((): boolean => {
+        const luaDoc = new LuaDocument("file://script", code);
+        const analysisResult = analyzeDocument(luaDoc, { hookName });
+        const diagnostics = getDiagnostics(luaDoc, analysisResult, {
+            hookName,
+            executionMode,
+        });
+
+        // Check for errors (severity = Error)
+        return diagnostics.some(d => d.severity === DiagnosticSeverity.Error);
+    }, [code, hookName, executionMode]);
+
     const handleSave = async () => {
-        if (!name.trim()) {
+        if (!name.trim() || hasErrors()) {
             return;
         }
+
         setIsSaving(true);
         try {
             await onSave(name.trim(), code);
@@ -269,7 +287,7 @@ export function ScriptEditorModal({
                             variant="primary"
                             size="sm"
                             onClick={handleSave}
-                            disabled={isSaving || !name.trim()}
+                            disabled={isSaving || !name.trim() || hasErrors()}
                         >
                             {isSaving ? "Saving..." : isNew ? "Create" : "Save Changes"}
                         </Button>

@@ -24,6 +24,13 @@ Serverless Next.js service that provides OAuth2/OIDC auth flows, JWT issuance, a
 - ReBAC + ABAC engine: tuple-store graph traversal, transitive relations, Lua policy hooks, and dependency-safe model updates
 - API keys treated as first-class subjects: client-scoped issuance, permission checks reuse the same resolver as users
 - Webhook system: endpoint/subscription/event/delivery tables with retries, status tracking, and secret management
+- Pipeline system: Customizable Lua script execution at 16+ auth lifecycle hooks
+  - DAG-based parallel/sequential execution with chain depth (10) and parallel node (5) limits
+  - Swimlane Editor with React Flow visualization and straight vertical connectors
+  - LSP-style Lua editor: hover docs, autocomplete, diagnostics, signature help, inlay hints
+  - Pre-save script validation with blocking error checks
+  - OpenTelemetry-compatible trace viewer with waterfall span visualization
+  - Sandboxed runtime with instruction limits, SSRF protection, and encrypted secrets
 - Repository-driven data layer powering admin/auth flows and keeping queries centralized
 
 ## Additional Notes

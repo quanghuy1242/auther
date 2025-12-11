@@ -18,6 +18,10 @@ import { isHookPoint, isProcessStep } from "../swimlanes/definitions";
 import type { HookName } from "@/lib/pipelines/definitions";
 import type { Script } from "@/app/admin/pipelines/actions";
 
+// Pipeline engine limits (keep in sync with pipeline-engine.ts)
+const MAX_CHAIN_DEPTH = 10; // Max layers in DAG
+const MAX_PARALLEL_NODES = 5; // Max scripts per layer
+
 interface PipelineFlowCanvasProps {
     definition: SwimlaneDef;
     pipelineMap: Record<string, Script[][]>;
@@ -30,6 +34,7 @@ interface PipelineFlowCanvasProps {
 const CENTER_X = 320;
 const SECTION_GAP = 90;
 const CONTAINER_PADDING = 24;
+const CONTAINER_PADDING_X = 40; // Extra horizontal padding for dynamic width content
 const BASE_VERTICAL_OFFSET = 30;
 
 const DEFAULT_NODE_WIDTH = 200;
@@ -53,6 +58,18 @@ const getNodeSize = (node: Node) => {
         width: layout?.width || DEFAULT_NODE_WIDTH,
         height: layout?.height || DEFAULT_NODE_HEIGHT,
     };
+};
+
+// Estimate fork node width based on hook name
+const formatLabel = (name: string) =>
+    name.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+const estimateForkWidth = (hookName: string): number => {
+    const label = `Fork: ${formatLabel(hookName)}`;
+    // Approximate: ~8px per uppercase char, plus icon (24px) + padding (32px) + gaps (16px)
+    const textWidth = label.length * 8;
+    const minWidth = NODE_DIMENSIONS.fork.width;
+    return Math.max(minWidth, textWidth + 72);
 };
 
 export function PipelineFlowCanvas({
@@ -110,6 +127,7 @@ export function PipelineFlowCanvas({
                 const hookEdges: Edge[] = [];
 
                 const forkId = `${baseId}_fork`;
+                const forkWidth = estimateForkWidth(hookItem.hookName);
                 hookNodes.push({
                     id: forkId,
                     type: "fork",
@@ -117,7 +135,7 @@ export function PipelineFlowCanvas({
                     data: {
                         hookName: hookItem.hookName,
                         executionMode: hookItem.executionMode,
-                        layout: NODE_DIMENSIONS.fork,
+                        layout: { width: forkWidth, height: NODE_DIMENSIONS.fork.height },
                     },
                     draggable: false,
                 });
@@ -159,16 +177,19 @@ export function PipelineFlowCanvas({
                         });
                     });
 
+                    // Add parallel button - disabled if layer has max parallel nodes
                     const addParallelId = `${baseId}_addParallel_${layerIndex}`;
+                    const isParallelLimited = layer.length >= MAX_PARALLEL_NODES;
                     hookNodes.push({
                         id: addParallelId,
                         type: "addLayer",
                         position: { x: 0, y: 0 },
                         data: {
                             onAddLayer: () => onAddScript(hookItem.hookName, layerIndex),
-                            label: "+",
-                            small: true,
-                            layout: NODE_DIMENSIONS.addSmall,
+                            label: isParallelLimited ? `Max ${MAX_PARALLEL_NODES}` : "+",
+                            small: !isParallelLimited,
+                            layout: isParallelLimited ? NODE_DIMENSIONS.add : NODE_DIMENSIONS.addSmall,
+                            disabled: isParallelLimited,
                         },
                         draggable: false,
                     });
@@ -218,15 +239,22 @@ export function PipelineFlowCanvas({
                     upstreamIds = [layerJoinId];
                 });
 
+                // Add new layer button - disabled if at max chain depth
                 const addLayerId = `${baseId}_addLayer`;
+                const isLayerLimited = layers.length >= MAX_CHAIN_DEPTH;
                 hookNodes.push({
                     id: addLayerId,
                     type: "addLayer",
                     position: { x: 0, y: 0 },
                     data: {
                         onAddLayer: () => onAddScript(hookItem.hookName),
-                        label: hasScripts ? "Add New Layer" : "Add Script",
+                        label: isLayerLimited
+                            ? `Max ${MAX_CHAIN_DEPTH} layers`
+                            : hasScripts
+                                ? "Add New Layer"
+                                : "Add Script",
                         layout: NODE_DIMENSIONS.add,
+                        disabled: isLayerLimited,
                     },
                     draggable: false,
                 });
@@ -278,14 +306,16 @@ export function PipelineFlowCanvas({
                     { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: 0, maxY: 0 }
                 );
 
-                const offsetX = CENTER_X - (bounds.maxX - bounds.minX) / 2 - bounds.minX;
+                // First: shift all nodes so their center is at CENTER_X
+                const contentCenterX = (bounds.minX + bounds.maxX) / 2;
+                const shiftX = CENTER_X - contentCenterX;
                 const offsetY = containerStartY + CONTAINER_PADDING - bounds.minY;
 
                 layoutedHookNodes.forEach(node => {
                     nodes.push({
                         ...node,
                         position: {
-                            x: node.position.x + offsetX,
+                            x: node.position.x + shiftX,
                             y: node.position.y + offsetY,
                         },
                         draggable: false,
@@ -294,12 +324,20 @@ export function PipelineFlowCanvas({
 
                 edges.push(...layoutedHookEdges);
 
-                const groupWidth = bounds.maxX - bounds.minX + CONTAINER_PADDING * 2;
-                const groupHeight = bounds.maxY - bounds.minY + CONTAINER_PADDING * 2;
+                // Then: calculate container to perfectly wrap the shifted content
+                const shiftedMinX = bounds.minX + shiftX;
+                const shiftedMaxX = bounds.maxX + shiftX;
+                const contentWidth = shiftedMaxX - shiftedMinX;
+                const contentHeight = bounds.maxY - bounds.minY;
+
+                // Container with equal padding on all sides
+                const groupWidth = contentWidth + CONTAINER_PADDING_X * 2;
+                const groupHeight = contentHeight + CONTAINER_PADDING * 2;
+                const containerLeft = shiftedMinX - CONTAINER_PADDING_X;
 
                 containerInfo.push({
                     id: `${baseId}_group`,
-                    x: CENTER_X - groupWidth / 2,
+                    x: containerLeft,
                     startY: containerStartY,
                     endY: containerStartY + groupHeight,
                     width: groupWidth,

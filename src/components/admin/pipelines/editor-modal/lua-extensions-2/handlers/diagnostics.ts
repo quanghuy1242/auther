@@ -28,7 +28,7 @@ export interface DiagnosticOptions {
     /** Current hook name for context-aware diagnostics */
     hookName?: string;
     /** Execution mode (determines required return structure) */
-    executionMode?: "sequential" | "parallel";
+    executionMode?: "blocking" | "async" | "enrichment";
     /** Maximum script size in bytes */
     maxScriptSize?: number;
     /** Maximum depth before warning about nested loops */
@@ -43,7 +43,7 @@ export interface DiagnosticOptions {
 
 const DEFAULT_OPTIONS: Required<DiagnosticOptions> = {
     hookName: "",
-    executionMode: "sequential",
+    executionMode: "blocking",
     maxScriptSize: 50 * 1024, // 50KB
     maxLoopDepth: 4,
     includeHints: true,
@@ -169,32 +169,76 @@ class ReturnValidationProvider implements DiagnosticProvider {
         // Find all return statements at the top level
         const topLevelReturns = this.findTopLevelReturns(ast);
 
+        // Async mode: hint if returning values (not needed)
+        if (executionMode === "async" && topLevelReturns.length > 0) {
+            for (const ret of topLevelReturns) {
+                if (ret.arguments.length > 0) {
+                    diagnostics.push({
+                        range: this.getReturnRange(context.document, ret),
+                        severity: DiagnosticSeverity.Hint,
+                        code: DiagnosticCode.RedundantAsyncReturn,
+                        source: "lua",
+                        message: "Async mode scripts don't need a return value (fire-and-forget)",
+                    });
+                }
+            }
+            return diagnostics;
+        }
+
+        // Blocking/Enrichment mode: check for required return
         if (topLevelReturns.length === 0) {
-            // No return statement - may be required
             if (returnInfo.requiredFields.length > 0) {
                 diagnostics.push({
                     range: createRange(
                         { line: context.document.getLineCount() - 1, character: 0 },
                         { line: context.document.getLineCount() - 1, character: 0 }
                     ),
-                    severity: DiagnosticSeverity.Warning,
+                    severity: DiagnosticSeverity.Error,
                     code: DiagnosticCode.MissingRequiredReturn,
                     source: "lua",
                     message: `Script should return a table with required fields: ${returnInfo.requiredFields.join(", ")}`,
                 });
             }
+            return diagnostics;
         }
 
-        // Validate return structure (basic check)
+        // Validate return structure for blocking/enrichment
         for (const ret of topLevelReturns) {
             if (ret.arguments.length === 0) {
                 diagnostics.push({
                     range: this.getReturnRange(context.document, ret),
-                    severity: DiagnosticSeverity.Warning,
+                    severity: DiagnosticSeverity.Error,
                     code: DiagnosticCode.InvalidReturnFormat,
                     source: "lua",
                     message: `Return statement should return a table with: ${returnInfo.requiredFields.join(", ")}`,
                 });
+                continue;
+            }
+
+            // Check if return argument is a table constructor with 'allowed' field
+            const arg = ret.arguments[0];
+            if (arg && arg.type === "TableConstructorExpression") {
+                const tableExpr = arg as LuaNode & { fields?: Array<{ type: string; key?: { name?: string }; value?: LuaNode }> };
+                const fields = tableExpr.fields || [];
+
+                // Extract field names from table constructor
+                const fieldNames = new Set<string>();
+                for (const field of fields) {
+                    if (field.type === "TableKeyString" && field.key?.name) {
+                        fieldNames.add(field.key.name);
+                    }
+                }
+
+                // Check for required 'allowed' field in blocking/enrichment
+                if (returnInfo.requiredFields.includes("allowed") && !fieldNames.has("allowed")) {
+                    diagnostics.push({
+                        range: this.getReturnRange(context.document, ret),
+                        severity: DiagnosticSeverity.Error,
+                        code: DiagnosticCode.MissingAllowedField,
+                        source: "lua",
+                        message: `${executionMode} mode requires 'allowed' field in return table`,
+                    });
+                }
             }
         }
 
@@ -303,13 +347,181 @@ class NestedLoopProvider implements DiagnosticProvider {
 
 /**
  * Checks for async operations without await
+ * Warns when helpers.fetch or helpers.secret is called without being wrapped in await()
  */
 class AsyncUsageProvider implements DiagnosticProvider {
-    provide(_context: DiagnosticContext): Diagnostic[] {
-        // This would require more sophisticated analysis to track
-        // whether async calls are properly awaited
-        // For now, this is a placeholder
-        return [];
+    // Async functions in the sandbox
+    private readonly asyncFunctions = new Set(["fetch", "secret"]);
+
+    provide(context: DiagnosticContext): Diagnostic[] {
+        const diagnostics: Diagnostic[] = [];
+        const ast = context.document.getAST();
+        if (!ast) return diagnostics;
+
+        walkAST(ast, (node: LuaNode, parent: LuaNode | null) => {
+            // Look for CallExpression with helpers.fetch or helpers.secret
+            if (!isCallExpression(node)) return;
+
+            const callExpr = node as LuaCallExpression;
+            if (!isMemberExpression(callExpr.base)) return;
+
+            const memberExpr = callExpr.base as LuaMemberExpression;
+
+            // Check if it's helpers.fetch or helpers.secret
+            if (!isIdentifier(memberExpr.base)) return;
+            const baseIdent = memberExpr.base as LuaIdentifier;
+            if (baseIdent.name !== "helpers") return;
+
+            const methodName = memberExpr.identifier?.name;
+            if (!methodName || !this.asyncFunctions.has(methodName)) return;
+
+            // Check if this call is wrapped in await()
+            const isAwaited = this.isWrappedInAwait(node, parent);
+
+            if (!isAwaited && callExpr.range) {
+                diagnostics.push({
+                    range: context.document.offsetRangeToRange(callExpr.range[0], callExpr.range[1]),
+                    severity: DiagnosticSeverity.Warning,
+                    code: DiagnosticCode.AsyncWithoutAwait,
+                    source: "lua",
+                    message: `'helpers.${methodName}' is async and should be wrapped with await()`,
+                });
+            }
+        });
+
+        return diagnostics;
+    }
+
+    /**
+     * Check if a call expression is wrapped in await()
+     */
+    private isWrappedInAwait(node: LuaNode, parent: LuaNode | null): boolean {
+        if (!parent) return false;
+
+        // Check if parent is a CallExpression with 'await' as base
+        if (isCallExpression(parent)) {
+            const parentCall = parent as LuaCallExpression;
+            if (isIdentifier(parentCall.base)) {
+                const baseIdent = parentCall.base as LuaIdentifier;
+                if (baseIdent.name === "await") {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TRACE NESTING PROVIDER
+// -----------------------------------------------------------------------------
+
+/**
+ * Warns about excessive helpers.trace() nesting
+ * Engine limit: MAX_CUSTOM_SPAN_DEPTH = 2
+ */
+class TraceNestingProvider implements DiagnosticProvider {
+    private readonly MAX_TRACE_DEPTH = 2;
+
+    provide(context: DiagnosticContext): Diagnostic[] {
+        const diagnostics: Diagnostic[] = [];
+        const ast = context.document.getAST();
+        if (!ast) return diagnostics;
+
+        this.checkTraceNesting(ast.body, context.document, diagnostics, 0);
+
+        return diagnostics;
+    }
+
+    private checkTraceNesting(
+        statements: LuaNode[],
+        document: LuaDocument,
+        diagnostics: Diagnostic[],
+        currentDepth: number
+    ): void {
+        for (const stmt of statements) {
+            this.visitNode(stmt, document, diagnostics, currentDepth);
+        }
+    }
+
+    private visitNode(
+        node: LuaNode,
+        document: LuaDocument,
+        diagnostics: Diagnostic[],
+        currentDepth: number
+    ): void {
+        // Check if this is a helpers.trace() call
+        if (isCallExpression(node)) {
+            const callExpr = node as LuaCallExpression;
+            if (this.isHelpersTrace(callExpr)) {
+                const newDepth = currentDepth + 1;
+
+                if (newDepth > this.MAX_TRACE_DEPTH && callExpr.range) {
+                    diagnostics.push({
+                        range: document.offsetRangeToRange(callExpr.range[0], callExpr.range[1]),
+                        severity: DiagnosticSeverity.Warning,
+                        code: DiagnosticCode.ExcessiveTraceNesting,
+                        source: "lua",
+                        message: `helpers.trace() nesting depth exceeds limit (max: ${this.MAX_TRACE_DEPTH} levels)`,
+                    });
+                }
+
+                // Check inside the callback function (last argument)
+                const args = callExpr.arguments || [];
+                const lastArg = args[args.length - 1];
+                // Callback functions in arguments are FunctionExpression type
+                if (lastArg && lastArg.type === "FunctionExpression") {
+                    const fnBody = (lastArg as LuaNode & { body?: LuaNode[] }).body;
+                    if (fnBody) {
+                        this.checkTraceNesting(fnBody, document, diagnostics, newDepth);
+                    }
+                }
+                return;
+            }
+        }
+
+        // Traverse children
+        this.traverseChildren(node, document, diagnostics, currentDepth);
+    }
+
+    private traverseChildren(
+        node: LuaNode,
+        document: LuaDocument,
+        diagnostics: Diagnostic[],
+        currentDepth: number
+    ): void {
+        const body = (node as unknown as { body?: LuaNode[] }).body;
+        if (body) {
+            this.checkTraceNesting(body, document, diagnostics, currentDepth);
+        }
+
+        const clauses = (node as unknown as { clauses?: Array<{ body?: LuaNode[] }> }).clauses;
+        if (clauses) {
+            for (const clause of clauses) {
+                if (clause.body) {
+                    this.checkTraceNesting(clause.body, document, diagnostics, currentDepth);
+                }
+            }
+        }
+
+        // Handle expressions in statements
+        if (isCallExpression(node)) {
+            const callExpr = node as LuaCallExpression;
+            for (const arg of callExpr.arguments || []) {
+                this.visitNode(arg, document, diagnostics, currentDepth);
+            }
+        }
+    }
+
+    private isHelpersTrace(callExpr: LuaCallExpression): boolean {
+        if (!isMemberExpression(callExpr.base)) return false;
+
+        const memberExpr = callExpr.base as LuaMemberExpression;
+        if (!isIdentifier(memberExpr.base)) return false;
+
+        const baseIdent = memberExpr.base as LuaIdentifier;
+        return baseIdent.name === "helpers" && memberExpr.identifier?.name === "trace";
     }
 }
 
@@ -384,10 +596,10 @@ class ArgumentCountProvider implements DiagnosticProvider {
                 if (!fnType || fnType.kind !== LuaTypeKind.FunctionType) return;
 
                 const funcType = fnType as LuaFunctionType;
-                
+
                 // Check overloads if available (Phase E integration)
                 const signatures = funcType.overloads ? [funcType, ...funcType.overloads] : [funcType];
-                
+
                 const argCount = callExpr.arguments?.length ?? 0;
                 let matchesAnySignature = false;
 
@@ -460,8 +672,9 @@ export function getDiagnostics(
         new ReturnValidationProvider(),
         new NestedLoopProvider(),
         new AsyncUsageProvider(),
-        new FieldValidationProvider(),      // Phase F Item 11
-        new ArgumentCountProvider(),        // Phase F Item 12
+        new TraceNestingProvider(),          // helpers.trace() nesting check
+        new FieldValidationProvider(),       // Phase F Item 11
+        new ArgumentCountProvider(),         // Phase F Item 12
     ];
 
     for (const provider of providers) {

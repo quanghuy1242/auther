@@ -9,6 +9,7 @@ export interface ProcessNodeData {
     icon: string;
     description: string;
     color: "emerald" | "blue" | "amber" | "purple";
+    layout?: { width?: number; height?: number };
 }
 
 const colorStyles = {
@@ -37,6 +38,7 @@ const colorStyles = {
 function ProcessNodeComponent({ data }: NodeProps) {
     const nodeData = data as unknown as ProcessNodeData;
     const styles = colorStyles[nodeData.color] || colorStyles.blue;
+    const nodeWidth = nodeData.layout?.width;
 
     return (
         <>
@@ -44,10 +46,11 @@ function ProcessNodeComponent({ data }: NodeProps) {
             <div
                 className={cn(
                     "flex items-center gap-2 px-3 py-2 rounded-lg",
-                    "border-2 min-w-[140px]",
+                    "border-2",
                     styles.bg,
                     styles.border
                 )}
+                style={nodeWidth ? { width: nodeWidth } : { minWidth: 140 }}
             >
                 <span className={cn("material-symbols-outlined text-lg", styles.text)}>
                     {nodeData.icon}

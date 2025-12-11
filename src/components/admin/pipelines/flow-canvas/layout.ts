@@ -86,7 +86,18 @@ export function getLayoutedElements(
         nodesByRank.get(rankY)!.push(node);
     });
 
-    // Apply positions - center single nodes, spread parallel nodes
+    // Calculate actual content bounds for proper centering
+    let contentMinX = Number.POSITIVE_INFINITY;
+    let contentMaxX = 0;
+    nodes.forEach((node) => {
+        const pos = nodePositions.get(node.id)!;
+        const { width } = getNodeDimensions(node, opts);
+        contentMinX = Math.min(contentMinX, pos.x - width / 2);
+        contentMaxX = Math.max(contentMaxX, pos.x + width / 2);
+    });
+    const contentCenterX = (contentMinX + contentMaxX) / 2;
+
+    // Apply positions - center single nodes at content center, spread parallel nodes
     const layoutedNodes = nodes.map((node) => {
         const pos = nodePositions.get(node.id)!;
         const { width, height } = getNodeDimensions(node, opts);
@@ -95,8 +106,9 @@ export function getLayoutedElements(
         const rankY = Math.round(pos.y / 10) * 10;
         const nodesAtRank = nodesByRank.get(rankY) || [];
 
+        // Center single nodes at content center for proper container alignment
         const x = nodesAtRank.length === 1
-            ? graphCenterX - width / 2
+            ? contentCenterX - width / 2
             : pos.x - width / 2;
 
         return {
