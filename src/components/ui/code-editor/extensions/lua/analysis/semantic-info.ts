@@ -24,6 +24,52 @@ import type { Symbol } from './symbol-table';
 import type { AnalysisResult } from './analyzer';
 import { isTableLike, findMemberType } from './type-helpers';
 import { getDefinitionLoader, type GlobalDefinition, type FieldDefinition } from '../definitions/definition-loader';
+import { inferTableType } from './infer/infer-table';
+
+// =============================================================================
+// EXPRESSION RESOLUTION
+// =============================================================================
+
+/**
+ * Robustly resolve the type of an expression
+ * Handles nested table constructors vs cached types vs literals
+ */
+export function resolveExpressionType(
+    analysisResult: AnalysisResult,
+    expr: LuaExpression
+): LuaType {
+    if (!expr || !expr.range) {
+        return LuaTypes.Unknown;
+    }
+
+    // 1. Check cache first
+    const cachedType = analysisResult.types.get(expr.range[0]);
+
+    // 2. Special handling for table constructors to get nested structure
+    // (Cache might store generic table type, but we want detailed structure for hover)
+    if (isTableConstructor(expr)) {
+        return inferTableType(expr as import('../core/luaparse-types').LuaTableConstructorExpression, (e) => resolveExpressionType(analysisResult, e));
+    }
+
+    // 3. Return cached type if available
+    if (cachedType) {
+        return cachedType;
+    }
+
+    // 4. Fallback for literals (if not in cache for some reason)
+    switch (expr.type) {
+        case "StringLiteral": return LuaTypes.String;
+        case "NumericLiteral": return LuaTypes.Number;
+        case "BooleanLiteral": return LuaTypes.Boolean;
+        case "NilLiteral": return LuaTypes.Nil;
+        case "FunctionExpression": return LuaTypes.Function;
+        case "Identifier": {
+            // Should have been in cache or symbol table, but basic fallback
+            return LuaTypes.Unknown;
+        }
+        default: return LuaTypes.Unknown;
+    }
+}
 
 // =============================================================================
 // SEMANTIC INFO TYPES
@@ -59,6 +105,10 @@ export interface SemanticInfo {
 // MAIN API
 // =============================================================================
 
+export interface SemanticInfoOptions {
+    hookName?: string;
+}
+
 /**
  * Get complete semantic information for an AST node
  * Port of get_semantic_info from EmmyLua's SemanticModel
@@ -68,7 +118,8 @@ export interface SemanticInfo {
  */
 export function getSemanticInfo(
     analysisResult: AnalysisResult,
-    node: LuaNode
+    node: LuaNode,
+    options: SemanticInfoOptions = {}
 ): SemanticInfo | null {
     // Handle identifiers
     if (isIdentifier(node)) {
@@ -77,7 +128,7 @@ export function getSemanticInfo(
 
     // Handle member expressions (e.g., t.field, helpers.matches)
     if (isMemberExpression(node)) {
-        return getMemberExpressionSemanticInfo(analysisResult, node as LuaMemberExpression);
+        return getMemberExpressionSemanticInfo(analysisResult, node as LuaMemberExpression, options);
     }
 
     // Handle call expressions
@@ -110,12 +161,10 @@ export function getSemanticInfo(
         return getExpressionSemanticInfo(analysisResult, node as LuaExpression);
     }
 
-    // Fallback: try to get type from cache
-    if (node.range) {
-        const cachedType = analysisResult.types.get(node.range[0]);
-        if (cachedType) {
-            return { type: cachedType };
-        }
+    // Fallback: resolve type robustly
+    const resolvedType = resolveExpressionType(analysisResult, node as LuaExpression);
+    if (resolvedType.kind !== LuaTypes.Unknown.kind) {
+        return { type: resolvedType };
     }
 
     return null;
@@ -207,13 +256,14 @@ function getIdentifierSemanticInfo(
  */
 function getMemberExpressionSemanticInfo(
     analysisResult: AnalysisResult,
-    expr: LuaMemberExpression
+    expr: LuaMemberExpression,
+    options: SemanticInfoOptions = {}
 ): SemanticInfo | null {
     const memberName = expr.identifier.name;
     const definitionLoader = getDefinitionLoader();
 
     // Get the base semantic info
-    const baseInfo = getSemanticInfo(analysisResult, expr.base);
+    const baseInfo = getSemanticInfo(analysisResult, expr.base, options);
 
     // Check if we have cached type for this expression
     const cachedType = expr.range ? analysisResult.types.get(expr.range[0]) : undefined;
@@ -221,7 +271,7 @@ function getMemberExpressionSemanticInfo(
     // If base is a global/sandbox item, check its members
     if (baseInfo?.declaration?.kind === 'global') {
         const globalName = baseInfo.declaration.name;
-        const memberDef = definitionLoader.getMemberDefinition(globalName, memberName);
+        const memberDef = definitionLoader.getMemberDefinition(globalName, memberName, options.hookName);
 
         if (memberDef) {
             return {

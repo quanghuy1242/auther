@@ -65,6 +65,8 @@ export {
     mayBeNil,
     formatType,
     parseTypeString,
+    definitionToType,
+    globalDefinitionToType,
 } from "./analysis/type-system";
 
 // Symbol table exports

@@ -6,9 +6,26 @@
 
 import * as luaparse from "luaparse";
 import type { Range, Position } from "../protocol";
-import { createRangeFromCoords } from "../protocol";
+import { createRangeFromCoords, createRange } from "../protocol";
 import type { LuaChunk, LuaComment } from "./luaparse-types";
-import { asLuaChunk } from "./luaparse-types";
+import { asLuaChunk, LuaNode } from "./luaparse-types";
+
+// =============================================================================
+// NODE UTILITIES
+// =============================================================================
+
+/**
+ * Get the range of a node in the document
+ */
+export function getNodeRange(document: LuaDocument, node: LuaNode): Range {
+    if (node.loc) {
+        return document.locToRange(node.loc);
+    }
+    if (node.range) {
+        return document.offsetRangeToRange(node.range[0], node.range[1]);
+    }
+    return createRange({ line: 0, character: 0 }, { line: 0, character: 0 });
+}
 
 // =============================================================================
 // PARSE ERROR
@@ -143,6 +160,25 @@ export class LuaDocument {
      */
     getLength(): number {
         return this._text.length;
+    }
+
+    /**
+     * Get the word at a specific position
+     */
+    getWordAtPosition(pos: Position): string {
+        const line = this.getLine(pos.line);
+        if (!line) return "";
+
+        const wordPattern = /[a-zA-Z_][a-zA-Z0-9_]*/g;
+        let match;
+        while ((match = wordPattern.exec(line)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (pos.character >= start && pos.character <= end) {
+                return match[0];
+            }
+        }
+        return "";
     }
 
     // ---------------------------------------------------------------------------

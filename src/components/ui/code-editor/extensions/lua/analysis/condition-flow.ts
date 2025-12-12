@@ -9,6 +9,8 @@ import type { LuaType } from "./type-system";
 import { LuaTypeKind, LuaTypes, removeFalseOrNil, narrowFalseOrNil, unionType } from "./type-system";
 import type { FlowTree, FlowId, FlowNode } from "./flow-graph";
 import { FlowNodeKind, getSingleAntecedent, getMultiAntecedents } from "./flow-graph";
+import type { AnalysisResult } from "./analyzer";
+import type { Symbol as LuaSymbol } from "./symbol-table";
 
 // =============================================================================
 // RESULT TYPE OR CONTINUE
@@ -766,4 +768,39 @@ export function removeType(source: LuaType, toRemove: LuaType): LuaType {
     }
 
     return source;
+}
+// =============================================================================
+// PUBLIC UTILITIES
+// =============================================================================
+
+/**
+ * Get the narrowed type at a specific offset using flow analysis
+ * Wrapper around getTypeAtFlow that handles context creation
+ */
+export function getNarrowedType(
+    analysisResult: AnalysisResult,
+    symbol: LuaSymbol,
+    offset?: number
+): LuaType {
+    const baseType = symbol.type;
+
+    // If no offset or no flow tree, return base type
+    if (offset === undefined || analysisResult.flowTree.isEmpty()) {
+        return baseType;
+    }
+
+    // Get the flow ID at this offset
+    const flowId = analysisResult.flowTree.getFlowId(offset);
+    if (flowId === undefined) {
+        return baseType;
+    }
+
+    // Create narrowing context
+    const ctx: NarrowingContext = {
+        flowTree: analysisResult.flowTree,
+        types: analysisResult.types,
+        lookupSymbol: (name, off) => analysisResult.symbolTable.lookupSymbol(name, off),
+    };
+
+    return getTypeAtFlow(ctx, symbol.name, baseType, flowId);
 }

@@ -254,7 +254,10 @@ export function getTableFields(type: LuaType): Map<string, LuaTableTypeField> | 
 
 /**
  * Find a specific member type from a type
- * This is a simplified version - full member resolution is in member-resolution.ts
+ * 
+ * This function handles in-memory LuaType lookups (tables, arrays, tuples).
+ * For definition-based lookups (Ref types, sandbox items), use findMemberByKey
+ * from member-resolution.ts which also handles type conversion.
  */
 export function findMemberType(type: LuaType, memberName: string): LuaType | null {
     // TableType - look up in fields map

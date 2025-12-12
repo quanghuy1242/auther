@@ -30,7 +30,6 @@ import type {
     LuaWhileStatement,
     LuaDoStatement,
     LuaRepeatStatement,
-    LuaTableKey,
 } from "../core/luaparse-types";
 import {
     isIdentifier,
@@ -44,21 +43,28 @@ import {
     LuaTypeKind,
     LuaTypes,
     LuaFunctionType,
-    LuaTableType,
-    LuaTupleType,
-    LuaRefType,
-    LuaUnionType,
     LuaFunctionParam,
     functionType,
     tableType,
-    unionType,
-    arrayType,
-    parseTypeString,
+    definitionToType,
+    globalDefinitionToType,
 } from "./type-system";
 import { DiagnosticCollector } from "./diagnostics";
 import { getDefinitionLoader } from "../definitions/definition-loader";
-import type { FieldDefinition, FunctionDefinition, TableDefinition, GlobalDefinition, ParamDefinition } from "../definitions/definition-loader";
+import type { FieldDefinition } from "../definitions/definition-loader";
 import { FlowTree, FlowBinder, FlowId, finishFlowLabel } from "./flow-graph";
+// Modular inference functions
+import {
+    InferContext,
+    inferBinaryExpressionType as inferBinaryType,
+    inferLogicalExpressionType as inferLogicalType,
+    inferUnaryExpressionType as inferUnaryType,
+    inferExpressionType as inferExpressionTypeFn,
+    inferTableType as inferTableTypeFn,
+    inferCallExpressionType as inferCallType,
+    inferMemberExpressionType as inferMemberType,
+    inferIndexExpressionType as inferIndexType,
+} from "./infer";
 
 // =============================================================================
 // ANALYZER OPTIONS
@@ -779,57 +785,31 @@ export class SemanticAnalyzer {
     // Type Inference
     // ---------------------------------------------------------------------------
 
+    /**
+     * Analyze an expression by delegating to the modular infer system
+     */
     private inferExpressionType(expr: LuaExpression): LuaType {
-        if (!expr) return LuaTypes.Unknown;
+        // Create context for the inference module
+        const context: InferContext = {
+            lookupSymbolType: (name, offset) => {
+                const symbol = this.symbolTable.lookupSymbol(name, offset);
+                // Side effect: track reference
+                if (symbol && offset) {
+                    this.symbolTable.addReference(symbol.id, offset);
+                    return symbol.type;
+                }
+                return null;
+            },
+            inferType: (e) => this.inferExpressionType(e),
+            getDefinitionLoader: () => this.definitionLoader,
+            hookName: this.options.hookName,
+            definitionToType: (def) => this.definitionToType(def as FieldDefinition),
+            globalDefinitionToType: (def) => this.globalDefinitionToType(def),
+            buildHelpersType: () => this.buildHelpersType(),
+            buildContextType: () => this.buildContextType()
+        };
 
-        switch (expr.type) {
-            case "NilLiteral":
-                return LuaTypes.Nil;
-
-            case "BooleanLiteral":
-                return LuaTypes.Boolean;
-
-            case "NumericLiteral":
-                return LuaTypes.Number;
-
-            case "StringLiteral":
-                return LuaTypes.String;
-
-            case "VarargLiteral":
-                return { kind: LuaTypeKind.Variadic, elementType: LuaTypes.Any };
-
-            case "Identifier":
-                return this.inferIdentifierType(expr as LuaIdentifier);
-
-            case "MemberExpression":
-                return this.inferMemberExpressionType(expr as LuaMemberExpression);
-
-            case "IndexExpression":
-                return this.inferIndexExpressionType(expr as LuaIndexExpression);
-
-            case "CallExpression":
-            case "StringCallExpression":
-            case "TableCallExpression":
-                return this.inferCallExpressionType(expr as LuaCallExpression);
-
-            case "FunctionExpression":
-                return this.buildFunctionType(expr as LuaFunctionExpression);
-
-            case "TableConstructorExpression":
-                return this.inferTableType(expr as LuaTableConstructorExpression);
-
-            case "BinaryExpression":
-                return this.inferBinaryExpressionType(expr as LuaBinaryExpression);
-
-            case "UnaryExpression":
-                return this.inferUnaryExpressionType(expr as LuaUnaryExpression);
-
-            case "LogicalExpression":
-                return this.inferLogicalExpressionType(expr as LuaLogicalExpression);
-
-            default:
-                return LuaTypes.Unknown;
-        }
+        return inferExpressionTypeFn(expr, context);
     }
 
     private inferIdentifierType(ident: LuaIdentifier): LuaType {
@@ -869,322 +849,67 @@ export class SemanticAnalyzer {
         return LuaTypes.Unknown;
     }
 
+    /**
+     * Infer member expression type - delegates to infer-member.ts
+     */
     private inferMemberExpressionType(expr: LuaMemberExpression): LuaType {
-        const baseType = this.analyzeExpression(expr.base as LuaExpression);
-        const memberName = expr.identifier.name;
-
-        // Handle table types with fields
-        if (baseType.kind === LuaTypeKind.TableType) {
-            const field = (baseType as LuaTableType).fields.get(memberName);
-            if (field) {
-                return field.type;
-            }
-        }
-
-        // Handle reference types
-        if (baseType.kind === LuaTypeKind.Ref) {
-            // Look up in custom types
-            const typeDef = this.definitionLoader.getType((baseType as { name: string }).name);
-            if (typeDef?.fields?.[memberName]) {
-                return parseTypeString(typeDef.fields[memberName].type);
-            }
-        }
-
-        // Handle helpers/context member access
-        if (isIdentifier(expr.base)) {
-            const baseName = (expr.base as LuaIdentifier).name;
-
-            if (baseName === "helpers") {
-                const helperDef = this.definitionLoader.getHelper(memberName);
-                if (helperDef) {
-                    return this.definitionToType(helperDef);
-                }
-            }
-
-            if (baseName === "context") {
-                const contextFields = this.definitionLoader.getContextFieldsForHook(
-                    this.options.hookName
-                );
-                const fieldDef = contextFields[memberName];
-                if (fieldDef) {
-                    return this.definitionToType(fieldDef);
-                }
-            }
-
-            // Standard library access
-            const libDef = this.definitionLoader.getLibrary(baseName);
-            if (libDef?.fields?.[memberName]) {
-                return this.definitionToType(libDef.fields[memberName]);
-            }
-        }
-
-        return LuaTypes.Unknown;
-    }
-
-    private inferIndexExpressionType(expr: LuaIndexExpression): LuaType {
-        const baseType = this.analyzeExpression(expr.base as LuaExpression);
-        const indexType = this.analyzeExpression(expr.index as LuaExpression);
-
-        // Handle array access
-        if (baseType.kind === LuaTypeKind.Array) {
-            return (baseType as { elementType: LuaType }).elementType;
-        }
-
-        // Handle tuple with numeric index
-        if (baseType.kind === LuaTypeKind.Tuple) {
-            const tupleType = baseType as LuaTupleType;
-            if (indexType.kind === LuaTypeKind.NumberLiteral) {
-                const index = (indexType as { value: number }).value;
-                // Lua is 1-indexed
-                if (index >= 1 && index <= tupleType.elements.length) {
-                    return tupleType.elements[index - 1];
-                }
-            }
-            // For non-literal index, return union of all element types
-            if (tupleType.elements.length > 0) {
-                return tupleType.elements[0]; // Simplified - could return union
-            }
-        }
-
-        // Handle table with index type
-        if (baseType.kind === LuaTypeKind.TableType) {
-            const tableType = baseType as LuaTableType;
-
-            // Check for string literal index
-            if (indexType.kind === LuaTypeKind.StringLiteral) {
-                const key = (indexType as { value: string }).value;
-                const field = tableType.fields.get(key);
-                if (field) {
-                    return field.type;
-                }
-            }
-
-            // Check for numeric literal index
-            if (indexType.kind === LuaTypeKind.NumberLiteral) {
-                const key = String((indexType as { value: number }).value);
-                const field = tableType.fields.get(key);
-                if (field) {
-                    return field.type;
-                }
-            }
-
-            // Generic value type
-            if (tableType.valueType) {
-                return tableType.valueType;
-            }
-        }
-
-        // Handle Ref types by looking up type definitions
-        if (baseType.kind === LuaTypeKind.Ref) {
-            const refTypeName = (baseType as LuaRefType).name;
-            const typeFields = this.definitionLoader.getTypeFields(refTypeName);
-            if (typeFields && indexType.kind === LuaTypeKind.StringLiteral) {
-                const key = (indexType as { value: string }).value;
-                if (typeFields[key]) {
-                    return parseTypeString(typeFields[key].type);
-                }
-            }
-        }
-
-        // Handle Union types - try each member
-        if (baseType.kind === LuaTypeKind.Union) {
-            const unionType = baseType as LuaUnionType;
-            for (const member of unionType.types) {
-                // Skip nil in union
-                if (member.kind === LuaTypeKind.Nil) continue;
-
-                // Create a fake index expression for recursive call
-                const memberResult = this.inferMemberTypeFromBase(member, indexType);
-                if (memberResult.kind !== LuaTypeKind.Unknown) {
-                    return memberResult;
-                }
-            }
-        }
-
-        return LuaTypes.Unknown;
+        return inferMemberType(
+            expr,
+            (e: LuaExpression) => this.analyzeExpression(e),
+            () => this.definitionLoader,
+            this.options.hookName,
+            (def: unknown) => this.definitionToType(def as FieldDefinition)
+        );
     }
 
     /**
-     * Helper to infer member type from a base type and index type
-     * Used for Union type handling in index expressions
+     * Infer index expression type - delegates to infer-member.ts
      */
-    private inferMemberTypeFromBase(baseType: LuaType, indexType: LuaType): LuaType {
-        if (baseType.kind === LuaTypeKind.Array) {
-            return (baseType as { elementType: LuaType }).elementType;
-        }
-
-        if (baseType.kind === LuaTypeKind.TableType) {
-            const tableType = baseType as LuaTableType;
-            if (indexType.kind === LuaTypeKind.StringLiteral) {
-                const key = (indexType as { value: string }).value;
-                const field = tableType.fields.get(key);
-                if (field) return field.type;
-            }
-            if (tableType.valueType) return tableType.valueType;
-        }
-
-        return LuaTypes.Unknown;
+    private inferIndexExpressionType(expr: LuaIndexExpression): LuaType {
+        return inferIndexType(
+            expr,
+            (e: LuaExpression) => this.analyzeExpression(e),
+            () => this.definitionLoader
+        );
     }
 
+    /**
+     * Infer call expression type - delegates to infer-call.ts
+     */
     private inferCallExpressionType(call: LuaCallExpression): LuaType {
-        const baseType = this.analyzeExpression(call.base as LuaExpression);
-
-        // Analyze arguments to ensure references are tracked
-        if (call.arguments && Array.isArray(call.arguments)) {
-            for (const arg of call.arguments) {
-                this.analyzeExpression(arg);
-            }
-        }
-
-        if (baseType.kind === LuaTypeKind.FunctionType) {
-            const fnType = baseType as LuaFunctionType;
-            if (fnType.returns.length > 0) {
-                return fnType.returns.length === 1
-                    ? fnType.returns[0]
-                    : { kind: LuaTypeKind.Tuple, elements: fnType.returns } as LuaType;
-            }
-            return LuaTypes.Void;
-        }
-
-        // Handle known function calls
-        if (isMemberExpression(call.base)) {
-            const memberExpr = call.base as LuaMemberExpression;
-            if (isIdentifier(memberExpr.base)) {
-                const baseName = (memberExpr.base as LuaIdentifier).name;
-                const methodName = memberExpr.identifier.name;
-
-                // Check library methods
-                const methodDef = this.definitionLoader.getLibraryMethod(baseName, methodName);
-                if (methodDef?.kind === "function" && methodDef.returns) {
-                    return parseTypeString(methodDef.returns.type);
-                }
-
-                // Check helpers
-                if (baseName === "helpers") {
-                    const helperDef = this.definitionLoader.getHelper(methodName);
-                    if (helperDef?.returns) {
-                        return parseTypeString(helperDef.returns.type);
-                    }
-                }
-            }
-        }
-
-        return LuaTypes.Unknown;
+        return inferCallType(
+            call,
+            (e: LuaExpression) => this.analyzeExpression(e),
+            () => this.definitionLoader
+        );
     }
 
+    /**
+     * Infer table type - delegates to infer-table.ts
+     */
     private inferTableType(expr: LuaTableConstructorExpression): LuaType {
-        const fields = new Map<string, { name: string; type: LuaType; optional?: boolean }>();
-        let isArray = true;
-        let arrayIndex = 1;
-
-        for (const field of expr.fields) {
-            switch (field.type) {
-                case "TableKeyString": {
-                    isArray = false;
-                    const keyName = (field.key as LuaIdentifier).name;
-                    const valueType = this.analyzeExpression(field.value as LuaExpression);
-                    fields.set(keyName, { name: keyName, type: valueType });
-                    break;
-                }
-
-                case "TableKey": {
-                    isArray = false;
-                    // Dynamic key - track usage
-                    this.analyzeExpression((field as LuaTableKey).key);
-                    this.analyzeExpression((field as LuaTableKey).value);
-                    break;
-                }
-
-                case "TableValue": {
-                    const valueType = this.analyzeExpression(field.value as LuaExpression);
-                    fields.set(String(arrayIndex), { name: String(arrayIndex), type: valueType });
-                    arrayIndex++;
-                    break;
-                }
-            }
-        }
-
-        if (isArray && fields.size > 0) {
-            // Infer array element type
-            const types = Array.from(fields.values()).map((f) => f.type);
-            const elementType = types.length === 1 ? types[0] : unionType(...types);
-            return arrayType(elementType);
-        }
-
-        return tableType(Array.from(fields.values()));
+        return inferTableTypeFn(expr, (e: LuaExpression) => this.analyzeExpression(e));
     }
 
+    /**
+     * Infer binary expression type - delegates to infer-binary.ts
+     */
     private inferBinaryExpressionType(expr: LuaBinaryExpression): LuaType {
-        this.analyzeExpression(expr.left as LuaExpression);
-        this.analyzeExpression(expr.right as LuaExpression);
-        const op = expr.operator;
-
-        // Comparison operators
-        if (["==", "~=", "<", ">", "<=", ">="].includes(op)) {
-            return LuaTypes.Boolean;
-        }
-
-        // String concatenation
-        if (op === "..") {
-            return LuaTypes.String;
-        }
-
-        // Arithmetic operators
-        if (["+", "-", "*", "/", "//", "%", "^"].includes(op)) {
-            // If either is integer, result might be integer (for // only)
-            if (op === "//") {
-                return LuaTypes.Integer;
-            }
-            return LuaTypes.Number;
-        }
-
-        // Bitwise operators
-        if (["&", "|", "~", "<<", ">>"].includes(op)) {
-            return LuaTypes.Integer;
-        }
-
-        return LuaTypes.Unknown;
+        return inferBinaryType(expr, (e: LuaExpression) => this.analyzeExpression(e));
     }
 
+    /**
+     * Infer unary expression type - delegates to infer-binary.ts
+     */
     private inferUnaryExpressionType(expr: LuaUnaryExpression): LuaType {
-        // Track usage in operand
-        this.analyzeExpression(expr.argument);
-        const op = expr.operator;
-
-        if (op === "not") {
-            return LuaTypes.Boolean;
-        }
-
-        if (op === "-") {
-            return LuaTypes.Number;
-        }
-
-        if (op === "#") {
-            return LuaTypes.Integer;
-        }
-
-        if (op === "~") {
-            return LuaTypes.Integer;
-        }
-
-        return LuaTypes.Unknown;
+        return inferUnaryType(expr, (e: LuaExpression) => this.analyzeExpression(e));
     }
 
+    /**
+     * Infer logical expression type - delegates to infer-binary.ts
+     */
     private inferLogicalExpressionType(expr: LuaLogicalExpression): LuaType {
-        const left = this.analyzeExpression(expr.left as LuaExpression);
-        const right = this.analyzeExpression(expr.right as LuaExpression);
-
-        if (expr.operator === "and") {
-            // Returns right if left is truthy, otherwise left
-            return unionType(left, right);
-        }
-
-        if (expr.operator === "or") {
-            // Returns left if truthy, otherwise right
-            return unionType(left, right);
-        }
-
-        return LuaTypes.Unknown;
+        return inferLogicalType(expr, (e: LuaExpression) => this.analyzeExpression(e));
     }
 
     // ---------------------------------------------------------------------------
@@ -1237,82 +962,21 @@ export class SemanticAnalyzer {
         return tableType(fields);
     }
 
+    /**
+     * Convert a field definition to LuaType
+     * Delegates to centralized function in type-system.ts
+     */
     private definitionToType(def: FieldDefinition | undefined): LuaType {
-        if (!def) return LuaTypes.Unknown;
-
-        switch (def.kind) {
-            case "function": {
-                const fnDef = def as FunctionDefinition;
-                const params: LuaFunctionParam[] = (fnDef.params ?? []).map((p) => ({
-                    name: p.name,
-                    type: parseTypeString(p.type),
-                    optional: p.optional,
-                    vararg: p.vararg,
-                }));
-                const returns = fnDef.returns
-                    ? [parseTypeString(fnDef.returns.type)]
-                    : [LuaTypes.Void];
-                return functionType(params, returns, { isAsync: fnDef.async });
-            }
-
-            case "property":
-                return parseTypeString(def.type);
-
-            case "table": {
-                const tableDef = def as TableDefinition;
-                if (!tableDef.fields) return LuaTypes.Table;
-
-                const fields: Array<{ name: string; type: LuaType }> = [];
-                for (const [name, fieldDef] of Object.entries(tableDef.fields)) {
-                    fields.push({
-                        name,
-                        type: this.definitionToType(fieldDef),
-                    });
-                }
-                return tableType(fields);
-            }
-
-            default:
-                return LuaTypes.Unknown;
-        }
+        return definitionToType(def as unknown as Parameters<typeof definitionToType>[0]);
     }
 
-    private globalDefinitionToType(def: GlobalDefinition | undefined): LuaType {
-        if (!def) return LuaTypes.Unknown;
-
-        switch (def.kind) {
-            case "function": {
-                const params: LuaFunctionParam[] = (def.params ?? []).map((p: ParamDefinition) => ({
-                    name: p.name,
-                    type: parseTypeString(p.type),
-                    optional: p.optional,
-                    vararg: p.vararg,
-                }));
-                const returns = def.returns
-                    ? [parseTypeString(def.returns.type)]
-                    : [LuaTypes.Void];
-                return functionType(params, returns);
-            }
-
-            case "property":
-                return def.type ? parseTypeString(def.type) : LuaTypes.Unknown;
-
-            case "table": {
-                if (!def.fields) return LuaTypes.Table;
-
-                const fields: Array<{ name: string; type: LuaType }> = [];
-                for (const [name, fieldDef] of Object.entries(def.fields)) {
-                    fields.push({
-                        name,
-                        type: this.definitionToType(fieldDef as FieldDefinition),
-                    });
-                }
-                return tableType(fields);
-            }
-
-            default:
-                return LuaTypes.Unknown;
-        }
+    /**
+     * Convert a global definition to LuaType
+     * Delegates to centralized function in type-system.ts
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private globalDefinitionToType(def: any): LuaType {
+        return globalDefinitionToType(def);
     }
 
     // ---------------------------------------------------------------------------

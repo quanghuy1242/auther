@@ -904,3 +904,137 @@ export function parseTypeString(typeStr: string): LuaType {
     // Default to reference type for unknown types
     return refType(typeStr);
 }
+
+// =============================================================================
+// TYPE BRIDGE - JSON DEFINITION TO LUA TYPE
+// =============================================================================
+// Converts JSON schema types (from definition-loader.ts) to runtime LuaType.
+// This centralizes the conversion logic that was previously in analyzer.ts.
+
+// Import types are defined inline to avoid circular dependencies
+// These match the interfaces in definition-loader.ts
+
+interface ParamDef {
+    name: string;
+    type: string;
+    optional?: boolean;
+    vararg?: boolean;
+}
+
+interface ReturnDef {
+    type: string;
+}
+
+interface FunctionDef {
+    kind: "function";
+    params?: ParamDef[];
+    returns?: ReturnDef;
+    async?: boolean;
+}
+
+interface PropertyDef {
+    kind: "property";
+    type: string;
+    optional?: boolean;
+}
+
+interface TableDef {
+    kind: "table";
+    fields?: Record<string, FieldDef>;
+}
+
+type FieldDef = FunctionDef | PropertyDef | TableDef;
+
+interface GlobalDef {
+    kind: "function" | "table" | "property";
+    type?: string;
+    params?: ParamDef[];
+    returns?: ReturnDef;
+    fields?: Record<string, FieldDef>;
+}
+
+/**
+ * Convert a JSON field definition to a LuaType
+ * This handles function, property, and table definitions from JSON files
+ */
+export function definitionToType(def: FieldDef | undefined): LuaType {
+    if (!def) return LuaTypes.Unknown;
+
+    switch (def.kind) {
+        case "function": {
+            const fnDef = def as FunctionDef;
+            const params: LuaFunctionParam[] = (fnDef.params ?? []).map((p) => ({
+                name: p.name,
+                type: parseTypeString(p.type),
+                optional: p.optional,
+                vararg: p.vararg,
+            }));
+            const returns = fnDef.returns
+                ? [parseTypeString(fnDef.returns.type)]
+                : [LuaTypes.Void];
+            return functionType(params, returns, { isAsync: fnDef.async });
+        }
+
+        case "property":
+            return parseTypeString((def as PropertyDef).type);
+
+        case "table": {
+            const tableDef = def as TableDef;
+            if (!tableDef.fields) return LuaTypes.Table;
+
+            const fields: Array<{ name: string; type: LuaType }> = [];
+            for (const [name, fieldDef] of Object.entries(tableDef.fields)) {
+                fields.push({
+                    name,
+                    type: definitionToType(fieldDef),
+                });
+            }
+            return tableType(fields);
+        }
+
+        default:
+            return LuaTypes.Unknown;
+    }
+}
+
+/**
+ * Convert a global definition to a LuaType
+ * Globals have a slightly different shape than field definitions
+ */
+export function globalDefinitionToType(def: GlobalDef | undefined): LuaType {
+    if (!def) return LuaTypes.Unknown;
+
+    switch (def.kind) {
+        case "function": {
+            const params: LuaFunctionParam[] = (def.params ?? []).map((p: ParamDef) => ({
+                name: p.name,
+                type: parseTypeString(p.type),
+                optional: p.optional,
+                vararg: p.vararg,
+            }));
+            const returns = def.returns
+                ? [parseTypeString(def.returns.type)]
+                : [LuaTypes.Void];
+            return functionType(params, returns);
+        }
+
+        case "property":
+            return def.type ? parseTypeString(def.type) : LuaTypes.Unknown;
+
+        case "table": {
+            if (!def.fields) return LuaTypes.Table;
+
+            const fields: Array<{ name: string; type: LuaType }> = [];
+            for (const [name, fieldDef] of Object.entries(def.fields)) {
+                fields.push({
+                    name,
+                    type: definitionToType(fieldDef as FieldDef),
+                });
+            }
+            return tableType(fields);
+        }
+
+        default:
+            return LuaTypes.Unknown;
+    }
+}

@@ -8,20 +8,26 @@ A TypeScript-based Lua LSP implementation specifically designed for the Auther p
 
 ### ✅ Implemented
 
-#### **Autocomplete** (`handlers/completion.ts`)
+#### **Autocomplete** (`handlers/completion/`)
+- Modular provider architecture (Postfix, Keywords, Equality, FunctionArg, TableField, DocTag, DocType, DocName, Desc, Env, Member)
 - Global variables (`context`, `helpers`)
 - Built-in Lua libraries (`math`, `string`, `table`)
 - Local variables and function parameters
 - Member access (`.` and `:` methods)
 - Hook-specific context fields (e.g., `context.email` for signup hooks)
 - Library function signatures with parameter hints
+- Postfix templates
+- Type-aware completions
 
-#### **Hover Information** (`handlers/hover.ts`)
+#### **Hover Information** (`handlers/hover/`)
+- Modular content building architecture
 - Type information on hover
 - Function signatures
 - Documentation from `---@` comments
 - Multi-return type display
 - Flow-based type narrowing results
+- Shared inference logic via `analysis/infer`
+- Centralized semantic resolution via `analysis/semantic-info.ts`
 
 #### **Go to Definition** (`handlers/definition.ts`)
 - Jump to variable declarations
@@ -71,32 +77,46 @@ A TypeScript-based Lua LSP implementation specifically designed for the Auther p
 ### Core Components
 
 ```
-lua-extensions-2/
-├── analysis/              # Type inference and analysis
-│   ├── analyzer.ts       # Main analyzer orchestrator
-│   ├── type-system.ts    # Type representation and operations
-│   ├── symbol-table.ts   # Symbol tracking and scopes
-│   └── flow-graph.ts     # Control flow analysis
+lua/
+src/components/ui/code-editor/extensions/lua/
+├── index.ts              # Main exports and extension factory
+│
+├── analysis/             # Code analysis
+│   ├── analyzer.ts       # AST traversal and type inference (main entry)
+│   ├── symbol-table.ts   # Variable/function declarations
+│   ├── type-system.ts    # Type definitions and utilities
+│   ├── flow-graph.ts     # Control flow analysis
+│   ├── condition-flow.ts # Type narrowing in conditionals
+│   ├── diagnostics.ts    # Error/warning collection
+│   ├── member-resolution.ts # Member type lookups
+│   ├── type-helpers.ts   # Helper type utilities
+│   ├── semantic-info.ts  # Semantic information API
+│   └── infer/            # Modular type inference
+│       ├── index.ts       # Re-exports
+│       ├── infer-binary.ts   # Binary/unary operators
+│       ├── infer-call.ts     # Function calls
+│       ├── infer-expression.ts # Expression types
+│       ├── infer-member.ts   # Member access
+│       └── infer-table.ts    # Table constructors
 │
 ├── handlers/             # LSP feature handlers
 │   ├── completion.ts     # Autocomplete
-│   ├── hover.ts          # Hover info
+│   ├── hover.ts          # Hover information
+│   ├── diagnostics.ts    # Error checking
 │   ├── definition.ts     # Go to definition
 │   ├── references.ts     # Find references
-│   ├── signature-help.ts # Parameter hints
-│   ├── semantic-tokens.ts# Syntax highlighting
-│   ├── diagnostics.ts    # Error checking
-│   └── document-symbols.ts # Outline view
+│   ├── document-symbols.ts # Outline view
+│   ├── semantic-tokens.ts # Syntax highlighting
+│   └── signature-help.ts # Function signatures
 │
 ├── definitions/          # Type definitions and schemas
-│   ├── definition-loader.ts  # Loads type definitions
-│   ├── lua-builtins.json    # Lua standard library types
-│   ├── auther-globals.json  # Custom globals (context, helpers)
-│   └── hooks-schema.json    # Hook-specific schemas
+│   ├── definition-loader.ts    # Loads type definitions (JSON → runtime)
+│   ├── lua-builtins.json       # Lua standard library types
+│   └── sandbox-definitions.json # Pipeline sandbox (context, helpers, hooks, types)
 │
 ├── core/                 # Core infrastructure
 │   ├── document.ts       # Document model and AST
-│   └── lsp-types.ts      # LSP protocol types
+│   └── luaparse-types.ts # Lua parser type definitions
 │
 ├── codemirror/           # CodeMirror integration
 │   ├── completion-source.ts  # CM autocomplete adapter
@@ -179,7 +199,7 @@ context.name      -- string
 context.expiresAt -- string | nil
 ```
 
-**Configuration**: [hooks-schema.json](./definitions/hooks-schema.json)
+**Configuration**: Hook-specific fields are defined in [sandbox-definitions.json](./definitions/sandbox-definitions.json) under the `hooks` section.
 
 ### Helper Functions
 
@@ -191,7 +211,7 @@ helpers.hash(value)            -- string
 helpers.http(url, options)     -- Promise-like
 ```
 
-**Configuration**: [auther-globals.json](./definitions/auther-globals.json)
+**Configuration**: Helper functions are defined in [sandbox-definitions.json](./definitions/sandbox-definitions.json) under the `helpers` section.
 
 ---
 
@@ -313,27 +333,6 @@ const extensions = [
     linter(createLuaLinter({ hookName: "before_signup" }))
 ];
 ```
-
----
-
-## Known Limitations
-
-### Not Implemented
-- ❌ `type(x) == "string"` narrowing (in progress)
-- ❌ Table field completion in literals `{ | }`
-- ❌ Rename symbol
-- ❌ Code actions (extract variable, etc.)
-- ❌ Call hierarchy
-- ❌ Inlay hints
-
-### Partial Support
-- ⚠️ Generic type instantiation (basic only)
-- ⚠️ Variadic type unpacking (basic only)
-- ⚠️ Operator overloading (not supported)
-- ⚠️ Metatable `__index` resolution (basic only)
-
-See [9_lua_lsp_gaps_analysis.md](../../../../../docs/9_lua_lsp_gaps_analysis.md) for full comparison with EmmyLua.
-
 ---
 
 ## Performance
@@ -462,14 +461,14 @@ localStorage.setItem("lua-lsp-debug", "true");
 
 ### Hook Configuration
 
-Add new hook types in [hooks-schema.json](./definitions/hooks-schema.json):
+Add new hook types in [sandbox-definitions.json](./definitions/sandbox-definitions.json):
 
 ```json
 {
-    "before_custom_hook": {
-        "description": "Runs before custom action",
-        "context": {
-            "fields": {
+    "hooks": {
+        "before_custom_hook": {
+            "description": "Runs before custom action",
+            "context": {
                 "customField": {
                     "kind": "property",
                     "type": "string",
@@ -483,19 +482,19 @@ Add new hook types in [hooks-schema.json](./definitions/hooks-schema.json):
 
 ### Global Functions
 
-Add new globals in [auther-globals.json](./definitions/auther-globals.json):
+Add new globals in [sandbox-definitions.json](./definitions/sandbox-definitions.json):
 
 ```json
 {
-    "myHelper": {
-        "kind": "function",
-        "description": "My custom helper",
-        "params": [
-            { "name": "input", "type": "string" }
-        ],
-        "returns": [
-            { "type": "boolean" }
-        ]
+    "helpers": {
+        "myHelper": {
+            "kind": "function",
+            "description": "My custom helper",
+            "params": [
+                { "name": "input", "type": "string" }
+            ],
+            "returns": { "type": "boolean" }
+        }
     }
 }
 ```

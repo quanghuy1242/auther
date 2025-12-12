@@ -6,7 +6,7 @@
 // See: emmylua-analyzer-rust/crates/emmylua_code_analysis/src/semantic/member/
 
 import type { LuaType, LuaTableType, LuaArrayType, LuaTupleType, LuaUnionType } from './type-system';
-import { LuaTypeKind, LuaTypes, formatType } from './type-system';
+import { LuaTypeKind, LuaTypes, formatType, definitionToType, parseTypeString } from './type-system';
 import type { AnalysisResult } from './analyzer';
 import { getDefinitionLoader, type FieldDefinition } from '../definitions/definition-loader';
 
@@ -128,11 +128,13 @@ export function findMemberByKey(
         const definitionLoader = getDefinitionLoader();
         const typeFields = definitionLoader.getTypeFields(refType.name);
         if (typeFields && key in typeFields) {
-            const fieldDef = typeFields[key] as unknown as FieldDefinition;
+            const fieldDef = typeFields[key];
+            // Use parseTypeString to convert the field type
+            const fieldType = fieldDef.type ? parseTypeString(fieldDef.type) : LuaTypes.Unknown;
             return {
                 name: key,
-                type: LuaTypes.Unknown, // Would need definitionToType here
-                source: { kind: 'sandbox', definition: fieldDef },
+                type: fieldType,
+                source: { kind: 'sandbox', definition: fieldDef as unknown as FieldDefinition },
                 description: fieldDef.description,
             };
         }
@@ -182,7 +184,7 @@ export function findSandboxMembers(name: string, hookName?: string): MemberInfo[
         for (const [fieldName, fieldDef] of Object.entries(item.fields)) {
             members.push({
                 name: fieldName,
-                type: LuaTypes.Unknown, // Would need conversion
+                type: definitionToType(fieldDef as unknown as Parameters<typeof definitionToType>[0]),
                 source: { kind: 'sandbox', definition: fieldDef },
                 description: (fieldDef as FieldDefinition).description,
                 isMethod: (fieldDef as FieldDefinition).kind === 'function',
@@ -197,7 +199,7 @@ export function findSandboxMembers(name: string, hookName?: string): MemberInfo[
             for (const [fieldName, fieldDef] of Object.entries(hookFields)) {
                 members.push({
                     name: fieldName,
-                    type: LuaTypes.Unknown,
+                    type: definitionToType(fieldDef as unknown as Parameters<typeof definitionToType>[0]),
                     source: { kind: 'sandbox', definition: fieldDef },
                     description: (fieldDef as { description?: string }).description,
                 });
@@ -221,7 +223,7 @@ export function findLibraryMembers(name: string): MemberInfo[] {
     for (const [fieldName, fieldDef] of Object.entries(lib.fields)) {
         members.push({
             name: fieldName,
-            type: LuaTypes.Unknown,
+            type: definitionToType(fieldDef as unknown as Parameters<typeof definitionToType>[0]),
             source: { kind: 'library', definition: fieldDef },
             description: (fieldDef as FieldDefinition).description,
             isMethod: (fieldDef as FieldDefinition).kind === 'function',
@@ -292,9 +294,10 @@ function collectMembers(
         if (typeFields) {
             for (const [name, fieldDef] of Object.entries(typeFields)) {
                 const def = fieldDef as unknown as FieldDefinition;
+                const fieldType = fieldDef.type ? parseTypeString(fieldDef.type) : LuaTypes.Unknown;
                 members.push({
                     name,
-                    type: LuaTypes.Unknown,
+                    type: fieldType,
                     source: { kind: 'sandbox', definition: def },
                     description: def.description,
                 });

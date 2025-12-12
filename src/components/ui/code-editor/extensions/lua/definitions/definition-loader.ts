@@ -1,8 +1,26 @@
 // =============================================================================
 // DEFINITION LOADER
 // =============================================================================
-// Loads and provides access to Lua and sandbox definitions
-// Similar to EmmyLua's definition system
+// Loads and provides access to Lua and sandbox definitions from JSON files.
+// Similar to EmmyLua's definition system.
+//
+// IMPORTANT: This module defines two categories of types:
+//
+// 1. JSON SCHEMA TYPES (below)
+//    - ParamDefinition, FunctionDefinition, PropertyDefinition, etc.
+//    - These describe the SHAPE of JSON definition files (lua-builtins.json,
+//      sandbox-definitions.json).
+//    - Used for parsing/loading definitions from disk.
+//
+// 2. RUNTIME TYPES (in analysis/type-system.ts)
+//    - LuaType, LuaFunctionType, LuaTableType, etc.
+//    - These are the actual type representations used during analysis.
+//    - Used for type inference, type checking, and completion.
+//
+// To convert between them, use:
+//    import { definitionToType, parseTypeString } from '../analysis/type-system';
+//
+// =============================================================================
 
 import luaBuiltinsJson from "./lua-builtins.json";
 import sandboxDefinitionsJson from "./sandbox-definitions.json";
@@ -10,6 +28,8 @@ import sandboxDefinitionsJson from "./sandbox-definitions.json";
 // =============================================================================
 // JSON SCHEMA TYPES
 // =============================================================================
+// These interfaces describe the structure of definition JSON files.
+// They are NOT the same as LuaType used for runtime type inference.
 
 export interface ParamDefinition {
     name: string;
@@ -524,6 +544,25 @@ export class DefinitionLoader {
         }
 
         return results;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Type Resolution
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Resolve a type name to its expanded definition fields
+     * Handles custom types defined in sandbox-definitions.json
+     * 
+     * @param typeName - The type name to resolve (e.g., "FetchResponse", "PipelineUser")
+     * @returns The type's field definitions, or undefined if not found
+     * 
+     * @example
+     * const fields = loader.resolveTypeName("FetchResponse");
+     * // Returns: { status: { type: "number", ... }, body: { type: "string", ... }, ... }
+     */
+    resolveTypeName(typeName: string): Record<string, { type: string; description?: string; optional?: boolean }> | undefined {
+        return this.getTypeFields(typeName);
     }
 }
 
