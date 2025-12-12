@@ -285,10 +285,10 @@ export class LuaDocument {
                     : this._text.length;
 
                 // Replace error line content with spaces (preserve newlines/length for offsets)
-                const lineLength = nextLineStart - lineStart;
-                const charCode = this._text.charCodeAt(nextLineStart - 1);
-                const hasCR = charCode === 13; // \r
-                const hasLF = charCode === 10; // \n (previous char if CRLF?) -> Simplify: just look at slice
+                // const lineLength = nextLineStart - lineStart;
+                // const charCode = this._text.charCodeAt(nextLineStart - 1);
+                // const hasCR = charCode === 13; // \r
+                // const hasLF = charCode === 10; // \n (previous char if CRLF?) -> Simplify: just look at slice
 
                 // Simpler: substring to line, replace with spaces, keep newline
                 const before = this._text.substring(0, lineStart);
@@ -318,7 +318,7 @@ export class LuaDocument {
                 this._comments = comments;
                 // We keep _parseError set so the editor knows there's an error, 
                 // but we populate _ast so intelligence works.
-            } catch (recoveryError) {
+            } catch (_recoveryError) {
                 this._ast = null;
             }
         }

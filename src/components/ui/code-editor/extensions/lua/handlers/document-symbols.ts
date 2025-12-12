@@ -420,7 +420,7 @@ export interface DocumentSymbolOptions {
 export function getDocumentSymbols(
     document: LuaDocument,
     analysisResult: AnalysisResult,
-    options: DocumentSymbolOptions = {}
+    _options: DocumentSymbolOptions = {}
 ): DocumentSymbol[] {
     const ast = document.getAST();
     if (!ast) return [];

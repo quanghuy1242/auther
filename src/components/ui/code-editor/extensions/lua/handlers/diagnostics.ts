@@ -15,7 +15,7 @@ import { getDefinitionLoader } from "../definitions/definition-loader";
 import { walkAST, isReturnStatement, isIdentifier, isMemberExpression, isCallExpression } from "../core/luaparse-types";
 import type { LuaChunk, LuaReturnStatement, LuaNode, LuaIdentifier, LuaMemberExpression, LuaCallExpression } from "../core/luaparse-types";
 import { SymbolKind } from "../analysis/symbol-table";
-import { LuaTypeKind, type LuaType, type LuaTableType, type LuaFunctionType } from "../analysis/type-system";
+import { LuaTypeKind, type LuaTableType, type LuaFunctionType } from "../analysis/type-system";
 
 // =============================================================================
 // DIAGNOSTIC OPTIONS
@@ -116,7 +116,7 @@ class DisabledGlobalProvider implements DiagnosticProvider {
         if (!ast) return diagnostics;
 
         // Walk the AST looking for identifiers that are disabled globals
-        walkAST(ast, (node: LuaNode, _parent: LuaNode | null) => {
+        walkAST(ast, (node: LuaNode, __parent: LuaNode | null) => {
             if (isIdentifier(node)) {
                 const ident = node as LuaIdentifier;
                 const name = ident.name;
@@ -539,7 +539,7 @@ class FieldValidationProvider implements DiagnosticProvider {
         const ast = context.document.getAST();
         if (!ast) return diagnostics;
 
-        walkAST(ast, (node: LuaNode, _parent: LuaNode | null) => {
+        walkAST(ast, (node: LuaNode, __parent: LuaNode | null) => {
             if (isMemberExpression(node)) {
                 const memberExpr = node as LuaMemberExpression;
                 const fieldName = memberExpr.identifier?.name;
@@ -586,7 +586,7 @@ class ArgumentCountProvider implements DiagnosticProvider {
         const ast = context.document.getAST();
         if (!ast) return diagnostics;
 
-        walkAST(ast, (node: LuaNode, _parent: LuaNode | null) => {
+        walkAST(ast, (node: LuaNode, __parent: LuaNode | null) => {
             if (isCallExpression(node)) {
                 const callExpr = node as LuaCallExpression;
                 if (!callExpr.base?.range) return;

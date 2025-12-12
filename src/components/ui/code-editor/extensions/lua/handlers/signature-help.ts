@@ -266,7 +266,7 @@ function findCallContext(
                     callNode = candidateCall;
                     break;
                 }
-            } catch (e) {
+            } catch (_e) {
                 continue;
             }
         }

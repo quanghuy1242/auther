@@ -4,7 +4,7 @@
 // Port of EmmyLua's condition_flow/ module for control flow type narrowing
 // See: emmylua_code_analysis/src/semantic/infer/narrow/condition_flow/
 
-import type { LuaNode, LuaIdentifier, LuaBinaryExpression, LuaCallExpression, LuaUnaryExpression, LuaIndexExpression } from "../core/luaparse-types";
+import type { LuaNode, LuaIdentifier, LuaBinaryExpression, LuaCallExpression, LuaUnaryExpression } from "../core/luaparse-types";
 import type { LuaType } from "./type-system";
 import { LuaTypeKind, LuaTypes, removeFalseOrNil, narrowFalseOrNil, unionType } from "./type-system";
 import type { FlowTree, FlowId, FlowNode } from "./flow-graph";
@@ -627,12 +627,12 @@ function getTypeAtCallExpr(
  * Handle index/member expressions in conditions
  */
 function getTypeAtIndexExpr(
-    ctx: NarrowingContext,
-    varName: string,
-    currentType: LuaType,
-    flowNode: FlowNode,
-    indexExpr: LuaNode,
-    conditionFlow: InferConditionFlow
+    _ctx: NarrowingContext,
+    _varName: string,
+    _currentType: LuaType,
+    _flowNode: FlowNode,
+    _indexExpr: LuaNode,
+    _conditionFlow: InferConditionFlow
 ): ResultTypeOrContinue {
     // TODO: Handle t.field or t["field"] narrowing
     return CONTINUE;

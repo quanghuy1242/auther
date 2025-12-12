@@ -20,16 +20,13 @@ import { LuaTypeKind, LuaTypes, formatType, parseTypeString, functionType } from
 import { getTypeAtFlow, type NarrowingContext } from "../analysis/condition-flow";
 import type { LuaFunctionParam } from "../analysis/type-system";
 import {
-    findNodeAtOffset,
     findNodePathAtOffset,
     isMemberExpression,
     isIdentifier,
     isIndexExpression,
-    isExpression,
     isLiteral,
     isTableConstructor,
     isCallExpression,
-    isAnyCallExpression,
     isLocalStatement,
     isAssignmentStatement,
 } from "../core/luaparse-types";
@@ -40,7 +37,6 @@ import type {
     LuaIndexExpression,
     LuaIdentifier,
     LuaTableConstructorExpression,
-    LuaTableField,
     LuaTableKeyString,
     LuaCallExpression,
     LuaLocalStatement,
@@ -52,9 +48,8 @@ import type {
 import { getDefinitionLoader } from "../definitions/definition-loader";
 import type { FieldDefinition, FunctionDefinition, TableDefinition, GlobalDefinition } from "../definitions/definition-loader";
 // New EmmyLua-style semantic modules
-import { isTableLike, findMemberType as findMemberTypeHelper, isFunctionLike } from "../analysis/type-helpers";
-import { getSemanticInfo, type SemanticInfo } from "../analysis/semantic-info";
-import { findMembers, getMemberMap, findSandboxMembers, findLibraryMembers, type MemberInfo, membersToCompletions } from "../analysis/member-resolution";
+import { isTableLike, isFunctionLike } from "../analysis/type-helpers";
+import { findMembers } from "../analysis/member-resolution";
 
 // =============================================================================
 // COMPLETION TRIGGER STATUS
@@ -470,7 +465,7 @@ class FunctionArgProvider implements CompletionProvider {
         return functionType(params, returns, { isAsync: def.async });
     }
 
-    private dispatchTypeCompletions(builder: CompletionBuilder, type: LuaType, paramName?: string): void {
+    private dispatchTypeCompletions(builder: CompletionBuilder, type: LuaType, _paramName?: string): void {
         // For function types, offer lambda snippet
         if (type.kind === LuaTypeKind.FunctionType) {
             const fnType = type as LuaFunctionType;
@@ -961,7 +956,7 @@ class DocNameTokenProvider implements CompletionProvider {
         const docOffset = builder.offset;
 
         // Simple heuristic: look for FunctionDeclaration after current position
-        const nodePath = findNodePathAtOffset(ast, docOffset);
+
 
         // Search forward in the document for a function
         for (const stmt of ast.body) {
@@ -1317,7 +1312,7 @@ class MemberProvider implements CompletionProvider {
         return LuaTypes.Unknown;
     }
 
-    private addMemberCompletions(builder: CompletionBuilder, type: LuaType, colonCall = false): void {
+    private addMemberCompletions(builder: CompletionBuilder, type: LuaType, _colonCall = false): void {
         const definitionLoader = getDefinitionLoader();
 
         // =========================================================================
@@ -1333,8 +1328,7 @@ class MemberProvider implements CompletionProvider {
                 const item = this.createMemberCompletionItem(
                     member.name,
                     member.type,
-                    isFunction,
-                    colonCall
+                    isFunction
                 );
                 builder.addItem(item);
             }
@@ -1352,8 +1346,7 @@ class MemberProvider implements CompletionProvider {
                     const item = this.createMemberCompletionItem(
                         name,
                         fieldType,
-                        isFunction,
-                        colonCall
+                        isFunction
                     );
                     builder.addItem(item);
                 }
@@ -1364,8 +1357,7 @@ class MemberProvider implements CompletionProvider {
     private createMemberCompletionItem(
         name: string,
         type: LuaType,
-        isFunction: boolean,
-        _colonCall: boolean
+        isFunction: boolean
     ): CompletionItem {
         const kind: CompletionItemKind = isFunction ? 3 : 6; // Function : Property
 

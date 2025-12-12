@@ -66,9 +66,9 @@ export function getLayoutedElements(
     Dagre.layout(g);
 
     // Get graph dimensions
-    const graphInfo = g.graph();
-    const graphWidth = graphInfo.width || 400;
-    const graphCenterX = graphWidth / 2;
+    // const graphInfo = g.graph();
+    // const graphWidth = graphInfo.width || 400;
+    // const graphCenterX = graphWidth / 2;
 
     // Group nodes by rank (Y position) to identify parallel nodes
     const nodesByRank = new Map<number, Node[]>();

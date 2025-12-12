@@ -343,7 +343,7 @@ function getLiteralSemanticInfo(node: LuaNode): SemanticInfo | null {
 function getNarrowedType(
     analysisResult: AnalysisResult,
     symbol: Symbol,
-    offset?: number
+    _offset?: number
 ): LuaType {
     if (!symbol.type) {
         return LuaTypes.Unknown;

@@ -84,8 +84,7 @@ export function getDefinition(
             document,
             analysisResult,
             node as LuaIdentifier,
-            uri,
-            options
+            uri
         );
     }
 
@@ -125,8 +124,7 @@ function handleIdentifierDefinition(
     document: LuaDocument,
     analysisResult: AnalysisResult,
     ident: LuaIdentifier,
-    uri: string,
-    _options: DefinitionOptions
+    uri: string
 ): DefinitionResult | null {
     const name = ident.name;
     const offset = ident.range?.[0];

@@ -5,11 +5,10 @@
 // Provides centralized member lookup for types
 // See: emmylua-analyzer-rust/crates/emmylua_code_analysis/src/semantic/member/
 
-import type { LuaType, LuaTableType, LuaArrayType, LuaTupleType, LuaUnionType, LuaFunctionType } from './type-system';
+import type { LuaType, LuaTableType, LuaArrayType, LuaTupleType, LuaUnionType } from './type-system';
 import { LuaTypeKind, LuaTypes, formatType } from './type-system';
 import type { AnalysisResult } from './analyzer';
-import { isTableLike, isUnionType } from './type-helpers';
-import { getDefinitionLoader, type FieldDefinition, type GlobalDefinition } from '../definitions/definition-loader';
+import { getDefinitionLoader, type FieldDefinition } from '../definitions/definition-loader';
 
 // =============================================================================
 // MEMBER INFO TYPE
@@ -55,7 +54,7 @@ export type MemberSource =
  */
 export function findMembers(
     type: LuaType,
-    analysisResult?: AnalysisResult
+    _analysisResult?: AnalysisResult
 ): MemberInfo[] {
     const members: MemberInfo[] = [];
 
@@ -71,7 +70,7 @@ export function findMembers(
 export function findMemberByKey(
     type: LuaType,
     key: string,
-    analysisResult?: AnalysisResult
+    _analysisResult?: AnalysisResult
 ): MemberInfo | null {
     // TableType - direct field lookup
     if (type.kind === LuaTypeKind.TableType) {
@@ -148,9 +147,9 @@ export function findMemberByKey(
  */
 export function getMemberMap(
     type: LuaType,
-    analysisResult?: AnalysisResult
+    _analysisResult?: AnalysisResult
 ): Map<string, MemberInfo> {
-    const members = findMembers(type, analysisResult);
+    const members = findMembers(type, _analysisResult);
     const map = new Map<string, MemberInfo>();
 
     for (const member of members) {

@@ -4,7 +4,6 @@ import { RangeSetBuilder } from "@codemirror/state";
 import { LuaDocument } from "../core/document";
 import { analyzeDocument } from "../analysis/analyzer";
 import { getSemanticTokens, TOKEN_TYPES } from "../handlers/semantic-tokens";
-import { SemanticTokenType } from "../protocol";
 
 // =============================================================================
 // DECORATIONS
@@ -77,7 +76,7 @@ export function createSemanticTokens(options: SemanticTokensOptions = {}) {
                     const deltaChar = data[i + 1];
                     const length = data[i + 2];
                     const typeIdx = data[i + 3];
-                    const modifiers = data[i + 4]; // Modifiers use bitmask, can add extra classes if needed
+                    // const modifiers = data[i + 4]; // Modifiers use bitmask, can add extra classes if needed
 
                     currentLine += deltaLine;
                     if (deltaLine > 0) {
@@ -99,7 +98,7 @@ export function createSemanticTokens(options: SemanticTokensOptions = {}) {
                             if (endOffset <= view.state.doc.length) {
                                 builder.add(startOffset, endOffset, decoration);
                             }
-                        } catch (e) {
+                        } catch (_e) {
                             // Ignore range errors during edits
                         }
                     }

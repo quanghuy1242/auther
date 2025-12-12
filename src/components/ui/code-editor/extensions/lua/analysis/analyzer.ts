@@ -35,18 +35,10 @@ import type {
 import {
     isIdentifier,
     isMemberExpression,
-    isIndexExpression,
     isCallExpression,
-    isAnyCallExpression,
-    isAnyFunction,
-    isTableConstructor,
-    isLiteral,
-    isBinaryExpression,
-    isLogicalExpression,
-    isUnaryExpression,
 } from "../core/luaparse-types";
 import { SymbolTable, SymbolKind, ScopeKind, createSandboxSymbols } from "./symbol-table";
-import type { Symbol, Scope, ScopeId } from "./symbol-table";
+import type { Symbol } from "./symbol-table";
 import {
     LuaType,
     LuaTypeKind,
@@ -61,16 +53,12 @@ import {
     tableType,
     unionType,
     arrayType,
-    booleanLiteral,
-    numberLiteral,
-    stringLiteral,
-    formatType,
     parseTypeString,
 } from "./type-system";
-import { DiagnosticCollector, DiagnosticCode, diagnostic } from "./diagnostics";
+import { DiagnosticCollector } from "./diagnostics";
 import { getDefinitionLoader } from "../definitions/definition-loader";
 import type { FieldDefinition, FunctionDefinition, TableDefinition, GlobalDefinition, ParamDefinition } from "../definitions/definition-loader";
-import { FlowTree, FlowBinder, FlowId, FlowNodeKind, finishFlowLabel } from "./flow-graph";
+import { FlowTree, FlowBinder, FlowId, finishFlowLabel } from "./flow-graph";
 
 // =============================================================================
 // ANALYZER OPTIONS
@@ -530,7 +518,6 @@ export class SemanticAnalyzer {
 
         for (let i = 0; i < stmt.clauses.length; i++) {
             const clause = stmt.clauses[i];
-            const isElse = !clause.condition;
 
             if (clause.condition) {
                 // Analyze condition expression
@@ -711,7 +698,7 @@ export class SemanticAnalyzer {
         return type;
     }
 
-    private checkExpressionIssues(expr: LuaExpression, type: LuaType): void {
+    private checkExpressionIssues(expr: LuaExpression, _type: LuaType): void {
         // Check for undefined variables
         if (isIdentifier(expr)) {
             this.checkIdentifier(expr);
@@ -1128,8 +1115,8 @@ export class SemanticAnalyzer {
     }
 
     private inferBinaryExpressionType(expr: LuaBinaryExpression): LuaType {
-        const left = this.analyzeExpression(expr.left as LuaExpression);
-        const right = this.analyzeExpression(expr.right as LuaExpression);
+        this.analyzeExpression(expr.left as LuaExpression);
+        this.analyzeExpression(expr.right as LuaExpression);
         const op = expr.operator;
 
         // Comparison operators

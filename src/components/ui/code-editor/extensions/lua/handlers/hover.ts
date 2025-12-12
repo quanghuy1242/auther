@@ -39,33 +39,13 @@ import type {
     PropertyDefinition,
     GlobalDefinition,
 } from "../definitions/definition-loader";
-import type { LuaTableType, LuaRefType } from "../analysis/type-system";
-import { LuaTypes, parseTypeString, tableType } from "../analysis/type-system";
+import type { LuaTableType } from "../analysis/type-system";
+import { LuaTypes, tableType } from "../analysis/type-system";
 import type { LuaExpression, LuaTableConstructorExpression } from "../core/luaparse-types";
 import { isTableConstructor } from "../core/luaparse-types";
 // New EmmyLua-style semantic modules
-import { isTableLike, findMemberType as findMemberTypeHelper, isFunctionLike } from "../analysis/type-helpers";
-import { getSemanticInfo as getSemanticInfoNew, type SemanticInfo as SemanticInfoNew, type SemanticDecl } from "../analysis/semantic-info";
-import { findMemberByKey, findMembers, getMemberMap, type MemberInfo } from "../analysis/member-resolution";
-
-// =============================================================================
-// SEMANTIC INFO (EmmyLua pattern)
-// =============================================================================
-
-/**
- * Semantic information for a token/node
- * Following EmmyLua's SemanticInfo struct from semantic_model
- */
-interface SemanticInfo {
-    /** The inferred type */
-    type: LuaType;
-    /** Symbol if this is a declaration reference */
-    symbol?: Symbol;
-    /** Whether this is a table field */
-    isTableField?: boolean;
-    /** Field name if table field */
-    fieldName?: string;
-}
+import { isTableLike, findMemberType as findMemberTypeHelper } from "../analysis/type-helpers";
+import { getSemanticInfo as getSemanticInfoNew } from "../analysis/semantic-info";
 
 // =============================================================================
 // HOVER BUILDER
@@ -807,9 +787,8 @@ function handleMemberExpressionHover(
     document: LuaDocument,
     analysisResult: AnalysisResult,
     expr: LuaMemberExpression,
-    options: HoverOptions
+    _options: HoverOptions
 ): Hover | null {
-    const definitionLoader = getDefinitionLoader();
     const memberName = expr.identifier.name;
     const range = getNodeRange(document, expr.identifier);
 
@@ -879,44 +858,6 @@ function handleMemberExpressionHover(
             buildMemberHover(builder, memberName, type);
             builder.setRange(range);
             return builder.build();
-        }
-    }
-
-    return null;
-}
-
-/**
- * Recursively resolve the type of a member expression chain
- * e.g., for t.address.street, resolves: t -> t's type -> address field type
- */
-function resolveMemberExpressionType(
-    analysisResult: AnalysisResult,
-    expr: LuaMemberExpression
-): LuaType | null {
-    const memberName = expr.identifier.name;
-
-    // Base case: identifier base (e.g., t in t.address)
-    if (isIdentifier(expr.base)) {
-        const baseName = (expr.base as LuaIdentifier).name;
-        const baseSymbol = analysisResult.symbolTable.lookupSymbol(baseName, expr.base.range?.[0]);
-        if (baseSymbol && baseSymbol.type) {
-            const baseType = getNarrowedTypeAtOffset(analysisResult, baseSymbol, expr.base.range?.[0]);
-            if (baseType.kind === LuaTypeKind.TableType) {
-                const tblType = baseType as unknown as LuaTableType;
-                const field = tblType.fields?.get(memberName);
-                return field?.type ?? null;
-            }
-        }
-        return null;
-    }
-
-    // Recursive case: member expression base (e.g., t.address in t.address.street)
-    if (isMemberExpression(expr.base)) {
-        const baseType = resolveMemberExpressionType(analysisResult, expr.base as LuaMemberExpression);
-        if (baseType && baseType.kind === LuaTypeKind.TableType) {
-            const tblType = baseType as unknown as LuaTableType;
-            const field = tblType.fields?.get(memberName);
-            return field?.type ?? null;
         }
     }
 
