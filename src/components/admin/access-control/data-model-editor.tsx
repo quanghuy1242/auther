@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Button, Textarea, Alert, Icon, EmptyState } from "@/components/ui";
+import { Button, Alert, Icon, EmptyState, CodeEditor } from "@/components/ui";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EntityListItem, RelationRow, PermissionRow, type Subject } from "./shared";
 import { DataModelGuideModal } from "./data-model-guide-modal";
+import type { JSONSchema7 } from "json-schema";
+import authorizationModelSchemaRaw from "@/schemas/authorization-model.schema.json";
+
+const authorizationModelSchema = authorizationModelSchemaRaw as unknown as JSONSchema7;
 
 interface DataModelEditorProps {
   model: string;
@@ -57,6 +61,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
   const [error, setError] = React.useState<string | null>(null);
   const [entityToDelete, setEntityToDelete] = React.useState<string | null>(null);
   const [isGuideOpen, setIsGuideOpen] = React.useState(false);
+  const [jsonErrorCount, setJsonErrorCount] = React.useState(0);
 
   // Parse JSON into UI Entities
   const parseModel = React.useCallback((json: string) => {
@@ -328,7 +333,7 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
             </Button>
             <Button
               onClick={handleSave}
-              disabled={disabled}
+              disabled={disabled || (mode === "json" && jsonErrorCount > 0)}
               leftIcon="save"
               variant="primary"
               className="h-8"
@@ -351,19 +356,15 @@ export function DataModelEditor({ model, onChange, onSave, disabled }: DataModel
       )}
 
       {mode === "json" ? (
-        <div className="relative w-full rounded-lg border border-slate-700 bg-[#111921] overflow-hidden group">
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            <span className="text-xs text-slate-500 font-mono">json</span>
-          </div>
-          <Textarea
-            value={model}
-            onChange={(e) => onChange(e.target.value)}
-            spellCheck={false}
-            className="w-full h-[500px] bg-transparent text-sm font-mono text-blue-100 p-4 border-none focus:ring-0 resize-none leading-relaxed"
-            containerClassName="space-y-0"
-            disabled={disabled}
-          />
-        </div>
+        <CodeEditor
+          value={model}
+          onChange={onChange}
+          language="json"
+          languageOptions={{ schema: authorizationModelSchema }}
+          height="500px"
+          readOnly={disabled}
+          onErrorCountChange={setJsonErrorCount}
+        />
       ) : (
         <div className="flex h-[500px] border border-slate-700 rounded-lg overflow-hidden bg-[#111921]">
           {/* Sidebar: Entity List */}

@@ -1,2 +1,2 @@
 export { SwimlaneEditor } from "./swimlane-editor";
-export { ScriptEditorModal } from "./editor-modal";
+export { ScriptEditorModal } from "./script-editor-modal";

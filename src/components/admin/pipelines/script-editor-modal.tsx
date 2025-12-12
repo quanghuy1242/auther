@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Modal, ModalFooter, Button, Input, Label, CollapsibleSection } from "@/components/ui";
-import { CodeEditor } from "./code-editor";
+import { Modal, ModalFooter, Button, Input, Label, CollapsibleSection, CodeEditor } from "@/components/ui";
 import type { Script } from "@/app/admin/pipelines/actions";
-import { LuaDocument } from "./lua-extensions-2/core/document";
-import { analyzeDocument } from "./lua-extensions-2/analysis/analyzer";
-import { getDiagnostics } from "./lua-extensions-2/handlers/diagnostics";
-import { DiagnosticSeverity } from "./lua-extensions-2/protocol";
+import { LuaDocument } from "@/components/ui/code-editor/extensions/lua/core/document";
+import { analyzeDocument } from "@/components/ui/code-editor/extensions/lua/analysis/analyzer";
+import { getDiagnostics } from "@/components/ui/code-editor/extensions/lua/handlers/diagnostics";
+import { DiagnosticSeverity } from "@/components/ui/code-editor/extensions/lua/protocol";
 
 // Mode-specific script templates
 const BLOCKING_TEMPLATE = `-- Blocking Hook Script
@@ -186,10 +185,13 @@ export function ScriptEditorModal({
                         <CodeEditor
                             value={code}
                             onChange={setCode}
+                            language="lua"
+                            languageOptions={{
+                                hookName,
+                                executionMode,
+                                previousScriptCode,
+                            }}
                             height="350px"
-                            hookName={hookName}
-                            executionMode={executionMode}
-                            previousScriptCode={previousScriptCode}
                         />
                     </div>
                 </div>

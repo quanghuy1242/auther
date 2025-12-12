@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui";
 import { toast } from "sonner";
 import { Swimlane, SWIMLANE_DEFINITIONS } from "./swimlanes";
-import { ScriptEditorModal } from "./editor-modal";
+import { ScriptEditorModal } from "./script-editor-modal";
 import { ScriptPickerModal } from "./script-picker-modal";
 import type { HookName } from "@/lib/pipelines/definitions";
 import { HOOK_REGISTRY as hookRegistry } from "@/lib/pipelines/definitions";

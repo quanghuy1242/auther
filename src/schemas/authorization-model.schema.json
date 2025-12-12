@@ -1,0 +1,59 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://auther.app/schemas/authorization-model.json",
+    "title": "Authorization Model",
+    "description": "Defines the authorization schema with entity types, relations, and permissions",
+    "type": "object",
+    "properties": {
+        "schema_version": {
+            "type": "string",
+            "description": "Version of the authorization model schema"
+        },
+        "types": {
+            "type": "object",
+            "description": "Map of entity type names to their definitions",
+            "additionalProperties": {
+                "type": "object",
+                "description": "Defines an entity type with its relations and permissions",
+                "properties": {
+                    "relations": {
+                        "type": "object",
+                        "description": "Map of relation names to their allowed subject types. Relations define who can be connected to this entity (e.g., viewer, editor, owner).",
+                        "additionalProperties": {
+                            "type": "string",
+                            "description": "Subject type reference (e.g., 'user', 'team#member')"
+                        }
+                    },
+                    "permissions": {
+                        "type": "object",
+                        "description": "Map of permission names to their definitions. Permissions define what actions can be performed on this entity.",
+                        "additionalProperties": {
+                            "type": "object",
+                            "description": "Permission definition",
+                            "properties": {
+                                "relation": {
+                                    "type": "string",
+                                    "description": "The relation that grants this permission"
+                                },
+                                "policyEngine": {
+                                    "type": "string",
+                                    "enum": [
+                                        "lua"
+                                    ],
+                                    "description": "Optional policy engine for dynamic permission evaluation"
+                                },
+                                "policy": {
+                                    "type": "string",
+                                    "description": "Lua script for policy-based permission evaluation"
+                                }
+                            },
+                            "required": [
+                                "relation"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
