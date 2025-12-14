@@ -20,11 +20,6 @@ import type {
     LuaForGenericStatement,
     LuaCallExpression,
     LuaMemberExpression,
-    LuaIndexExpression,
-    LuaTableConstructorExpression,
-    LuaBinaryExpression,
-    LuaUnaryExpression,
-    LuaLogicalExpression,
     LuaReturnStatement,
     LuaIfStatement,
     LuaWhileStatement,
@@ -53,17 +48,9 @@ import { DiagnosticCollector } from "./diagnostics";
 import { getDefinitionLoader } from "../definitions/definition-loader";
 import type { FieldDefinition } from "../definitions/definition-loader";
 import { FlowTree, FlowBinder, FlowId, finishFlowLabel } from "./flow-graph";
-// Modular inference functions
 import {
     InferContext,
-    inferBinaryExpressionType as inferBinaryType,
-    inferLogicalExpressionType as inferLogicalType,
-    inferUnaryExpressionType as inferUnaryType,
     inferExpressionType as inferExpressionTypeFn,
-    inferTableType as inferTableTypeFn,
-    inferCallExpressionType as inferCallType,
-    inferMemberExpressionType as inferMemberType,
-    inferIndexExpressionType as inferIndexType,
 } from "./infer";
 
 // =============================================================================
@@ -793,9 +780,10 @@ export class SemanticAnalyzer {
         const context: InferContext = {
             lookupSymbolType: (name, offset) => {
                 const symbol = this.symbolTable.lookupSymbol(name, offset);
-                // Side effect: track reference
-                if (symbol && offset) {
+                // Side effect: track reference AND mark as used
+                if (symbol && offset !== undefined) {
                     this.symbolTable.addReference(symbol.id, offset);
+                    this.usedSymbols.add(symbol.id);
                     return symbol.type;
                 }
                 return null;
@@ -812,105 +800,6 @@ export class SemanticAnalyzer {
         return inferExpressionTypeFn(expr, context);
     }
 
-    private inferIdentifierType(ident: LuaIdentifier): LuaType {
-        const name = ident.name;
-
-        // Check local symbol table
-        const symbol = this.symbolTable.lookupSymbol(name, ident.range?.[0]);
-        if (symbol) {
-            if (ident.range) {
-                this.symbolTable.addReference(symbol.id, ident.range[0]);
-            }
-            return symbol.type;
-        }
-
-        // Check definitions
-        const globalDef = this.definitionLoader.getGlobal(name);
-        if (globalDef) {
-            return this.globalDefinitionToType(globalDef);
-        }
-
-        const libDef = this.definitionLoader.getLibrary(name);
-        if (libDef) {
-            return this.definitionToType(libDef);
-        }
-
-        // Check sandbox
-        if (name === "helpers") {
-            return this.buildHelpersType();
-        }
-        if (name === "context") {
-            return this.buildContextType();
-        }
-        if (name === "await") {
-            return LuaTypes.Function;
-        }
-
-        return LuaTypes.Unknown;
-    }
-
-    /**
-     * Infer member expression type - delegates to infer-member.ts
-     */
-    private inferMemberExpressionType(expr: LuaMemberExpression): LuaType {
-        return inferMemberType(
-            expr,
-            (e: LuaExpression) => this.analyzeExpression(e),
-            () => this.definitionLoader,
-            this.options.hookName,
-            (def: unknown) => this.definitionToType(def as FieldDefinition)
-        );
-    }
-
-    /**
-     * Infer index expression type - delegates to infer-member.ts
-     */
-    private inferIndexExpressionType(expr: LuaIndexExpression): LuaType {
-        return inferIndexType(
-            expr,
-            (e: LuaExpression) => this.analyzeExpression(e),
-            () => this.definitionLoader
-        );
-    }
-
-    /**
-     * Infer call expression type - delegates to infer-call.ts
-     */
-    private inferCallExpressionType(call: LuaCallExpression): LuaType {
-        return inferCallType(
-            call,
-            (e: LuaExpression) => this.analyzeExpression(e),
-            () => this.definitionLoader
-        );
-    }
-
-    /**
-     * Infer table type - delegates to infer-table.ts
-     */
-    private inferTableType(expr: LuaTableConstructorExpression): LuaType {
-        return inferTableTypeFn(expr, (e: LuaExpression) => this.analyzeExpression(e));
-    }
-
-    /**
-     * Infer binary expression type - delegates to infer-binary.ts
-     */
-    private inferBinaryExpressionType(expr: LuaBinaryExpression): LuaType {
-        return inferBinaryType(expr, (e: LuaExpression) => this.analyzeExpression(e));
-    }
-
-    /**
-     * Infer unary expression type - delegates to infer-binary.ts
-     */
-    private inferUnaryExpressionType(expr: LuaUnaryExpression): LuaType {
-        return inferUnaryType(expr, (e: LuaExpression) => this.analyzeExpression(e));
-    }
-
-    /**
-     * Infer logical expression type - delegates to infer-binary.ts
-     */
-    private inferLogicalExpressionType(expr: LuaLogicalExpression): LuaType {
-        return inferLogicalType(expr, (e: LuaExpression) => this.analyzeExpression(e));
-    }
 
     // ---------------------------------------------------------------------------
     // Type Building Helpers
