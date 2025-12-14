@@ -35,6 +35,7 @@ function CreateUserForm({ onCancel }: { onCancel: () => void }) {
           type="email"
           placeholder="john.doe@example.com"
           required
+          autoComplete="off"
         />
       </div>
 
@@ -54,6 +55,7 @@ function CreateUserForm({ onCancel }: { onCancel: () => void }) {
             type="password"
             placeholder="••••••••"
             readOnly={sendInvite}
+            autoComplete="new-password"
           />
           <p className="text-sm text-gray-400 mt-1">
             {sendInvite ? "User will set password via email" : "Leave empty to generate temporary password"}
@@ -110,34 +112,34 @@ export default function CreateUserPage() {
       />
 
       <Card>
-          <CardContent className="pt-6">
-            {showSuccess ? (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
-                  <span className="material-symbols-outlined text-green-500 text-[32px]">
-                    check_circle
-                  </span>
-                </div>
-                <h3 className="text-lg font-semibold text-white mb-2">User Created Successfully!</h3>
-                <p className="text-sm text-gray-400">
-                  {sendInvite 
-                    ? "Verification email sent. The user will need to verify their email and set a password."
-                    : "Redirecting to user list..."}
-                </p>
+        <CardContent className="pt-6">
+          {showSuccess ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-green-500 text-[32px]">
+                  check_circle
+                </span>
               </div>
-            ) : (
-              <FormWrapper
-                schema={createUserSchema}
-                // @ts-expect-error - Zod version mismatch with react-hook-form resolver
-                action={createUser}
-                onSuccess={handleSuccess}
-                className="space-y-6"
-              >
-                <CreateUserForm onCancel={handleCancel} />
-              </FormWrapper>
-            )}
-          </CardContent>
-        </Card>
+              <h3 className="text-lg font-semibold text-white mb-2">User Created Successfully!</h3>
+              <p className="text-sm text-gray-400">
+                {sendInvite
+                  ? "Verification email sent. The user will need to verify their email and set a password."
+                  : "Redirecting to user list..."}
+              </p>
+            </div>
+          ) : (
+            <FormWrapper
+              schema={createUserSchema}
+              // @ts-expect-error - Zod version mismatch with react-hook-form resolver
+              action={createUser}
+              onSuccess={handleSuccess}
+              className="space-y-6"
+            >
+              <CreateUserForm onCancel={handleCancel} />
+            </FormWrapper>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
