@@ -49,7 +49,7 @@ export default async function WebhooksPage({ searchParams }: PageProps) {
   };
 
   return (
-    <PageContainer maxWidth="7xl">
+    <PageContainer>
       <PageHeading
         title="Webhooks"
         description="Manage webhook endpoints and monitor delivery performance"

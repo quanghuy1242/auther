@@ -17,7 +17,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = React.useTransition();
-  
+
   const filterType = (searchParams.get("type") as "all" | "trusted" | "dynamic") || "all";
 
   const getClientType = (userId: string | null): "trusted" | "dynamic" => {
@@ -27,7 +27,7 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
   const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
     const currentSearch = params.get("search") || "";
-    
+
     // Avoid redundant navigation
     if (value === currentSearch) return;
 
@@ -112,9 +112,12 @@ export function ClientsClient({ initialData }: ClientsClientProps) {
               header: "Client Name",
               render: (client) => (
                 <div>
-                  <p className="text-sm font-medium text-white">
+                  <Link
+                    href={`/admin/clients/${client.clientId}`}
+                    className="font-medium text-blue-400 hover:underline"
+                  >
                     {client.name || "Unnamed Client"}
-                  </p>
+                  </Link>
                   <p className="text-xs text-gray-400 font-mono">
                     {client.clientId}
                   </p>

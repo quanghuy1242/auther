@@ -59,7 +59,7 @@ export function WebhooksClient({
   // Local state for filters
   const [status, setStatus] = useState(initialFilters.status);
   const [eventType, setEventType] = useState(initialFilters.eventType);
-  
+
   const handleActionComplete = useCallback(() => {
     router.refresh();
   }, [router]);
@@ -142,10 +142,10 @@ export function WebhooksClient({
       render: (webhook: WebhookEndpointWithSubscriptions) => (
         <Link
           href={`/admin/webhooks/${webhook.id}`}
-          className="font-medium text-[var(--color-text-primary)] hover:text-[var(--color-primary)] transition-colors line-clamp-1"
+          className="font-medium text-blue-400 hover:underline"
         >
           {webhook.displayName || (
-            <span className="text-[var(--color-text-tertiary)]">Unnamed</span>
+            <span className="text-gray-400">Unnamed</span>
           )}
         </Link>
       ),
@@ -229,8 +229,8 @@ export function WebhooksClient({
       header: "Actions",
       className: "w-[60px]",
       render: (webhook: WebhookEndpointWithSubscriptions) => (
-        <WebhookActionsDropdown 
-          webhookId={webhook.id} 
+        <WebhookActionsDropdown
+          webhookId={webhook.id}
           isActive={webhook.isActive}
           onActionComplete={handleActionComplete}
         />
@@ -320,8 +320,8 @@ export function WebhooksClient({
                       {webhook.url}
                     </p>
                   </div>
-                  <Badge 
-                    variant={webhook.isActive ? "success" : "default"} 
+                  <Badge
+                    variant={webhook.isActive ? "success" : "default"}
                     dot
                     className="flex-shrink-0"
                   >
@@ -393,11 +393,11 @@ export function WebhooksClient({
 }
 
 // Actions dropdown component
-function WebhookActionsDropdown({ 
-  webhookId, 
+function WebhookActionsDropdown({
+  webhookId,
   isActive,
-  onActionComplete 
-}: { 
+  onActionComplete
+}: {
   webhookId: string;
   isActive: boolean;
   onActionComplete: () => void;
@@ -547,7 +547,7 @@ function WebhookActionsDropdown({
       >
         <div className="space-y-4">
           <p className="text-sm text-[var(--color-text-secondary)]">
-            {isActive 
+            {isActive
               ? "This webhook will stop receiving events. You can re-enable it at any time."
               : "This webhook will start receiving events again immediately."}
           </p>
