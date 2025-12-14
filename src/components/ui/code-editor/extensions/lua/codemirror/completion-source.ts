@@ -9,6 +9,7 @@ import { LuaDocument } from "../core/document";
 import { analyzeDocument } from "../analysis/analyzer";
 import { getCompletions } from "../handlers/completion";
 import { CompletionItemKind, type CompletionItem } from "../protocol";
+import type { DagContext } from "../analysis/dag-context";
 
 // =============================================================================
 // OPTIONS
@@ -21,6 +22,8 @@ export interface CompletionSourceOptions {
     previousScriptCode?: string;
     /** Document URI */
     documentUri?: string;
+    /** DAG context for script dependency awareness */
+    dagContext?: DagContext;
 }
 
 // =============================================================================
@@ -105,7 +108,7 @@ function toCodeMirrorCompletion(item: CompletionItem): Completion {
 export function createCompletionSource(
     options: CompletionSourceOptions = {}
 ): (context: CompletionContext) => CompletionResult | null {
-    const { hookName, previousScriptCode, documentUri = "file://untitled" } = options;
+    const { hookName, previousScriptCode, documentUri = "file://untitled", dagContext } = options;
 
     return (context: CompletionContext): CompletionResult | null => {
         const code = context.state.doc.toString();
@@ -119,13 +122,15 @@ export function createCompletionSource(
         const position = luaDoc.offsetToPosition(pos);
 
         // Determine trigger character
-        const triggerMatch = context.matchBefore(/\./);
+        const triggerMatch = context.matchBefore(/\.$/);
         const triggerCharacter = triggerMatch ? "." : undefined;
 
         // Get completions from handler
         const items = getCompletions(luaDoc, analysisResult, position, triggerCharacter, {
             hookName,
             isExplicit: context.explicit,
+            dagContext,
+            previousScriptCode,
         });
 
         if (items.length === 0) {

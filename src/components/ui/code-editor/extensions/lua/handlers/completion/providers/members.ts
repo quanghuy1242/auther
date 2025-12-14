@@ -1,11 +1,14 @@
 import type { CompletionProvider } from "../types";
 import type { CompletionBuilder } from "../builder";
 import type { CompletionItem, CompletionItemKind } from "../../../protocol";
-import { LuaTypeKind, LuaTypes, formatType, type LuaFunctionType, type LuaRefType, type LuaType, parseTypeString } from "../../../analysis/type-system";
+import { LuaTypeKind, LuaTypes, formatType, type LuaFunctionType, type LuaRefType, type LuaType, type LuaTableType, type LuaUnionType, parseTypeString } from "../../../analysis/type-system";
 import { isFunctionLike, isTableLike } from "../../../analysis/type-helpers";
 import { findNodePathAtOffset, isIdentifier, isIndexExpression, isLiteral, isMemberExpression, type LuaExpression, type LuaIndexExpression, type LuaMemberExpression, type LuaNode } from "../../../core/luaparse-types";
-import { getDefinitionLoader } from "../../../definitions/definition-loader";
+import { getDefinitionLoader, type FieldDefinition } from "../../../definitions/definition-loader";
 import { findMemberByKey, findMembers } from "../../../analysis/member-resolution";
+import { extractReturnType } from "../../../analysis/extract-return-type";
+import { getPreviousLayerScripts } from "../../../analysis/dag-context";
+import { mergeReturnDataFields } from "../../../analysis/merge-return-types";
 
 // -----------------------------------------------------------------------------
 // MEMBER PROVIDER (for helpers., context., string., etc.)
@@ -80,6 +83,11 @@ export class MemberProvider implements CompletionProvider {
         const parts = path.split(".");
         if (parts.length === 0) return LuaTypes.Unknown;
 
+        // Special handling for context.prev - use dynamic type inference
+        if (path === "context.prev" || path.startsWith("context.prev.")) {
+            return this.resolveContextPrevType(builder, parts);
+        }
+
         // Resolve first part (root)
         const rootName = parts[0];
         let currentType: LuaType;
@@ -91,7 +99,7 @@ export class MemberProvider implements CompletionProvider {
             currentType = this.getNarrowedType(builder, symbol.name, symbol.type);
         } else {
             // Try global
-            currentType = this.getGlobalType(rootName);
+            currentType = this.getGlobalType(rootName, builder);
         }
 
         // Resolve subsequent parts
@@ -102,6 +110,67 @@ export class MemberProvider implements CompletionProvider {
 
         return currentType;
     }
+
+    /**
+     * Special handling for context.prev type resolution
+     * Uses previousScriptCode or dagContext to dynamically infer the return type
+     */
+    private resolveContextPrevType(builder: CompletionBuilder, parts: string[]): LuaType {
+        // Get previous script code from options
+        const previousScriptCode = builder.options.previousScriptCode;
+        const dagContext = builder.options.dagContext;
+
+        // Try to infer type from previous script's return statement
+        if (previousScriptCode) {
+            const returnType = extractReturnType(previousScriptCode);
+
+            // If we just want context.prev, return the full return type
+            if (parts.length === 2) {
+                return returnType;
+            }
+
+            // For deeper paths like context.prev.data, resolve the member
+            let currentType = returnType;
+            for (let i = 2; i < parts.length; i++) {
+                if (currentType.kind === LuaTypeKind.Unknown) return LuaTypes.Unknown;
+                currentType = this.findMemberType(currentType, parts[i]);
+            }
+            return currentType;
+        }
+
+        // Fallback: If no previousScriptCode, try dagContext (for parallel scripts)
+        if (dagContext) {
+            const prevScripts = getPreviousLayerScripts(dagContext);
+            if (prevScripts.length > 0) {
+                const prevCodes = prevScripts.map((s) => s.code);
+                const mergedType = mergeReturnDataFields(prevCodes);
+
+                if (parts.length === 2) {
+                    return mergedType;
+                }
+
+                let currentType = mergedType;
+                for (let i = 2; i < parts.length; i++) {
+                    if (currentType.kind === LuaTypeKind.Unknown) return LuaTypes.Unknown;
+                    currentType = this.findMemberType(currentType, parts[i]);
+                }
+                return currentType;
+            }
+        }
+
+        // Ultimate fallback: use static type resolution (ScriptOutput | nil from context.prev)
+        // Resolve context type, then traverse to prev and beyond
+        const contextType = this.getGlobalType("context", builder);
+        let currentType = contextType;
+
+        // Start from parts[1] which is "prev"
+        for (let i = 1; i < parts.length; i++) {
+            if (currentType.kind === LuaTypeKind.Unknown) return LuaTypes.Unknown;
+            currentType = this.findMemberType(currentType, parts[i]);
+        }
+        return currentType;
+    }
+
 
     /**
      * Find member type using centralized member-resolution
@@ -142,7 +211,7 @@ export class MemberProvider implements CompletionProvider {
                 return this.getNarrowedType(builder, symbol.name, symbol.type);
             }
             // Fallback to globals
-            return this.getGlobalType(expr.name);
+            return this.getGlobalType(expr.name, builder);
         } else if (isMemberExpression(expr)) {
             // Recursively infer type for member expressions (e.g., `a.b.c`)
             const baseType = this.inferBaseType(builder, expr.base as LuaExpression);
@@ -189,30 +258,105 @@ export class MemberProvider implements CompletionProvider {
         return baseType;
     }
 
-    private getGlobalType(name: string): LuaType {
+    private getGlobalType(name: string, builder?: CompletionBuilder): LuaType {
         const definitionLoader = getDefinitionLoader();
 
         // Check sandbox items (data-driven)
         const sandboxItem = definitionLoader.getSandboxItem(name);
         if (sandboxItem) {
-            if (definitionLoader.hasHookVariants(name)) { // hasHookVariants might need to be imported or check definition loader
-                // Hook-variant item (like context)
-                // Need to access builder.options.hookName
-                // const fields = definitionLoader.getContextFieldsForHook(builder.options.hookName);
+            // Build a proper LuaTableType with fields
+            const fields = new Map<string, { name: string; type: LuaType; optional?: boolean; description?: string }>();
 
-                // Need buildTableTypeFromFields or similar
-                return LuaTypes.Table; // Placeholder until I have the buildTable helper
-            } else if (sandboxItem.fields) { // sandboxItem.fields check
-                // Need buildTableTypeFromDefinitions
-                return LuaTypes.Table; // Placeholder
-            } else if (sandboxItem.kind === 'function') {
-                return LuaTypes.Function;
+            // Add base fields from sandbox item
+            if (sandboxItem.fields) {
+                for (const [fieldName, fieldDef] of Object.entries(sandboxItem.fields)) {
+                    const { typeStr, optional, description } = this.extractFieldInfo(fieldDef);
+                    const fieldType = parseTypeString(typeStr);
+                    fields.set(fieldName, {
+                        name: fieldName,
+                        type: fieldType,
+                        optional,
+                        description,
+                    });
+                }
             }
+
+            // Add hook-specific fields if applicable
+            const hookName = builder?.options.hookName;
+            if (hookName && definitionLoader.hasHookVariants(name)) {
+                const hookFields = definitionLoader.getContextFieldsForHook(hookName);
+                if (hookFields) {
+                    for (const [fieldName, fieldDef] of Object.entries(hookFields)) {
+                        const { typeStr, optional, description } = this.extractFieldInfo(fieldDef);
+                        const fieldType = parseTypeString(typeStr);
+                        fields.set(fieldName, {
+                            name: fieldName,
+                            type: fieldType,
+                            optional,
+                            description,
+                        });
+                    }
+                }
+            }
+
+            // Return a proper LuaTableType
+            return {
+                kind: LuaTypeKind.TableType,
+                fields,
+            } as LuaTableType;
         }
 
-        // ... (simplified for brevity, need to port fully)
+        // Check libraries
+        const library = definitionLoader.getLibrary(name);
+        if (library) {
+            const fields = new Map<string, { name: string; type: LuaType; optional?: boolean; description?: string }>();
+            if (library.fields) {
+                for (const [fieldName, fieldDef] of Object.entries(library.fields)) {
+                    const { typeStr, optional, description } = this.extractFieldInfo(fieldDef);
+                    const fieldType = parseTypeString(typeStr);
+                    fields.set(fieldName, {
+                        name: fieldName,
+                        type: fieldType,
+                        optional,
+                        description,
+                    });
+                }
+            }
+            return {
+                kind: LuaTypeKind.TableType,
+                fields,
+            } as LuaTableType;
+        }
 
         return LuaTypes.Unknown;
+    }
+
+    /**
+     * Extract type string, optional flag, and description from a FieldDefinition safely
+     * Handles the union type by checking the `kind` property
+     */
+    private extractFieldInfo(fieldDef: FieldDefinition): { typeStr: string; optional?: boolean; description?: string } {
+        if (fieldDef.kind === 'property') {
+            return {
+                typeStr: fieldDef.type || 'unknown',
+                optional: fieldDef.optional,
+                description: fieldDef.description,
+            };
+        } else if (fieldDef.kind === 'function') {
+            // For functions, use the return type or 'function'
+            return {
+                typeStr: fieldDef.returns?.type || 'function',
+                optional: false,
+                description: fieldDef.description,
+            };
+        } else if (fieldDef.kind === 'table') {
+            return {
+                typeStr: 'table',
+                optional: false,
+                description: fieldDef.description,
+            };
+        }
+        return { typeStr: 'unknown' };
     }
 
     private resolveMemberType(baseType: LuaType, memberName: string): LuaType {
@@ -222,6 +366,18 @@ export class MemberProvider implements CompletionProvider {
 
     private addMemberCompletions(builder: CompletionBuilder, type: LuaType, _colonCall = false): void {
         const definitionLoader = getDefinitionLoader();
+
+        // Handle Union types by collecting completions from each member type
+        if (type.kind === LuaTypeKind.Union) {
+            const unionType = type as LuaUnionType;
+            for (const memberType of unionType.types) {
+                // Skip nil type in unions
+                if (memberType.kind === LuaTypeKind.Nil) continue;
+                // Recurse for each non-nil member
+                this.addMemberCompletions(builder, memberType, _colonCall);
+            }
+            return;
+        }
 
         // Check if type is table-like using new type helper
         if (isTableLike(type)) {

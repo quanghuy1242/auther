@@ -216,7 +216,7 @@
                 },
                 "prev": {
                     "kind": "property",
-                    "type": "table | nil",
+                    "type": "ScriptOutput | nil",
                     "description": "Merged result data from the previous script layer."
                 },
                 "outputs": {

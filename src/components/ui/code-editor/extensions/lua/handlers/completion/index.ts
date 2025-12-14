@@ -1,6 +1,7 @@
 import type { Position, CompletionItem } from "../../protocol";
 import type { LuaDocument } from "../../core/document";
 import type { AnalysisResult } from "../../analysis/analyzer";
+import type { DagContext } from "../../analysis/dag-context";
 import { findNodePathAtOffset, isCallExpression, isTableConstructor, type LuaCallExpression } from "../../core/luaparse-types";
 
 import { CompletionBuilder } from "./builder";
@@ -17,6 +18,7 @@ import { TableFieldProvider } from "./providers/table-fields";
 import { MemberProvider } from "./providers/members";
 import { EnvProvider } from "./providers/environment";
 import { KeywordsProvider } from "./providers/keywords";
+import { OutputsProvider } from "./providers/outputs";
 
 // =============================================================================
 // COMPLETION OPTIONS
@@ -32,6 +34,10 @@ export interface CompletionOptions {
     maxItems?: number;
     /** Whether completion was explicitly triggered (Ctrl+Space) */
     isExplicit?: boolean;
+    /** DAG context for script dependency awareness */
+    dagContext?: DagContext;
+    /** Previous script code for context.prev type inference */
+    previousScriptCode?: string;
 }
 
 // =============================================================================
@@ -66,9 +72,10 @@ export function getCompletions(
     );
 
     // Run providers in order (following EmmyLua's provider order)
-    // Doc providers first, then postfix, equality, function, table_field,
-    // env, member, and finally keywords
+    // OutputsProvider first for DAG-aware completions, then doc providers,
+    // postfix, equality, function, table_field, env, member, and finally keywords
     const providers: CompletionProvider[] = [
+        new OutputsProvider(), // DAG-aware context.outputs completions - FIRST
         new DocTagProvider(),
         new DocTypeProvider(),
         new DocNameTokenProvider(),

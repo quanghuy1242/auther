@@ -1,4 +1,5 @@
 import type { CompletionBuilder } from "./builder";
+import type { DagContext } from "../../analysis/dag-context";
 
 // =============================================================================
 // COMPLETION TRIGGER STATUS
@@ -45,4 +46,8 @@ export interface CompletionOptions {
     includeDeprecated?: boolean;
     /** Whether completion was explicitly triggered */
     isExplicit?: boolean;
+    /** DAG context for script dependency awareness */
+    dagContext?: DagContext;
+    /** Previous script code for context.prev type inference */
+    previousScriptCode?: string;
 }

@@ -7,6 +7,7 @@ import { LuaDocument } from "@/components/ui/code-editor/extensions/lua/core/doc
 import { analyzeDocument } from "@/components/ui/code-editor/extensions/lua/analysis/analyzer";
 import { getDiagnostics } from "@/components/ui/code-editor/extensions/lua/handlers/diagnostics";
 import { DiagnosticSeverity } from "@/components/ui/code-editor/extensions/lua/protocol";
+import type { DagContext } from "@/components/ui/code-editor/extensions/lua/analysis/dag-context";
 
 // Mode-specific script templates
 const BLOCKING_TEMPLATE = `-- Blocking Hook Script
@@ -77,6 +78,8 @@ interface ScriptEditorModalProps {
     hookName?: string;
     /** Code from the previous script in the pipeline for context.prev completions */
     previousScriptCode?: string;
+    /** DAG context for script dependency awareness */
+    dagContext?: DagContext;
     onSave: (name: string, code: string) => Promise<void>;
     onDelete: () => Promise<void>;
 }
@@ -88,6 +91,7 @@ export function ScriptEditorModal({
     executionMode,
     hookName,
     previousScriptCode,
+    dagContext,
     onSave,
     onDelete,
 }: ScriptEditorModalProps) {
@@ -190,6 +194,7 @@ export function ScriptEditorModal({
                                 hookName,
                                 executionMode,
                                 previousScriptCode,
+                                dagContext,
                             }}
                             height="350px"
                         />

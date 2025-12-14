@@ -8,6 +8,7 @@ import { autocompletion } from "@codemirror/autocomplete";
 import { linter, lintGutter } from "@codemirror/lint";
 import type { Extension } from "@codemirror/state";
 import type { HookExecutionMode } from "@/schemas/pipelines";
+import type { DagContext } from "../analysis/dag-context";
 
 import { createCompletionSource } from "./completion-source";
 import { createHoverTooltip } from "./hover-tooltip";
@@ -97,6 +98,12 @@ export interface LuaExtensionsOptions {
      * @default true
      */
     semanticTokens?: boolean;
+
+    /**
+     * DAG context for script dependency awareness.
+     * Enables intelligent context.outputs and context.prev completions.
+     */
+    dagContext?: DagContext;
 }
 
 // =============================================================================
@@ -140,6 +147,7 @@ export function createLuaExtensions(options: LuaExtensionsOptions = {}): Extensi
         findReferences: enableFindReferences = true,
         semanticTokens: enableSemanticTokens = true,
         lintDelay = 300,
+        dagContext,
     } = options;
 
     const extensions: Extension[] = [];
@@ -153,7 +161,7 @@ export function createLuaExtensions(options: LuaExtensionsOptions = {}): Extensi
     if (enableAutocomplete) {
         extensions.push(
             autocompletion({
-                override: [createCompletionSource({ hookName, previousScriptCode })],
+                override: [createCompletionSource({ hookName, previousScriptCode, dagContext })],
                 activateOnTyping: true,
                 maxRenderedOptions: 50,
             })
