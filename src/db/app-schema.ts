@@ -133,7 +133,7 @@ export const webhookEndpoint = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
-    url: text("url").notNull(),
+    url: text("url"), // Nullable - webhooks can be created without URL (pending setup)
     encryptedSecret: text("encrypted_secret").notNull(), // Store encrypted webhook signing secret
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     retryPolicy: text("retry_policy").notNull().default("standard"), // e.g., "none", "standard", "aggressive"

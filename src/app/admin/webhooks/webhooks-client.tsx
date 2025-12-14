@@ -185,12 +185,22 @@ export function WebhooksClient({
     {
       key: "isActive",
       header: "Status",
-      className: "w-[100px]",
-      render: (webhook: WebhookEndpointWithSubscriptions) => (
-        <Badge variant={webhook.isActive ? "success" : "default"} dot>
-          {webhook.isActive ? "Active" : "Inactive"}
-        </Badge>
-      ),
+      className: "w-[120px]",
+      render: (webhook: WebhookEndpointWithSubscriptions) => {
+        // Webhooks without URL are in "Pending Setup" state
+        if (!webhook.url || webhook.url.trim() === "") {
+          return (
+            <Badge variant="warning" dot>
+              Pending Setup
+            </Badge>
+          );
+        }
+        return (
+          <Badge variant={webhook.isActive ? "success" : "default"} dot>
+            {webhook.isActive ? "Active" : "Inactive"}
+          </Badge>
+        );
+      },
     },
     {
       key: "lastDelivery",

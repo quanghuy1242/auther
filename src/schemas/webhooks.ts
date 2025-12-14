@@ -9,20 +9,28 @@ export const webhookSchema = z.object({
     .max(100, "Display name must be less than 100 characters"),
   url: z
     .string()
-    .url("Must be a valid URL")
+    .optional()
     .refine(
       (url) => {
-        // Allow HTTPS, localhost, and Docker network URLs (e.g., http://webhook-tester:8080)
+        // Empty/undefined URL is valid (webhook will be disabled)
+        if (!url || url.trim() === "") return true;
+        // If URL is provided, validate it
+        try {
+          new URL(url);
+        } catch {
+          return false;
+        }
+        // Allow HTTPS, localhost, and Docker network URLs
         return (
-          url.startsWith("https://") || 
+          url.startsWith("https://") ||
           url.startsWith("http://localhost") ||
           url.startsWith("http://127.0.0.1") ||
-          /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url) // Docker service names with port
+          /^http:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*:[0-9]+/.test(url)
         );
       },
       "URL must use HTTPS or be a valid local/Docker network URL (http://localhost, http://service-name:port)"
     ),
-  isActive: booleanField.default(true),
+  isActive: booleanField.default(false), // Default to false since URL may not be set
   eventTypes: z
     .array(z.string())
     .min(1, "At least one event type must be selected")
@@ -36,7 +44,19 @@ export const webhookSchema = z.object({
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
   requestMethod: z.enum(["POST", "PUT"]).default("POST"),
-});
+}).refine(
+  (data) => {
+    // If no URL, isActive must be false
+    if (!data.url || data.url.trim() === "") {
+      return data.isActive === false;
+    }
+    return true;
+  },
+  {
+    message: "Webhook cannot be enabled without a URL configured",
+    path: ["isActive"],
+  }
+);
 
 // UI Constants related to the schema
 export const RETRY_POLICY_OPTIONS = [

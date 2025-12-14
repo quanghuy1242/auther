@@ -184,33 +184,33 @@ export class WebhookRepository {
       const subscriptions =
         endpointIds.length > 0
           ? await db
-              .select()
-              .from(webhookSubscription)
-              .where(inArray(webhookSubscription.endpointId, endpointIds))
+            .select()
+            .from(webhookSubscription)
+            .where(inArray(webhookSubscription.endpointId, endpointIds))
           : [];
 
       // Get last deliveries for these endpoints
       const lastDeliveries =
         endpointIds.length > 0
           ? await db
-              .select({
-                endpointId: webhookDelivery.endpointId,
-                status: webhookDelivery.status,
-                timestamp: webhookDelivery.createdAt,
-                responseCode: webhookDelivery.responseCode,
-              })
-              .from(webhookDelivery)
-              .where(
-                and(
-                  inArray(webhookDelivery.endpointId, endpointIds),
-                  sql`${webhookDelivery.id} IN (
+            .select({
+              endpointId: webhookDelivery.endpointId,
+              status: webhookDelivery.status,
+              timestamp: webhookDelivery.createdAt,
+              responseCode: webhookDelivery.responseCode,
+            })
+            .from(webhookDelivery)
+            .where(
+              and(
+                inArray(webhookDelivery.endpointId, endpointIds),
+                sql`${webhookDelivery.id} IN (
                     SELECT id FROM ${webhookDelivery}
                     WHERE ${webhookDelivery.endpointId} = ${webhookDelivery.endpointId}
                     ORDER BY ${webhookDelivery.createdAt} DESC
                     LIMIT 1
                   )`
-                )
               )
+            )
           : [];
 
       // Combine data
@@ -292,7 +292,7 @@ export class WebhookRepository {
     id: string;
     userId: string;
     displayName: string;
-    url: string;
+    url: string | null;
     encryptedSecret: string;
     isActive: boolean;
     retryPolicy: WebhookRetryPolicy;
@@ -702,24 +702,24 @@ export class WebhookRepository {
       // Calculate daily data
       const dailyData = [];
       const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      
+
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
         date.setHours(0, 0, 0, 0);
-        
+
         const nextDate = new Date(date);
         nextDate.setDate(nextDate.getDate() + 1);
-        
+
         const dayDeliveries = recentDeliveries.filter((d) => {
           const deliveryDate = new Date(d.createdAt);
           return deliveryDate >= date && deliveryDate < nextDate;
         });
-        
+
         const daySuccess = dayDeliveries.filter((d) => d.status === "success").length;
         const dayTotal = dayDeliveries.length;
         const daySuccessRate = dayTotal > 0 ? (daySuccess / dayTotal) * 100 : 0;
-        
+
         dailyData.push({
           day: dayNames[date.getDay()],
           successCount: daySuccess,

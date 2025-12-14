@@ -246,14 +246,18 @@ export async function createWebhook(
     const plainSecret = generateWebhookSecret();
     const encryptedSecret = encryptSecret(plainSecret);
 
+    // Force isActive to false if no URL is provided
+    const hasUrl = data.url && data.url.trim() !== "";
+    const effectiveIsActive = hasUrl ? data.isActive : false;
+
     // Create endpoint
     const endpoint = await webhookRepository.create({
       id,
       userId: session.user.id,
       displayName: data.displayName,
-      url: data.url,
+      url: data.url || null,
       encryptedSecret,
-      isActive: data.isActive,
+      isActive: effectiveIsActive,
       retryPolicy: data.retryPolicy as WebhookRetryPolicy,
       deliveryFormat: data.deliveryFormat as WebhookDeliveryFormat,
       requestMethod: data.requestMethod as WebhookRequestMethod,
@@ -342,11 +346,15 @@ export async function updateWebhook(
 
     const data = result.data;
 
+    // Force isActive to false if no URL is provided
+    const hasUrl = data.url && data.url.trim() !== "";
+    const effectiveIsActive = hasUrl ? data.isActive : false;
+
     // Update endpoint
     const updated = await webhookRepository.update(webhookId, {
       displayName: data.displayName,
-      url: data.url,
-      isActive: data.isActive,
+      url: data.url || null,
+      isActive: effectiveIsActive,
       retryPolicy: data.retryPolicy as WebhookRetryPolicy,
       deliveryFormat: data.deliveryFormat as WebhookDeliveryFormat,
       requestMethod: data.requestMethod as WebhookRequestMethod,
