@@ -3,11 +3,6 @@
 import * as React from "react";
 import {
     Button,
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
     Badge,
     Modal,
     ModalFooter,
@@ -17,7 +12,9 @@ import {
     Select,
     Switch,
     Tabs,
+    EmptyState,
 } from "@/components/ui";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { toast } from "sonner";
 import type {
     PermissionRequestWithDetails,
@@ -73,20 +70,19 @@ export function PendingRequestsSection({ requests }: PendingRequestsSectionProps
     const pendingRequests = requests.filter(r => r.status === "pending");
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Icon name="pending_actions" className="h-5 w-5" />
+        <CollapsibleSection
+            title={
+                <span className="flex items-center gap-2">
                     Pending Requests
                     {pendingRequests.length > 0 && (
                         <Badge variant="warning">{pendingRequests.length}</Badge>
                     )}
-                </CardTitle>
-                <CardDescription>
-                    Permission escalation requests awaiting approval
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
+                </span>
+            }
+            icon="pending_actions"
+            description="Permission escalation requests awaiting approval"
+            defaultOpen
+        >
                 {pendingRequests.length > 0 ? (
                     <div className="space-y-3">
                         {pendingRequests.map((request) => (
@@ -140,14 +136,13 @@ export function PendingRequestsSection({ requests }: PendingRequestsSectionProps
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="check_circle" className="h-8 w-8 mx-auto mb-2 opacity-50 text-green-500" />
-                        <p>No pending requests</p>
-                        <p className="text-sm">All permission requests have been processed</p>
-                    </div>
+                    <EmptyState
+                        icon="check_circle"
+                        title="No pending requests"
+                        description="All permission requests have been processed"
+                    />
                 )}
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }
 
@@ -163,17 +158,12 @@ export function RequestHistorySection({ requests }: RequestHistorySectionProps) 
     const processedRequests = requests.filter(r => r.status !== "pending");
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Icon name="history" className="h-5 w-5" />
-                    Request History
-                </CardTitle>
-                <CardDescription>
-                    Previously processed permission requests
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
+        <CollapsibleSection
+            title="Request History"
+            icon="history"
+            description="Previously processed permission requests"
+            defaultOpen
+        >
                 {processedRequests.length > 0 ? (
                     <div className="space-y-2">
                         {processedRequests.map((request) => (
@@ -207,13 +197,12 @@ export function RequestHistorySection({ requests }: RequestHistorySectionProps) 
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="history" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No request history</p>
-                    </div>
+                    <EmptyState
+                        icon="history"
+                        title="No request history"
+                    />
                 )}
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }
 
@@ -312,24 +301,17 @@ export function AutomationRulesSection({ rules }: AutomationRulesSectionProps) {
     }
 
     return (
-        <Card>
-            <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <Icon name="auto_fix_high" className="h-5 w-5" />
-                            Automation Rules
-                        </CardTitle>
-                        <CardDescription>
-                            Configure automatic handling of permission requests
-                        </CardDescription>
-                    </div>
-                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                        Add Rule
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent>
+        <CollapsibleSection
+            title="Automation Rules"
+            icon="auto_fix_high"
+            description="Configure automatic handling of permission requests"
+            defaultOpen
+            actions={
+                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                    Add Rule
+                </Button>
+            }
+        >
                 {rules.length > 0 ? (
                     <div className="space-y-2">
                         {rules.map((rule) => (
@@ -378,11 +360,11 @@ export function AutomationRulesSection({ rules }: AutomationRulesSectionProps) {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="auto_fix_high" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No automation rules</p>
-                        <p className="text-sm">All requests require manual approval</p>
-                    </div>
+                    <EmptyState
+                        icon="auto_fix_high"
+                        title="No automation rules"
+                        description="All requests require manual approval"
+                    />
                 )}
 
                 {/* Create Rule Modal */}
@@ -484,8 +466,7 @@ export function AutomationRulesSection({ rules }: AutomationRulesSectionProps) {
                         </Button>
                     </ModalFooter>
                 </Modal>
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }
 
@@ -506,7 +487,7 @@ export function RequestsClient({ pendingRequests, allRequests, rules }: Requests
                 {
                     label: `Pending${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ""}`,
                     content: (
-                        <div className="space-y-6 pt-4">
+                        <div className="space-y-6">
                             <PendingRequestsSection requests={pendingRequests} />
                         </div>
                     ),
@@ -514,7 +495,7 @@ export function RequestsClient({ pendingRequests, allRequests, rules }: Requests
                 {
                     label: "History",
                     content: (
-                        <div className="space-y-6 pt-4">
+                        <div className="space-y-6">
                             <RequestHistorySection requests={allRequests} />
                         </div>
                     ),
@@ -522,7 +503,7 @@ export function RequestsClient({ pendingRequests, allRequests, rules }: Requests
                 {
                     label: "Automation",
                     content: (
-                        <div className="space-y-6 pt-4">
+                        <div className="space-y-6">
                             <AutomationRulesSection rules={rules} />
                         </div>
                     ),

@@ -37,7 +37,7 @@ export type AlertVariant =
 // ============================================================================
 
 export type Size = "xs" | "sm" | "md" | "lg" | "xl";
-export type IconSize = "sm" | "md" | "lg" | "xl";
+export type IconSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 // ============================================================================
 // Design System Colors

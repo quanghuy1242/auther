@@ -3,11 +3,6 @@
 import * as React from "react";
 import {
     Button,
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
     Badge,
     Switch,
     Modal,
@@ -16,7 +11,9 @@ import {
     Input,
     Label,
     Textarea,
+    EmptyState,
 } from "@/components/ui";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { toast } from "sonner";
 import type {
     PolicyTemplate,
@@ -116,24 +113,17 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
     const customTemplates = templates.filter(t => !t.isSystem);
 
     return (
-        <Card>
-            <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <Icon name="shield" className="h-5 w-5" />
-                            Policy Templates
-                        </CardTitle>
-                        <CardDescription>
-                            Pre-configured permission bundles that can be applied to users
-                        </CardDescription>
-                    </div>
-                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                        Create Template
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        <CollapsibleSection
+            title="Policy Templates"
+            icon="shield"
+            description="Pre-configured permission bundles that can be applied to users"
+            defaultOpen
+            actions={
+                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                    Create Template
+                </Button>
+            }
+        >
                 {/* System Templates */}
                 {systemTemplates.length > 0 && (
                     <div>
@@ -146,7 +136,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                                     onClick={() => setSelectedTemplate(template)}
                                 >
                                     <div className="flex items-center gap-2">
-                                        <Icon name="verified" className="h-4 w-4 text-blue-500" />
+                                        <Icon name="verified" size="xs" className="h-4 w-4 text-blue-500" />
                                         <span className="font-medium">{template.name}</span>
                                     </div>
                                     <Badge variant="default">
@@ -170,7 +160,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                                     onClick={() => setSelectedTemplate(template)}
                                 >
                                     <div className="flex items-center gap-2">
-                                        <Icon name="description" className="h-4 w-4 text-neutral-500" />
+                                        <Icon name="description" size="xs" className="h-4 w-4 text-neutral-500" />
                                         <span className="font-medium">{template.name}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -186,7 +176,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                                                 handleDelete(template.id);
                                             }}
                                         >
-                                            <Icon name="delete" className="h-4 w-4 text-red-500" />
+                                            <Icon name="delete" size="xs" className="h-4 w-4 text-red-500" />
                                         </Button>
                                     </div>
                                 </div>
@@ -196,11 +186,11 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                 )}
 
                 {templates.length === 0 && (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="shield" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No policy templates yet</p>
-                        <p className="text-sm">Create templates to quickly assign permissions</p>
-                    </div>
+                    <EmptyState
+                        icon="shield"
+                        title="No policy templates yet"
+                        description="Create templates to quickly assign permissions"
+                    />
                 )}
 
                 {/* Template Detail Modal */}
@@ -224,7 +214,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                                         <span className="font-mono text-xs bg-neutral-200 dark:bg-neutral-700 px-1.5 py-0.5 rounded">
                                             {perm.entityType}
                                         </span>
-                                        <Icon name="arrow_forward" className="h-3 w-3 text-neutral-400" />
+                                        <Icon name="arrow_forward" className="text-[12px] h-3 w-3 text-neutral-400" />
                                         <span className="font-medium">{perm.relation}</span>
                                     </div>
                                 ))}
@@ -312,8 +302,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                         </Button>
                     </ModalFooter>
                 </Modal>
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }
 
@@ -326,7 +315,6 @@ interface AuthorizationModelsSectionProps {
 }
 
 export function AuthorizationModelsSection({ models }: AuthorizationModelsSectionProps) {
-    const [expandedModels, setExpandedModels] = React.useState<Set<string>>(new Set());
     const [showCreate, setShowCreate] = React.useState(false);
     const [creating, setCreating] = React.useState(false);
     const [deleting, setDeleting] = React.useState<string | null>(null);
@@ -334,18 +322,6 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
     // Form state
     const [entityType, setEntityType] = React.useState("");
     const [relationsInput, setRelationsInput] = React.useState("");
-
-    function toggleExpanded(id: string) {
-        setExpandedModels(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
-    }
 
     function resetForm() {
         setEntityType("");
@@ -401,87 +377,55 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
     const featureModels = models.filter(m => m.entityType !== "platform");
 
     return (
-        <Card>
-            <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <Icon name="account_tree" className="h-5 w-5" />
-                            Authorization Models
-                        </CardTitle>
-                        <CardDescription>
-                            Define relations for platform features
-                        </CardDescription>
-                    </div>
-                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                        Add Model
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
+        <CollapsibleSection
+            title="Authorization Models"
+            icon="account_tree"
+            description="Define relations for platform features"
+            defaultOpen
+            actions={
+                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                    Add Model
+                </Button>
+            }
+        >
                 {/* Platform Model (highlighted) */}
                 {platformModel && (
-                    <div className="rounded-lg border-2 border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/20">
-                        <div
-                            className="flex items-center justify-between p-4 cursor-pointer"
-                            onClick={() => toggleExpanded(platformModel.id)}
-                        >
-                            <div className="flex items-center gap-3">
-                                <Icon
-                                    name={expandedModels.has(platformModel.id) ? "expand_less" : "expand_more"}
-                                    className="h-5 w-5 text-neutral-500"
-                                />
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold">Platform</span>
-                                        <Badge variant="info">Core</Badge>
-                                    </div>
-                                    <p className="text-sm text-neutral-500">{platformModel.description}</p>
-                                </div>
+                    <CollapsibleSection
+                        title={
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold">Platform</span>
+                                <Badge variant="info">Core</Badge>
                             </div>
+                        }
+                        description={platformModel.description || undefined}
+                        actions={
                             <Badge variant="default">{platformModel.relations.length} relations</Badge>
+                        }
+                    >
+                        <div className="flex flex-wrap gap-2">
+                            {platformModel.relations.map((rel) => (
+                                <Badge key={rel} variant="default" className="font-mono text-xs">
+                                    {rel}
+                                </Badge>
+                            ))}
                         </div>
-                        {expandedModels.has(platformModel.id) && (
-                            <div className="border-t border-blue-200 dark:border-blue-900 p-4 pt-3">
-                                <div className="flex flex-wrap gap-2">
-                                    {platformModel.relations.map((rel) => (
-                                        <Badge key={rel} variant="default" className="font-mono text-xs">
-                                            {rel}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    </CollapsibleSection>
                 )}
 
                 {/* Feature Models */}
                 {featureModels.map((model) => (
-                    <div
+                    <CollapsibleSection
                         key={model.id}
-                        className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800"
-                    >
-                        <div
-                            className="flex items-center justify-between p-4 cursor-pointer"
-                            onClick={() => toggleExpanded(model.id)}
-                        >
-                            <div className="flex items-center gap-3">
-                                <Icon
-                                    name={expandedModels.has(model.id) ? "expand_less" : "expand_more"}
-                                    className="h-5 w-5 text-neutral-500"
-                                />
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold capitalize">{model.entityType}</span>
-                                        {model.isSystem && (
-                                            <Badge variant="default">System</Badge>
-                                        )}
-                                    </div>
-                                    {model.description && (
-                                        <p className="text-sm text-neutral-500">{model.description}</p>
-                                    )}
-                                </div>
+                        title={
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold capitalize">{model.entityType}</span>
+                                {model.isSystem && (
+                                    <Badge variant="default">System</Badge>
+                                )}
                             </div>
+                        }
+                        description={model.description || undefined}
+                        actions={
                             <div className="flex items-center gap-2">
                                 <Badge variant="default">{model.relations.length} relations</Badge>
                                 {!model.isSystem && (
@@ -494,31 +438,28 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                                         }}
                                         disabled={deleting === model.entityType}
                                     >
-                                        <Icon name="delete" className="h-4 w-4 text-red-500" />
+                                        <Icon name="delete" size="xs" className="h-4 w-4 text-red-500" />
                                     </Button>
                                 )}
                             </div>
+                        }
+                    >
+                        <div className="flex flex-wrap gap-2">
+                            {model.relations.map((rel) => (
+                                <Badge key={rel} variant="default" className="font-mono text-xs">
+                                    {rel}
+                                </Badge>
+                            ))}
                         </div>
-                        {expandedModels.has(model.id) && (
-                            <div className="border-t border-neutral-200 dark:border-neutral-700 p-4 pt-3">
-                                <div className="flex flex-wrap gap-2">
-                                    {model.relations.map((rel) => (
-                                        <Badge key={rel} variant="default" className="font-mono text-xs">
-                                            {rel}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    </CollapsibleSection>
                 ))}
 
                 {models.length === 0 && (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="account_tree" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No authorization models defined</p>
-                        <p className="text-sm">Create models to define feature permissions</p>
-                    </div>
+                    <EmptyState
+                        icon="account_tree"
+                        title="No authorization models defined"
+                        description="Create models to define feature permissions"
+                    />
                 )}
 
                 {/* Create Model Modal */}
@@ -562,8 +503,7 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                         </Button>
                     </ModalFooter>
                 </Modal>
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }
 
@@ -596,23 +536,18 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
     const disabledClients = clients.filter(c => !c.allowsRegistrationContexts);
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Icon name="app_registration" className="h-5 w-5" />
-                    Client Registration Whitelist
-                </CardTitle>
-                <CardDescription>
-                    Only whitelisted clients can create registration contexts for user sign-up
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
+        <CollapsibleSection
+            title="Client Registration Whitelist"
+            icon="app_registration"
+            description="Only whitelisted clients can create registration contexts for user sign-up"
+            defaultOpen
+        >
                 <div className="space-y-4">
                     {/* Enabled clients */}
                     {enabledClients.length > 0 && (
                         <div>
                             <h4 className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-1">
-                                <Icon name="check_circle" className="h-4 w-4" />
+                                <Icon name="check_circle" size="xs" className="h-4 w-4" />
                                 Enabled ({enabledClients.length})
                             </h4>
                             <div className="space-y-2">
@@ -644,7 +579,7 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
                     {disabledClients.length > 0 && (
                         <div>
                             <h4 className="text-sm font-medium text-neutral-500 mb-2 flex items-center gap-1">
-                                <Icon name="block" className="h-4 w-4" />
+                                <Icon name="block" size="xs" className="h-4 w-4" />
                                 Disabled ({disabledClients.length})
                             </h4>
                             <div className="space-y-2">
@@ -668,14 +603,13 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
                     )}
 
                     {clients.length === 0 && (
-                        <div className="text-center py-8 text-neutral-500">
-                            <Icon name="apps" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p>No OAuth clients registered</p>
-                        </div>
+                        <EmptyState
+                            icon="apps"
+                            title="No OAuth clients registered"
+                        />
                     )}
                 </div>
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }
 
@@ -784,24 +718,17 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
     }
 
     return (
-        <Card>
-            <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2">
-                            <Icon name="person_add" className="h-5 w-5" />
-                            Platform Registration Contexts
-                        </CardTitle>
-                        <CardDescription>
-                            Sign-up flows that grant platform-level permissions
-                        </CardDescription>
-                    </div>
-                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                        Create Context
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent>
+        <CollapsibleSection
+            title="Platform Registration Contexts"
+            icon="person_add"
+            description="Sign-up flows that grant platform-level permissions"
+            defaultOpen
+            actions={
+                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                    Create Context
+                </Button>
+            }
+        >
                 {contexts.length > 0 ? (
                     <div className="space-y-3">
                         {contexts.map((context) => (
@@ -837,7 +764,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                             size="sm"
                                             onClick={() => handleDelete(context.id)}
                                         >
-                                            <Icon name="delete" className="h-4 w-4 text-red-500" />
+                                            <Icon name="delete" size="xs" className="h-4 w-4 text-red-500" />
                                         </Button>
                                     </div>
                                 </div>
@@ -870,11 +797,11 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="person_add" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No platform registration contexts</p>
-                        <p className="text-sm">Create contexts to enable user sign-up with platform permissions</p>
-                    </div>
+                    <EmptyState
+                        icon="person_add"
+                        title="No platform registration contexts"
+                        description="Create contexts to enable user sign-up with platform permissions"
+                    />
                 )}
 
                 {/* Create Context Modal */}
@@ -978,7 +905,6 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                         </Button>
                     </ModalFooter>
                 </Modal>
-            </CardContent>
-        </Card>
+        </CollapsibleSection>
     );
 }

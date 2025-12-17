@@ -9,6 +9,7 @@ export interface IconProps {
 }
 
 const sizeMap: Record<IconSize, string> = {
+  xs: "text-[16px]",
   sm: "text-[18px]",
   md: "text-[24px]",
   lg: "text-[32px]",
@@ -32,7 +33,7 @@ export function Icon({
   return (
     <span
       className={cn(
-        "material-symbols-outlined scale-85",
+        "material-symbols-outlined inline-flex items-center justify-center scale-85",
         sizeMap[size],
         filled && "fill",
         className

@@ -3,11 +3,6 @@
 import * as React from "react";
 import {
     Button,
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
     Badge,
     Switch,
     Modal,
@@ -16,7 +11,9 @@ import {
     Input,
     Label,
     Textarea,
+    EmptyState,
 } from "@/components/ui";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { toast } from "sonner";
 import type {
     RegistrationContext,
@@ -137,44 +134,41 @@ export function RegistrationTab({ clientId, contexts, allowsContexts }: Registra
 
     if (!allowsContexts) {
         return (
-            <Card>
-                <CardContent className="py-8">
-                    <div className="text-center text-neutral-500">
-                        <Icon name="block" className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p className="font-medium">Registration Contexts Disabled</p>
-                        <p className="text-sm mt-1">
-                            This client is not whitelisted for registration contexts.
-                        </p>
-                        <p className="text-sm">
-                            Contact a platform administrator to enable this feature.
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
+            <CollapsibleSection
+                title="Registration Contexts"
+                icon="block"
+                description="Registration contexts are disabled for this client"
+                defaultOpen
+            >
+                    <EmptyState
+                        icon="block"
+                        title="Registration Contexts Disabled"
+                        description={
+                            <>
+                                This client is not whitelisted for registration contexts.
+                                <br />
+                                Contact a platform administrator to enable this feature.
+                            </>
+                        }
+                    />
+            </CollapsibleSection>
         );
     }
 
     return (
         <>
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <Icon name="person_add" className="h-5 w-5" />
-                                Registration Contexts
-                            </CardTitle>
-                            <CardDescription>
-                                Sign-up flows that grant client-level permissions
-                            </CardDescription>
-                        </div>
-                        <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                            Create Context
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {contexts.length > 0 ? (
+            <CollapsibleSection
+                title="Registration Contexts"
+                icon="person_add"
+                description="Sign-up flows that grant client-level permissions"
+                defaultOpen
+                actions={
+                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                        Create Context
+                    </Button>
+                }
+            >
+                {contexts.length > 0 ? (
                         <div className="space-y-3">
                             {contexts.map((context) => (
                                 <div
@@ -242,14 +236,13 @@ export function RegistrationTab({ clientId, contexts, allowsContexts }: Registra
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center py-8 text-neutral-500">
-                            <Icon name="person_add" className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p>No registration contexts</p>
-                            <p className="text-sm">Create contexts to enable user sign-up for this client</p>
-                        </div>
+                        <EmptyState
+                            icon="person_add"
+                            title="No registration contexts"
+                            description="Create contexts to enable user sign-up for this client"
+                        />
                     )}
-                </CardContent>
-            </Card>
+                </CollapsibleSection>
 
             {/* Create Context Modal */}
             <Modal
@@ -388,20 +381,19 @@ export function RequestsTab({ clientId, requests }: RequestsTabProps) {
     const pendingRequests = requests.filter(r => r.status === "pending");
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Icon name="pending_actions" className="h-5 w-5" />
+        <CollapsibleSection
+            title={
+                <span className="flex items-center gap-2">
                     Permission Requests
                     {pendingRequests.length > 0 && (
                         <Badge variant="warning">{pendingRequests.length}</Badge>
                     )}
-                </CardTitle>
-                <CardDescription>
-                    Permission escalation requests for this client
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
+                </span>
+            }
+            icon="pending_actions"
+            description="Permission escalation requests for this client"
+            defaultOpen
+        >
                 {pendingRequests.length > 0 ? (
                     <div className="space-y-3">
                         {pendingRequests.map((request) => (
@@ -455,13 +447,12 @@ export function RequestsTab({ clientId, requests }: RequestsTabProps) {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-neutral-500">
-                        <Icon name="check_circle" className="h-8 w-8 mx-auto mb-2 opacity-50 text-green-500" />
-                        <p>No pending requests</p>
-                        <p className="text-sm">All permission requests have been processed</p>
-                    </div>
+                    <EmptyState
+                        icon="check_circle"
+                        title="No pending requests"
+                        description="All permission requests have been processed"
+                    />
                 )}
-            </CardContent>
-        </Card>
+            </CollapsibleSection>
     );
 }
