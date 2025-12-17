@@ -29,9 +29,7 @@ import {
     deleteInvite,
 } from "./invites-actions";
 
-interface InvitesTabProps { }
-
-export function InvitesTab({ }: InvitesTabProps) {
+export function InvitesTab() {
     const [invites, setInvites] = React.useState<InviteWithContext[]>([]);
     const [contexts, setContexts] = React.useState<RegistrationContext[]>([]);
     const [loading, setLoading] = React.useState(true);

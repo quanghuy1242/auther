@@ -42,7 +42,7 @@ export class OAuthClientMetadataRepository {
       allowsApiKeys: row.allowsApiKeys,
       defaultApiKeyPermissions: parsePermissions(row.defaultApiKeyPermissions),
       accessPolicy: row.accessPolicy as "all_users" | "restricted",
-      allowsRegistrationContexts: row.allowsRegistrationContexts,
+      allowsRegistrationContexts: row.allowsRegistrationContexts ?? false,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -84,6 +84,7 @@ export class OAuthClientMetadataRepository {
         ? stringifyPermissions(data.defaultApiKeyPermissions)
         : "{}",
       accessPolicy: data.accessPolicy ?? "all_users",
+      allowsRegistrationContexts: data.allowsRegistrationContexts ?? false,
       createdAt: now,
       updatedAt: now,
     };
@@ -98,6 +99,7 @@ export class OAuthClientMetadataRepository {
           allowsApiKeys: values.allowsApiKeys,
           defaultApiKeyPermissions: values.defaultApiKeyPermissions,
           accessPolicy: values.accessPolicy,
+          allowsRegistrationContexts: values.allowsRegistrationContexts,
           updatedAt: now,
         },
       })
@@ -133,6 +135,10 @@ export class OAuthClientMetadataRepository {
 
       if (data.accessPolicy !== undefined) {
         updateData.accessPolicy = data.accessPolicy;
+      }
+
+      if (data.allowsRegistrationContexts !== undefined) {
+        updateData.allowsRegistrationContexts = data.allowsRegistrationContexts;
       }
 
       const [updated] = await db
