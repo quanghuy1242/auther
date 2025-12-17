@@ -13,6 +13,8 @@ const mainNavItems: NavItem[] = [
   { label: "Users", href: "/admin/users", icon: "group" },
   { label: "Groups", href: "/admin/groups", icon: "groups" },
   { label: "OAuth Clients", href: "/admin/clients", icon: "apps" },
+  { label: "Access", href: "/admin/access", icon: "shield" },
+  { label: "Requests", href: "/admin/requests", icon: "approval" },
   { label: "Sessions", href: "/admin/sessions", icon: "schedule" },
   { label: "JWKS Keys", href: "/admin/keys", icon: "key" },
   { label: "Webhooks", href: "/admin/webhooks", icon: "webhook" },

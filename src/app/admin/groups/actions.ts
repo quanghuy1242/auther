@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { userGroupRepository, tupleRepository } from "@/lib/repositories";
-import { requireAdmin } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
 import { db } from "@/lib/db";
 import { user } from "@/db/schema";
 import { inArray } from "drizzle-orm";
@@ -30,7 +30,7 @@ export async function getGroups(params?: {
     pageSize?: number;
     search?: string;
 }): Promise<GetGroupsResult> {
-    await requireAdmin();
+    await guards.groups.view();
 
     const page = Math.max(1, params?.page || 1);
     const pageSize = Math.min(100, Math.max(1, params?.pageSize || 10));
@@ -40,10 +40,12 @@ export async function getGroups(params?: {
     });
 
     // Enrich with member counts
-    const groupsWithCounts = await Promise.all(result.items.map(async (g) => {
-        const members = await userGroupRepository.getMembers(g.id);
-        return { ...g, memberCount: members.length };
-    }));
+    const groupsWithCounts = await Promise.all(
+        result.items.map(async (g) => {
+            const members = await userGroupRepository.getMembers(g.id);
+            return { ...g, memberCount: members.length };
+        })
+    );
 
     return {
         groups: groupsWithCounts,
@@ -58,7 +60,7 @@ export async function getGroups(params?: {
  * Get a single group by ID
  */
 export async function getGroup(id: string) {
-    await requireAdmin();
+    await guards.groups.view();
     return userGroupRepository.findById(id);
 }
 
@@ -66,7 +68,7 @@ export async function getGroup(id: string) {
  * Create a new group
  */
 export async function createGroup(data: z.infer<typeof createGroupSchema>) {
-    await requireAdmin();
+    await guards.groups.create();
 
     const validated = createGroupSchema.parse(data);
     const group = await userGroupRepository.create(validated);
@@ -78,8 +80,11 @@ export async function createGroup(data: z.infer<typeof createGroupSchema>) {
 /**
  * Update a group
  */
-export async function updateGroup(id: string, data: z.infer<typeof updateGroupSchema>) {
-    await requireAdmin();
+export async function updateGroup(
+    id: string,
+    data: z.infer<typeof updateGroupSchema>
+) {
+    await guards.groups.update();
 
     const validated = updateGroupSchema.parse(data);
     await userGroupRepository.update(id, validated);
@@ -93,7 +98,7 @@ export async function updateGroup(id: string, data: z.infer<typeof updateGroupSc
  * Delete a group
  */
 export async function deleteGroup(id: string) {
-    await requireAdmin();
+    await guards.groups.delete();
 
     // 1. Delete group (cascade handles membership in DB usually, but repo handles it)
     await userGroupRepository.delete(id);
@@ -112,7 +117,7 @@ export async function deleteGroup(id: string) {
  * Get members of a group
  */
 export async function getGroupMembers(groupId: string) {
-    await requireAdmin();
+    await guards.groups.view();
 
     const memberIds = await userGroupRepository.getMembers(groupId);
     if (memberIds.length === 0) return [];
@@ -134,7 +139,7 @@ export async function getGroupMembers(groupId: string) {
  * Add a member to a group
  */
 export async function addGroupMember(groupId: string, userId: string) {
-    await requireAdmin();
+    await guards.groups.manageMembers();
 
     // Check if already a member
     const members = await userGroupRepository.getMembers(groupId);
@@ -152,7 +157,7 @@ export async function addGroupMember(groupId: string, userId: string) {
  * Remove a member from a group
  */
 export async function removeGroupMember(groupId: string, userId: string) {
-    await requireAdmin();
+    await guards.groups.manageMembers();
 
     await userGroupRepository.removeMember(groupId, userId);
 
@@ -164,11 +169,11 @@ export async function removeGroupMember(groupId: string, userId: string) {
  * Get permissions for a group (ReBAC tuples)
  */
 export async function getGroupPermissions(groupId: string) {
-    await requireAdmin();
+    await guards.groups.view();
 
     const tuples = await tupleRepository.findBySubject("group", groupId);
 
-    return tuples.map(t => ({
+    return tuples.map((t) => ({
         id: t.id,
         entityType: t.entityType,
         entityId: t.entityId,
@@ -181,7 +186,6 @@ export async function getGroupPermissions(groupId: string) {
  * Get all groups a user belongs to
  */
 export async function getUserGroups(userId: string) {
-    await requireAdmin();
+    await guards.groups.view();
     return userGroupRepository.getUserGroups(userId);
 }
-

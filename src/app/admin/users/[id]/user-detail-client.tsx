@@ -12,6 +12,7 @@ import { UserAccountsTab } from "./tabs/accounts-tab";
 import { UserSessionsTab } from "./tabs/sessions-tab";
 import { UserSecurityTab } from "./tabs/security-tab";
 import { UserGroupsTab } from "./tabs/groups-tab";
+import { UserPermissionsTab } from "./tabs/permissions-tab";
 
 interface UserDetailClientProps {
   user: UserDetail;
@@ -102,6 +103,10 @@ export function UserDetailClient({ user }: UserDetailClientProps) {
           {
             label: "Profile",
             content: <UserProfileTab user={user} />,
+          },
+          {
+            label: "Permissions",
+            content: <UserPermissionsTab userId={user.id} />,
           },
           {
             label: "Groups",

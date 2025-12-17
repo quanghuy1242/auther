@@ -18,6 +18,16 @@ export function ClientDetailTabs({ clientId }: ClientDetailTabsProps) {
       href: `/admin/clients/${clientId}/access`,
       icon: "security",
     },
+    {
+      label: "Registration",
+      href: `/admin/clients/${clientId}/registration`,
+      icon: "person_add",
+    },
+    {
+      label: "Requests",
+      href: `/admin/clients/${clientId}/requests`,
+      icon: "pending_actions",
+    },
   ];
 
   return <NavTabs tabs={tabs} />;

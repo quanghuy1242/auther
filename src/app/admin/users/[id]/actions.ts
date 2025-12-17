@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -46,7 +46,7 @@ export interface UserDetail {
  */
 export async function getUserById(userId: string): Promise<UserDetail | null> {
   try {
-    await requireAdmin();
+    await guards.users.view();
 
     // Get user with accounts
     const userWithAccounts = await userRepository.findByIdWithAccounts(userId);
@@ -86,7 +86,7 @@ export async function updateUserProfile(
   formData: FormData
 ): Promise<UpdateUserState> {
   try {
-    await requireAdmin();
+    await guards.users.update();
 
     const data = {
       name: formData.get("name") as string,
@@ -135,7 +135,7 @@ export async function toggleEmailVerification(
   verified: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await guards.users.update();
 
     await userRepository.update(userId, {
       emailVerified: verified,
@@ -166,7 +166,7 @@ export async function unlinkAccount(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await guards.users.update();
 
     await accountRepository.delete(accountId);
 
@@ -191,7 +191,7 @@ export async function revokeUserSession(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await guards.sessions.revokeAll();
 
     await auth.api.revokeSession({
       body: { token: sessionToken },
@@ -217,7 +217,7 @@ export async function forceLogoutUser(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await guards.sessions.revokeAll();
 
     await sessionRepository.deleteByUserId(userId);
 
@@ -241,7 +241,7 @@ export async function setUserPassword(
   newPassword: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await guards.users.update();
 
     if (!newPassword || newPassword.length < 8) {
       return {
@@ -277,7 +277,7 @@ export async function sendPasswordResetEmail(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await guards.users.update();
     if (process.env.SKIP_EMAIL_SENDING === 'true') {
       return { success: true };
     }

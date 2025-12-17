@@ -2,8 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { requireAdmin } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
+import { getSession } from "@/lib/session";
 import { createUserSchema } from "@/schemas/users";
+import { TupleRepository } from "@/lib/repositories/tuple-repository";
+import {
+  policyTemplateRepo,
+  platformInviteRepo,
+  registrationContextRepo,
+} from "@/lib/repositories/platform-access-repository";
+import crypto from "crypto";
 
 export type CreateUserState = {
   success: boolean;
@@ -21,7 +29,9 @@ export async function createUser(
   formData: FormData
 ): Promise<CreateUserState> {
   try {
-    await requireAdmin();
+    await guards.users.create();
+    const session = await getSession();
+
     // Parse form data
     const rawData = Object.fromEntries(formData.entries());
 
@@ -39,9 +49,13 @@ export async function createUser(
 
     const { fullName, email, username, password, sendInvite = false } = result.data;
 
+    // Get template and context from form data (not in schema)
+    const templateId = formData.get("templateId") as string | null;
+    const contextSlug = formData.get("contextSlug") as string | null;
+
     // If sendInvite is true, create user without password (will need to set password via magic link)
     // Otherwise, use provided password or generate a temporary one
-    const userPassword = sendInvite 
+    const userPassword = sendInvite
       ? `temp_${Math.random().toString(36).slice(2, 15)}_${Date.now()}`
       : (password || `temp_${Math.random().toString(36).slice(2, 15)}_${Date.now()}`);
 
@@ -60,6 +74,52 @@ export async function createUser(
         success: false,
         error: "Failed to create user",
       };
+    }
+
+    const userId = response.user.id;
+
+    // Apply template permissions if selected
+    if (templateId) {
+      const template = await policyTemplateRepo.findById(templateId);
+      if (template) {
+        const tupleRepo = new TupleRepository();
+        for (const perm of template.permissions) {
+          const entityType = perm.entityType || "platform";
+          await tupleRepo.createIfNotExists({
+            entityType,
+            entityId: "*",
+            relation: perm.relation,
+            subjectType: "user",
+            subjectId: userId,
+          });
+        }
+      }
+    }
+
+    // Store registration context association by creating a consumed pseudo-invite
+    if (contextSlug && session?.user?.id) {
+      const context = await registrationContextRepo.findBySlug(contextSlug);
+      if (context) {
+        // Create token and hash for record integrity
+        const token = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+        // Create invite record that's already consumed
+        await platformInviteRepo.create({
+          email,
+          contextSlug,
+          tokenHash,
+          expiresAt: new Date(), // Already expired
+          invitedBy: session.user.id,
+        });
+
+        // Get the invite we just created and mark it as consumed
+        const invites = await platformInviteRepo.findByInviter(session.user.id);
+        const ourInvite = invites.find(i => i.tokenHash === tokenHash);
+        if (ourInvite) {
+          await platformInviteRepo.markConsumed(ourInvite.id, userId);
+        }
+      }
     }
 
     // If sendInvite is true, trigger verification email

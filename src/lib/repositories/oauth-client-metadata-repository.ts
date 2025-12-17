@@ -12,6 +12,7 @@ export interface OAuthClientMetadataEntity {
   allowsApiKeys: boolean;
   defaultApiKeyPermissions: ResourcePermissions;
   accessPolicy: "all_users" | "restricted";
+  allowsRegistrationContexts: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -22,6 +23,7 @@ export interface CreateOAuthClientMetadataData {
   allowsApiKeys?: boolean;
   defaultApiKeyPermissions?: ResourcePermissions;
   accessPolicy?: "all_users" | "restricted";
+  allowsRegistrationContexts?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export class OAuthClientMetadataRepository {
       allowsApiKeys: row.allowsApiKeys,
       defaultApiKeyPermissions: parsePermissions(row.defaultApiKeyPermissions),
       accessPolicy: row.accessPolicy as "all_users" | "restricted",
+      allowsRegistrationContexts: row.allowsRegistrationContexts,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -71,18 +74,18 @@ export class OAuthClientMetadataRepository {
     const now = new Date();
 
     const values = {
-        id,
-        clientId: data.clientId,
-        allowedResources: data.allowedResources 
-          ? stringifyPermissions(data.allowedResources) 
-          : "{}",
-        allowsApiKeys: data.allowsApiKeys ?? false,
-        defaultApiKeyPermissions: data.defaultApiKeyPermissions 
-          ? stringifyPermissions(data.defaultApiKeyPermissions) 
-          : "{}",
-        accessPolicy: data.accessPolicy ?? "all_users",
-        createdAt: now,
-        updatedAt: now,
+      id,
+      clientId: data.clientId,
+      allowedResources: data.allowedResources
+        ? stringifyPermissions(data.allowedResources)
+        : "{}",
+      allowsApiKeys: data.allowsApiKeys ?? false,
+      defaultApiKeyPermissions: data.defaultApiKeyPermissions
+        ? stringifyPermissions(data.defaultApiKeyPermissions)
+        : "{}",
+      accessPolicy: data.accessPolicy ?? "all_users",
+      createdAt: now,
+      updatedAt: now,
     };
 
     const [record] = await db

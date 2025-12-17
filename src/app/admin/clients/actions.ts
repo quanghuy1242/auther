@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAuth } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
 import { oauthClientRepository } from "@/lib/repositories";
 import type { OAuthClientEntity, ClientStats } from "@/lib/repositories";
 
@@ -25,7 +25,7 @@ export async function getOAuthClients(params: {
   type?: "trusted" | "dynamic" | null;
 }): Promise<GetClientsResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const page = Math.max(1, params.page || 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize || 10));
@@ -59,7 +59,7 @@ export async function getOAuthClients(params: {
  */
 export async function getClientStats(): Promise<ClientStats> {
   try {
-    await requireAuth();
+    await guards.clients.view();
     return await oauthClientRepository.getStats();
   } catch (error) {
     console.error("Failed to fetch client stats:", error);

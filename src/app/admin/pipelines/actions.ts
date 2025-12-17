@@ -2,6 +2,7 @@
 
 import { pipelineRepository } from "@/lib/auth/pipeline-repository";
 import { HOOK_REGISTRY, type HookName } from "@/lib/pipelines/definitions";
+import { guards } from "@/lib/auth/platform-guard";
 
 // =============================================================================
 // TYPES
@@ -57,6 +58,7 @@ export type PipelineConfig = Partial<Record<HookName, string[][]>>;
  * Returns default layout with all 16 trigger nodes if no graph exists.
  */
 export async function getGraph(): Promise<GraphData> {
+    await guards.pipelines.view();
     const graph = await pipelineRepository.getGraph();
 
     // If no graph exists, return default with trigger nodes
@@ -91,6 +93,7 @@ export async function saveGraph(
     edges: GraphEdge[]
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        await guards.pipelines.update();
         // Save the graph layout
         await pipelineRepository.saveGraph({
             nodes,
@@ -129,6 +132,7 @@ export async function saveGraph(
  * Get all pipeline scripts.
  */
 export async function getScripts(): Promise<Script[]> {
+    await guards.pipelines.view();
     const scripts = await pipelineRepository.listScripts();
     return scripts.map((s) => ({
         id: s.id,
@@ -148,6 +152,7 @@ export async function createScript(
     code: string
 ): Promise<{ success: boolean; script?: Script; error?: string }> {
     try {
+        await guards.pipelines.create();
         const script = await pipelineRepository.createScript({ name, code });
         return {
             success: true,
@@ -177,6 +182,7 @@ export async function updateScript(
     data: { name?: string; code?: string }
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        await guards.pipelines.update();
         await pipelineRepository.updateScript(id, data);
         return { success: true };
     } catch (error) {
@@ -195,6 +201,7 @@ export async function deleteScript(
     id: string
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        await guards.pipelines.delete();
         await pipelineRepository.deleteScript(id);
         return { success: true };
     } catch (error) {
@@ -215,6 +222,7 @@ export async function deleteScript(
  * Returns a map of hook names to their execution layers.
  */
 export async function getPipelineConfig(): Promise<PipelineConfig> {
+    await guards.pipelines.view();
     const hookNames = Object.keys(HOOK_REGISTRY) as HookName[];
     const config: PipelineConfig = {};
 
@@ -236,6 +244,7 @@ export async function savePipelineConfig(
     config: PipelineConfig
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        await guards.pipelines.update();
         const hookNames = Object.keys(HOOK_REGISTRY) as HookName[];
 
         for (const hookName of hookNames) {
@@ -461,6 +470,7 @@ export interface SecretInfo {
  * Get all secrets (without exposing values).
  */
 export async function getSecrets(): Promise<SecretInfo[]> {
+    await guards.pipelines.view();
     return pipelineRepository.listSecrets();
 }
 
@@ -581,6 +591,7 @@ export interface TraceFilters {
  * Get traces with optional filters.
  */
 export async function getTraces(filters?: TraceFilters): Promise<TraceInfo[]> {
+    await guards.pipelines.view();
     const traces = await pipelineRepository.listTraces({
         triggerEvent: filters?.triggerEvent,
         limit: filters?.limit || 50,

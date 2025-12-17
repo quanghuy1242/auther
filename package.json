@@ -69,6 +69,7 @@
     "react-hook-form": "^7.65.0",
     "recharts": "^3.3.0",
     "resend": "^6.3.0",
+    "shiki": "^1.29.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "wasmoon": "^1.16.0",

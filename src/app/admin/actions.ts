@@ -8,6 +8,7 @@ import { getUserStats } from "@/app/admin/users/actions";
 import { getClientStats } from "@/app/admin/clients/actions";
 import { getJwksKeys } from "@/app/admin/keys/actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
+import { guards } from "@/lib/auth/platform-guard";
 
 /**
  * Sign out the current user
@@ -26,6 +27,7 @@ export async function signOut() {
  */
 export async function getDashboardStats() {
   try {
+    await guards.platform.member();
     const [userStats, clientStats, activeSessions, keys] = await Promise.all([
       getUserStats(),
       getClientStats(),
@@ -75,6 +77,7 @@ export async function getDashboardStats() {
  */
 export async function getRecentSignIns(limit = 10) {
   try {
+    await guards.sessions.viewAll();
     const sessions = await sessionRepository.findRecent(limit);
     return sessions;
   } catch (error) {
@@ -98,6 +101,7 @@ export async function getSessions({
   activeOnly?: boolean;
 } = {}) {
   try {
+    await guards.sessions.viewAll();
     const result = await sessionRepository.findMany(page, pageSize, {
       activeOnly,
       search,
@@ -127,6 +131,7 @@ export async function getSessions({
  */
 export async function revokeSession(sessionId: string) {
   try {
+    await guards.sessions.revokeAll();
     const success = await sessionRepository.delete(sessionId);
 
     return { success };
@@ -145,6 +150,7 @@ export async function revokeSession(sessionId: string) {
  */
 export async function revokeExpiredSessions() {
   try {
+    await guards.sessions.revokeAll();
     const count = await sessionRepository.deleteExpired();
 
     return { success: true, count };
