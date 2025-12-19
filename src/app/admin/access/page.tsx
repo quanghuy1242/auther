@@ -39,11 +39,11 @@ export default async function AccessPage() {
             />
 
             <div className="space-y-6">
-                {/* Policy Templates */}
-                <PolicyTemplatesSection templates={templates} models={models} />
-
                 {/* Authorization Models */}
                 <AuthorizationModelsSection models={models} />
+
+                {/* Policy Templates */}
+                <PolicyTemplatesSection templates={templates} models={models} />
 
                 {/* Client Registration Whitelist */}
                 <ClientWhitelistSection clients={clients} />

@@ -18,6 +18,7 @@ import {
     CardDescription,
     CardContent,
     Select,
+    PermissionTagInput,
 } from "@/components/ui";
 
 import { toast } from "sonner";
@@ -68,6 +69,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
     const [permissions, setPermissions] = React.useState<Array<{ entityType: string; relation: string }>>([]);
+    const [errors, setErrors] = React.useState<{ name?: string; permissions?: string }>({});;
 
     async function handleDelete(id: string) {
         const result = await deletePolicyTemplate(id);
@@ -79,14 +81,21 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
     }
 
     async function handleCreate() {
+        const newErrors: { name?: string; permissions?: string } = {};
+
         if (!name.trim()) {
-            toast.error("Name is required");
-            return;
+            newErrors.name = "Name is required";
         }
         if (permissions.length === 0) {
-            toast.error("At least one permission is required");
+            newErrors.permissions = "At least one permission is required";
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
             return;
         }
+
+        setErrors({});
 
         setCreating(true);
         try {
@@ -111,6 +120,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
         setName("");
         setDescription("");
         setPermissions([]);
+        setErrors({});
     }
 
     function addPermission() {
@@ -402,12 +412,16 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                 >
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="template-name">Name</Label>
                             <Input
                                 id="template-name"
+                                label="Name"
                                 value={name}
-                                onChange={(e) => setName(e.target.value)}
+                                onChange={(e) => {
+                                    setName(e.target.value);
+                                    if (errors.name) setErrors(prev => ({ ...prev, name: undefined }));
+                                }}
                                 placeholder="e.g., Support Agent"
+                                error={errors.name}
                             />
                         </div>
                         <div className="space-y-2">
@@ -428,9 +442,14 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                                 </Button>
                             </div>
                             {permissions.length === 0 ? (
-                                <p className="text-sm text-neutral-500 text-center py-4">
-                                    No permissions added yet
-                                </p>
+                                <div>
+                                    <p className="text-sm text-neutral-500 text-center py-4">
+                                        No permissions added yet
+                                    </p>
+                                    {errors.permissions && (
+                                        <p className="text-sm text-red-400 text-center">{errors.permissions}</p>
+                                    )}
+                                </div>
                             ) : (
                                 <div className="space-y-3">
                                     {permissions.map((perm, idx) => {
@@ -496,35 +515,57 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
     const [creating, setCreating] = React.useState(false);
     const [deleting, setDeleting] = React.useState<string | null>(null);
     const [editingModel, setEditingModel] = React.useState<AuthorizationModel | null>(null);
+    const [errors, setErrors] = React.useState<{ entityType?: string; relations?: string }>({});
 
     // Form state
     const [entityType, setEntityType] = React.useState("");
-    const [relationsInput, setRelationsInput] = React.useState("");
+    const [relations, setRelations] = React.useState<string[]>([]);
+
+    // Build available relations options for the PermissionTagInput
+    // Common relation names that can be selected
+    const commonRelationsOptions = [
+        { value: "viewer", label: "viewer" },
+        { value: "editor", label: "editor" },
+        { value: "admin", label: "admin" },
+        { value: "owner", label: "owner" },
+        { value: "member", label: "member" },
+        { value: "manager", label: "manager" },
+        { value: "contributor", label: "contributor" },
+        { value: "guest", label: "guest" },
+    ];
 
     function resetForm() {
         setEntityType("");
-        setRelationsInput("");
+        setRelations([]);
         setEditingModel(null);
+        setErrors({});
     }
 
     function openEdit(model: AuthorizationModel) {
         setEditingModel(model);
         setEntityType(model.entityType);
-        setRelationsInput(model.definition?.relations ? Object.keys(model.definition.relations).join(", ") : "");
+        setRelations(model.definition?.relations ? Object.keys(model.definition.relations) : []);
         setShowModal(true);
     }
 
     async function handleSave() {
+        const newErrors: { entityType?: string; relations?: string } = {};
+
         if (!entityType.trim()) {
-            toast.error("Entity type is required");
+            newErrors.entityType = "Entity type is required";
+        }
+
+        // relations is already an array from state
+        if (relations.length === 0) {
+            newErrors.relations = "At least one relation is required";
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
             return;
         }
 
-        const relations = relationsInput.split(",").map(r => r.trim()).filter(r => r);
-        if (relations.length === 0) {
-            toast.error("At least one relation is required");
-            return;
-        }
+        setErrors({});
 
         setCreating(true);
         try {
@@ -631,7 +672,7 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                     </div>
                 </div>
                 <div className="pl-4 flex items-center">
-                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowModal(true)}>
+                    <Button variant="secondary" size="sm" leftIcon="add" disabled title="Adding custom models is disabled">
                         Add Model
                     </Button>
                 </div>
@@ -680,51 +721,7 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                         </div>
                     </div>
 
-                    {/* Custom Models Channel */}
-                    <div>
-                        <h4 className="text-sm font-medium text-neutral-500 mb-3 flex items-center gap-2">
-                            <Icon name="extension" size="xs" className="h-4 w-4" />
-                            Custom Models
-                        </h4>
-                        <div className="grid gap-4">
-                            {models.filter(m => !m.isSystem).length > 0 ? (
-                                models.filter(m => !m.isSystem).map((model) => (
-                                    <div
-                                        key={model.id}
-                                        className="rounded-lg border border-neutral-200 dark:border-[#243647] p-4"
-                                    >
-                                        <div className="flex items-start justify-between">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-semibold capitalize">{model.entityType}</span>
-                                                </div>
-                                                {model.description && (
-                                                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                                                        {model.description}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center space-x-1">
-                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(model)}>
-                                                    <Icon name="edit" size="xs" className="text-neutral-500" />
-                                                </Button>
-                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={() => handleDelete(model.entityType)} disabled={deleting === model.entityType}>
-                                                    <Icon name="delete" size="xs" className="text-red-500" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                        {renderVisualization(model)}
-                                    </div>
-                                ))
-                            ) : (
-                                <EmptyState
-                                    icon="account_tree"
-                                    title="No custom models defined"
-                                    description="Create models to define permissions for your own modules"
-                                />
-                            )}
-                        </div>
-                    </div>
+                    {/* Custom Models section hidden - only showing system models for override use case */}
                 </div>
 
                 {/* Create/Edit Model Modal */}
@@ -735,28 +732,38 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                 >
                     <div className="space-y-4">
                         <div>
-                            <Label htmlFor="entityType">Entity Type</Label>
                             <Input
                                 id="entityType"
+                                label="Entity Type"
                                 value={entityType}
-                                onChange={(e) => setEntityType(e.target.value)}
+                                onChange={(e) => {
+                                    setEntityType(e.target.value);
+                                    if (errors.entityType) setErrors(prev => ({ ...prev, entityType: undefined }));
+                                }}
                                 placeholder="e.g., reports, analytics, billing"
-                                disabled={!!editingModel} // Cannot change ID
+                                disabled={!!editingModel}
+                                error={errors.entityType}
                             />
                             <p className="text-xs text-neutral-500 mt-1">
                                 {editingModel ? "Entity type cannot be changed." : "Lowercase, no spaces. Used as permission namespace."}
                             </p>
                         </div>
                         <div>
-                            <Label htmlFor="relations">Relations (comma-separated)</Label>
-                            <Input
-                                id="relations"
-                                value={relationsInput}
-                                onChange={(e) => setRelationsInput(e.target.value)}
-                                placeholder="e.g., viewer, editor, admin"
+                            <PermissionTagInput
+                                label="Relations"
+                                availablePermissions={commonRelationsOptions}
+                                selectedPermissions={relations}
+                                onChange={(newRelations) => {
+                                    setRelations(newRelations);
+                                    if (errors.relations) setErrors(prev => ({ ...prev, relations: undefined }));
+                                }}
+                                placeholder="Select or add relations..."
                             />
+                            {errors.relations && (
+                                <p className="text-sm text-red-400 mt-1">{errors.relations}</p>
+                            )}
                             <p className="text-xs text-neutral-500 mt-1">
-                                Define permission levels for this entity type.
+                                Define permission levels for this entity type. Select common roles or type to add custom ones.
                             </p>
                         </div>
                         {editingModel && editingModel.isSystem && (
