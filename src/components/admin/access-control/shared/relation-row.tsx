@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Input, Icon, Switch } from "@/components/ui";
+import { Input, Icon } from "@/components/ui";
 import { SubjectBadge, type Subject } from "./subject-badge";
 import { AddSubjectPopover } from "./add-subject-popover";
 
@@ -15,18 +15,18 @@ interface RelationRowProps {
     onToggleHierarchy?: (isHierarchy: boolean) => void;
     onRemove: () => void;
     disabled?: boolean;
+    isExisting?: boolean; // If true, name field is disabled (existing relation cannot be renamed)
 }
 
 export function RelationRow({
     name,
     subjects,
-    isHierarchy = false,
     availableRelations,
     onNameChange,
     onSubjectsChange,
-    onToggleHierarchy,
     onRemove,
     disabled,
+    isExisting,
 }: RelationRowProps) {
     const handleRemoveSubject = (index: number) => {
         onSubjectsChange(subjects.filter((_, i) => i !== index));
@@ -39,7 +39,7 @@ export function RelationRow({
     return (
         <div className="flex items-start gap-3 p-3 rounded bg-[#1A2530]/50 border border-slate-700/50 hover:border-slate-600 transition-colors">
             {/* Relation Name */}
-            <div className="flex-1 space-y-1">
+            <div className="w-32 min-w-[110px] space-y-1">
                 <label className="text-[10px] text-gray-500 uppercase tracking-wider">
                     Relation Name
                 </label>
@@ -48,16 +48,16 @@ export function RelationRow({
                     onChange={(e) => onNameChange(e.target.value)}
                     placeholder="e.g. viewer"
                     className="h-8 text-sm font-mono bg-[#111921] border-slate-700"
-                    disabled={disabled}
+                    disabled={disabled || isExisting}
                 />
             </div>
 
             {/* Inherited Relations */}
-            <div className="flex-[2] space-y-1">
+            <div className="flex-1 space-y-1">
                 <label className="text-[10px] text-gray-500 uppercase tracking-wider">
                     Inherited Relations (Implied by)
                 </label>
-                <div className="flex flex-wrap items-center gap-2 h-8 px-1.5 rounded-md border border-slate-700 bg-[#111921]">
+                <div className="flex flex-wrap pt-1 gap-2 h-8 px-1.5 rounded-md border border-slate-700 bg-[#111921]">
                     {subjects.map((sub, idx) => (
                         <SubjectBadge
                             key={idx}
@@ -70,21 +70,6 @@ export function RelationRow({
                         onAdd={handleAddSubject}
                         availableRelations={availableRelations}
                         disabled={disabled}
-                    />
-                </div>
-            </div>
-
-            {/* Hierarchy Toggle */}
-            <div className="flex flex-col items-center space-y-1">
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider text-center w-full cursor-help" title="Allows subjects to be nested (e.g. group hierarchies)">
-                    Recursive?
-                </label>
-                <div className="h-8 flex items-center justify-center">
-                    <Switch
-                        checked={isHierarchy}
-                        onChange={(val) => !disabled && onToggleHierarchy?.(val)}
-                        disabled={disabled}
-                        className="scale-90"
                     />
                 </div>
             </div>

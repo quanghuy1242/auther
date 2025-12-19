@@ -84,9 +84,9 @@ export function AddSubjectPopover({ onAdd, availableRelations = [], disabled }: 
             <PopoverTrigger asChild>
                 <button
                     disabled={disabled}
-                    className="text-xs text-primary hover:text-blue-400 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-6 text-xs text-primary hover:text-blue-400 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <Icon name="add" className="text-[14px]" />
+                    <Icon name="add" size="xs" className="pt-0.5" />
                     <span className="font-medium">Add</span>
                 </button>
             </PopoverTrigger>

@@ -4,4 +4,4 @@ export { AddSubjectPopover } from "./add-subject-popover";
 export { RelationRow } from "./relation-row";
 export { PermissionRow } from "./permission-row";
 export { TestPolicyModal, DEFAULT_TEST_CONTEXT } from "./test-policy-modal";
-
+export { PlatformRelationRow, type PlatformRelation } from "./platform-relation-row";

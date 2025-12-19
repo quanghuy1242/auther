@@ -18,8 +18,8 @@ import {
     CardDescription,
     CardContent,
     Select,
-    PermissionTagInput,
 } from "@/components/ui";
+import { RelationRow, PermissionRow, type Subject } from "@/components/admin/access-control/shared";
 
 import { toast } from "sonner";
 import type {
@@ -516,27 +516,52 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
     const [deleting, setDeleting] = React.useState<string | null>(null);
     const [editingModel, setEditingModel] = React.useState<AuthorizationModel | null>(null);
     const [errors, setErrors] = React.useState<{ entityType?: string; relations?: string }>({});
+    const [isScrollable, setIsScrollable] = React.useState(false);
+    const scrollRef = React.useRef<HTMLDivElement>(null);
 
-    // Form state
+    // Form state - relations as name + subjects (inherited relations)
     const [entityType, setEntityType] = React.useState("");
-    const [relations, setRelations] = React.useState<string[]>([]);
+    const [relations, setRelations] = React.useState<Array<{
+        name: string;
+        subjects: Subject[];
+        isHierarchy: boolean;
+        isExisting: boolean;
+    }>>([]);
+    const [permissions, setPermissions] = React.useState<Array<{
+        name: string;
+        requiredRelation: string;
+        policyEnabled: boolean;
+        policy: string;
+    }>>([]);
 
-    // Build available relations options for the PermissionTagInput
-    // Common relation names that can be selected
-    const commonRelationsOptions = [
-        { value: "viewer", label: "viewer" },
-        { value: "editor", label: "editor" },
-        { value: "admin", label: "admin" },
-        { value: "owner", label: "owner" },
-        { value: "member", label: "member" },
-        { value: "manager", label: "manager" },
-        { value: "contributor", label: "contributor" },
-        { value: "guest", label: "guest" },
-    ];
+    // Check if content is scrollable
+    React.useEffect(() => {
+        if (!showModal) {
+            setIsScrollable(false);
+            return;
+        }
+        // Wait for next frame to ensure DOM is rendered
+        const rafId = requestAnimationFrame(() => {
+            const el = scrollRef.current;
+            if (!el) return;
+            const check = () => setIsScrollable(el.scrollHeight > el.clientHeight);
+            check();
+            const observer = new ResizeObserver(check);
+            observer.observe(el);
+            // Store observer for cleanup
+            (scrollRef as React.MutableRefObject<HTMLDivElement | null> & { observer?: ResizeObserver }).observer = observer;
+        });
+        return () => {
+            cancelAnimationFrame(rafId);
+            const obs = (scrollRef as React.MutableRefObject<HTMLDivElement | null> & { observer?: ResizeObserver }).observer;
+            obs?.disconnect();
+        };
+    }, [showModal, relations.length, permissions.length]);
 
     function resetForm() {
         setEntityType("");
         setRelations([]);
+        setPermissions([]);
         setEditingModel(null);
         setErrors({});
     }
@@ -544,8 +569,69 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
     function openEdit(model: AuthorizationModel) {
         setEditingModel(model);
         setEntityType(model.entityType);
-        setRelations(model.definition?.relations ? Object.keys(model.definition.relations) : []);
+
+        // Parse existing relations with their union arrays as Subject[]
+        const parsedRelations: Array<{ name: string; subjects: Subject[]; isHierarchy: boolean; isExisting: boolean }> = [];
+        if (model.definition?.relations) {
+            for (const [name, val] of Object.entries(model.definition.relations)) {
+                let inheritsFrom: string[] = [];
+                let isHierarchy = false;
+                if (Array.isArray(val)) {
+                    inheritsFrom = val as string[];
+                } else if (val && typeof val === "object" && "union" in val) {
+                    inheritsFrom = (val as { union: string[]; subjectParams?: { hierarchy?: boolean } }).union;
+                    isHierarchy = !!(val as { subjectParams?: { hierarchy?: boolean } }).subjectParams?.hierarchy;
+                }
+                // Convert inherited relation names to Subject[] format
+                const subjects: Subject[] = inheritsFrom.map(relName => ({ type: relName }));
+                parsedRelations.push({ name, subjects, isHierarchy, isExisting: true }); // Mark as existing
+            }
+        }
+        setRelations(parsedRelations);
+
+        // Parse existing permissions
+        const parsedPermissions: Array<{ name: string; requiredRelation: string; policyEnabled: boolean; policy: string }> = [];
+        if (model.definition?.permissions) {
+            for (const [name, val] of Object.entries(model.definition.permissions)) {
+                parsedPermissions.push({
+                    name,
+                    requiredRelation: val.relation || "",
+                    policyEnabled: !!val.policyEngine,
+                    policy: val.policy || "",
+                });
+            }
+        }
+        setPermissions(parsedPermissions);
         setShowModal(true);
+    }
+
+    function handleAddRelation() {
+        const newName = `role_${relations.length + 1}`;
+        setRelations([...relations, { name: newName, subjects: [], isHierarchy: false, isExisting: false }]);
+    }
+
+    function handleUpdateRelation(index: number, field: "name" | "subjects" | "isHierarchy", value: string | Subject[] | boolean) {
+        const newRelations = [...relations];
+        newRelations[index] = { ...newRelations[index], [field]: value };
+        setRelations(newRelations);
+    }
+
+    function handleRemoveRelation(index: number) {
+        setRelations(relations.filter((_, i) => i !== index));
+    }
+
+    function handleAddPermission() {
+        setPermissions([...permissions, { name: `perm_${permissions.length + 1}`, requiredRelation: "", policyEnabled: false, policy: "" }]);
+    }
+
+    function handleUpdatePermission(index: number, field: string, value: string | boolean) {
+        const newPerms = [...permissions];
+        newPerms[index] = { ...newPerms[index], [field]: value };
+        setPermissions(newPerms);
+    }
+
+    function handleRemovePermission(index: number) {
+        setPermissions(permissions.filter((_, i) => i !== index));
     }
 
     async function handleSave() {
@@ -569,13 +655,33 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
 
         setCreating(true);
         try {
-            // If editing, use update; otherwise use create
-            const permissionsArg = editingModel?.definition?.permissions;
+            // Build permissions from state
+            const permissionsPayload: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }> = {};
+            for (const perm of permissions) {
+                if (perm.name.trim() && perm.requiredRelation) {
+                    const permDef: { relation: string; policyEngine?: "lua"; policy?: string } = {
+                        relation: perm.requiredRelation
+                    };
+                    if (perm.policyEnabled && perm.policy) {
+                        permDef.policyEngine = "lua";
+                        permDef.policy = perm.policy;
+                    }
+                    permissionsPayload[perm.name] = permDef;
+                }
+            }
+
+            // Convert relations from Subject[] format to inheritsFrom string[] for actions
+            const relationsPayload = relations.map(rel => ({
+                name: rel.name,
+                inheritsFrom: rel.subjects.map(s => s.type),
+                isHierarchy: rel.isHierarchy,
+            }));
+
             const actionPayload = {
                 entityType: entityType.trim(),
-                relations,
+                relations: relationsPayload,
                 description: editingModel?.description || undefined,
-                permissions: permissionsArg
+                permissions: permissionsPayload
             };
 
             const result = editingModel
@@ -729,8 +835,9 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                     isOpen={showModal}
                     onClose={() => { setShowModal(false); resetForm(); }}
                     title={editingModel ? "Edit Authorization Model" : "Create Authorization Model"}
+                    className={`max-w-[600px] ${isScrollable ? '!pr-1' : ''}`}
                 >
-                    <div className="space-y-4">
+                    <div ref={scrollRef} className={`space-y-4 max-h-[60vh] overflow-y-auto ${isScrollable ? 'pr-4' : ''}`}>
                         <div>
                             <Input
                                 id="entityType"
@@ -749,23 +856,89 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                             </p>
                         </div>
                         <div>
-                            <PermissionTagInput
-                                label="Relations"
-                                availablePermissions={commonRelationsOptions}
-                                selectedPermissions={relations}
-                                onChange={(newRelations) => {
-                                    setRelations(newRelations);
-                                    if (errors.relations) setErrors(prev => ({ ...prev, relations: undefined }));
-                                }}
-                                placeholder="Select or add relations..."
-                            />
+                            <div className="flex items-center justify-between mb-2">
+                                <Label>Relations</Label>
+                                <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    leftIcon="add"
+                                    onClick={handleAddRelation}
+                                >
+                                    Add Relation
+                                </Button>
+                            </div>
+                            {relations.length === 0 ? (
+                                <div className="text-center py-6 bg-neutral-50 dark:bg-neutral-800/50 rounded-md border border-dashed border-neutral-300 dark:border-neutral-600">
+                                    <p className="text-sm text-neutral-500 mb-2">No relations defined yet.</p>
+                                    <p className="text-xs text-neutral-400">Click &quot;Add Relation&quot; to create roles.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {relations.map((rel, idx) => (
+                                        <RelationRow
+                                            key={idx}
+                                            name={rel.name}
+                                            subjects={rel.subjects}
+                                            availableRelations={relations.filter(r => r.name !== rel.name && r.name.trim()).map(r => r.name)}
+                                            onNameChange={(name) => handleUpdateRelation(idx, "name", name)}
+                                            onSubjectsChange={(subjects) => handleUpdateRelation(idx, "subjects", subjects)}
+                                            onRemove={() => handleRemoveRelation(idx)}
+                                            isExisting={rel.isExisting}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                             {errors.relations && (
                                 <p className="text-sm text-red-400 mt-1">{errors.relations}</p>
                             )}
-                            <p className="text-xs text-neutral-500 mt-1">
-                                Define permission levels for this entity type. Select common roles or type to add custom ones.
+                            <p className="text-xs text-neutral-500 mt-2">
+                                Define roles and their inheritance. A role with &quot;inherits from&quot; gets all permissions of those roles.
                             </p>
                         </div>
+
+                        {/* Permissions Section */}
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <Label>Permissions</Label>
+                                <Button
+                                    size="xs"
+                                    variant="secondary"
+                                    leftIcon="add"
+                                    onClick={handleAddPermission}
+                                >
+                                    Add Permission
+                                </Button>
+                            </div>
+                            {permissions.length === 0 ? (
+                                <div className="text-center py-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-md border border-dashed border-neutral-300 dark:border-neutral-600">
+                                    <p className="text-sm text-neutral-500">No permissions defined yet.</p>
+                                    <p className="text-xs text-neutral-400 mt-1">Add permissions and map them to relations above.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {permissions.map((perm, idx) => (
+                                        <PermissionRow
+                                            key={idx}
+                                            name={perm.name}
+                                            requiredRelation={perm.requiredRelation}
+                                            policyEnabled={perm.policyEnabled}
+                                            policy={perm.policy}
+                                            availableRelations={relations.map(r => r.name).filter(n => n.trim())}
+                                            onNameChange={(name) => handleUpdatePermission(idx, "name", name)}
+                                            onRelationChange={(rel) => handleUpdatePermission(idx, "requiredRelation", rel)}
+                                            onPolicyEnabledChange={(enabled) => handleUpdatePermission(idx, "policyEnabled", enabled)}
+                                            onPolicyChange={(policy) => handleUpdatePermission(idx, "policy", policy)}
+                                            onRemove={() => handleRemovePermission(idx)}
+                                            hidePolicy
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            <p className="text-xs text-neutral-500 mt-2">
+                                Each permission is granted when the user has the required relation. Optionally add ABAC Lua policies.
+                            </p>
+                        </div>
+
                         {editingModel && editingModel.isSystem && (
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-100 dark:border-blue-800">
                                 <p className="text-xs text-blue-700 dark:text-blue-300">

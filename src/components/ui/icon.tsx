@@ -26,7 +26,7 @@ const sizeMap: Record<IconSize, string> = {
  */
 export function Icon({
   name,
-  size = "md",
+  size = "xs",
   filled = false,
   className
 }: IconProps) {

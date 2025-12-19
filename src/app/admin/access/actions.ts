@@ -205,8 +205,8 @@ export async function getAuthorizationModels(): Promise<AuthorizationModel[]> {
 
 export async function createAuthorizationModel(data: {
     entityType: string;
-    relations: string[];
-    permissions?: Record<string, { relation: string }>; // New field for full definition
+    relations: Array<{ name: string; inheritsFrom: string[] }>;
+    permissions?: Record<string, { relation: string }>;
     description?: string;
 }): Promise<{ success: boolean; error?: string }> {
     try {
@@ -222,7 +222,7 @@ export async function createAuthorizationModel(data: {
         if (existing) {
             return { success: false, error: "Entity type already exists" };
         }
-        // If permissions are not provided (simple UI upgrade), try to preserve them from System Defaults
+        // If permissions are not provided, try to preserve them from System Defaults
         let permissions = data.permissions;
         if (!permissions) {
             const systemModel = SYSTEM_MODELS.find(m => m.entityType === data.entityType);
@@ -231,14 +231,14 @@ export async function createAuthorizationModel(data: {
             }
         }
 
-        // Construct definition
+        // Construct definition with hierarchy support
         const rels: Record<string, string[] | { union: string[] }> = {};
         for (const r of data.relations) {
-            // If this relation existed in system model, maybe preserve its hierarchy?
-            // For now, simplicity: Flatten it. The user "Overrode" it.
-            // If they want 'admin' to imply 'viewer', they need advanced mode (not built yet).
-            // Current simple mode = flat roles.
-            rels[r] = [];
+            if (r.inheritsFrom && r.inheritsFrom.length > 0) {
+                rels[r.name] = { union: r.inheritsFrom };
+            } else {
+                rels[r.name] = [];
+            }
         }
 
         if (Object.keys(rels).length === 0) { // Changed from `relations` to `rels`
@@ -288,7 +288,7 @@ export async function deleteAuthorizationModel(
 
 export async function updateAuthorizationModel(data: {
     entityType: string;
-    relations: string[];
+    relations: Array<{ name: string; inheritsFrom: string[] }>;
     permissions?: Record<string, { relation: string }>;
     description?: string;
 }): Promise<{ success: boolean; error?: string }> {
@@ -300,10 +300,14 @@ export async function updateAuthorizationModel(data: {
         }
 
         // For updates, we skip the existence check and directly upsert
-        // Construct definition
+        // Construct definition with hierarchy support
         const rels: Record<string, string[] | { union: string[] }> = {};
         for (const r of data.relations) {
-            rels[r] = [];
+            if (r.inheritsFrom && r.inheritsFrom.length > 0) {
+                rels[r.name] = { union: r.inheritsFrom };
+            } else {
+                rels[r.name] = [];
+            }
         }
 
         if (Object.keys(rels).length === 0) {

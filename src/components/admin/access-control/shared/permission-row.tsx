@@ -17,6 +17,7 @@ interface PermissionRowProps {
     onPolicyChange: (policy: string) => void;
     onRemove: () => void;
     disabled?: boolean;
+    hidePolicy?: boolean;
 }
 
 export function PermissionRow({
@@ -31,6 +32,7 @@ export function PermissionRow({
     onPolicyChange,
     onRemove,
     disabled,
+    hidePolicy,
 }: PermissionRowProps) {
     const [validationError, setValidationError] = React.useState<string | null>(null);
     const [validationWarnings, setValidationWarnings] = React.useState<string[]>([]);
@@ -119,63 +121,65 @@ export function PermissionRow({
                     </div>
                 </div>
 
-                {/* ABAC Policy Section */}
-                <div className="border-t border-slate-700/50 pt-3">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                            <Icon name="policy" size="sm" className="text-purple-400" />
-                            <span className="text-xs font-medium text-gray-300">ABAC Policy (Lua)</span>
-                            {isValidating && (
-                                <span className="text-[10px] text-gray-500 animate-pulse">Validating...</span>
-                            )}
-                        </div>
-                        <Switch
-                            checked={policyEnabled}
-                            onChange={onPolicyEnabledChange}
-                            disabled={disabled}
-                        />
-                    </div>
-
-                    {policyEnabled && (
-                        <div className="space-y-2">
-                            <Textarea
-                                value={policy}
-                                onChange={(e) => onPolicyChange(e.target.value)}
-                                placeholder="return context.resource.amount < 1000"
-                                className={`h-20 text-xs font-mono bg-[#111921] ${validationError ? 'border-red-500' : 'border-slate-700'}`}
-                                containerClassName="space-y-0"
+                {/* ABAC Policy Section - conditionally hidden */}
+                {!hidePolicy && (
+                    <div className="border-t border-slate-700/50 pt-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                                <Icon name="policy" size="sm" className="text-purple-400" />
+                                <span className="text-xs font-medium text-gray-300">ABAC Policy (Lua)</span>
+                                {isValidating && (
+                                    <span className="text-[10px] text-gray-500 animate-pulse">Validating...</span>
+                                )}
+                            </div>
+                            <Switch
+                                checked={policyEnabled}
+                                onChange={onPolicyEnabledChange}
                                 disabled={disabled}
                             />
-                            <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                    {validationError && (
-                                        <Alert variant="error" className="py-1 px-2 text-[10px]">
-                                            {validationError}
-                                        </Alert>
-                                    )}
-                                    {validationWarnings.length > 0 && !validationError && (
-                                        <Alert variant="warning" className="py-1 px-2 text-[10px]">
-                                            {validationWarnings.join("; ")}
-                                        </Alert>
-                                    )}
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-[10px] h-6 px-2 ml-2"
-                                    onClick={() => setIsTestModalOpen(true)}
-                                    disabled={!policy.trim() || !!validationError}
-                                >
-                                    <Icon name="play_arrow" size="sm" className="mr-1" />
-                                    Test
-                                </Button>
-                            </div>
-                            <p className="text-[10px] text-gray-500">
-                                Lua script. Available: <code className="bg-slate-800 px-1 rounded">context.resource</code>, <code className="bg-slate-800 px-1 rounded">context.user</code>. Return <code className="bg-slate-800 px-1 rounded">true</code> to allow.
-                            </p>
                         </div>
-                    )}
-                </div>
+
+                        {policyEnabled && (
+                            <div className="space-y-2">
+                                <Textarea
+                                    value={policy}
+                                    onChange={(e) => onPolicyChange(e.target.value)}
+                                    placeholder="return context.resource.amount < 1000"
+                                    className={`h-20 text-xs font-mono bg-[#111921] ${validationError ? 'border-red-500' : 'border-slate-700'}`}
+                                    containerClassName="space-y-0"
+                                    disabled={disabled}
+                                />
+                                <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                        {validationError && (
+                                            <Alert variant="error" className="py-1 px-2 text-[10px]">
+                                                {validationError}
+                                            </Alert>
+                                        )}
+                                        {validationWarnings.length > 0 && !validationError && (
+                                            <Alert variant="warning" className="py-1 px-2 text-[10px]">
+                                                {validationWarnings.join("; ")}
+                                            </Alert>
+                                        )}
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-[10px] h-6 px-2 ml-2"
+                                        onClick={() => setIsTestModalOpen(true)}
+                                        disabled={!policy.trim() || !!validationError}
+                                    >
+                                        <Icon name="play_arrow" size="sm" className="mr-1" />
+                                        Test
+                                    </Button>
+                                </div>
+                                <p className="text-[10px] text-gray-500">
+                                    Lua script. Available: <code className="bg-slate-800 px-1 rounded">context.resource</code>, <code className="bg-slate-800 px-1 rounded">context.user</code>. Return <code className="bg-slate-800 px-1 rounded">true</code> to allow.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Test Policy Modal */}
