@@ -48,7 +48,7 @@ export default async function AccessPage() {
                 {/* Client Registration Whitelist */}
                 <ClientWhitelistSection clients={clients} />
 
-                {/* Platform Registration Contexts */}
+                {/* Platform Sign-Up Flows */}
                 <PlatformContextsSection contexts={contexts} models={models} />
             </div>
         </PageContainer>

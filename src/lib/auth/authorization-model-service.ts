@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { authorizationModelSchema, AuthorizationModelDefinition } from "@/schemas/rebac";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 
+import { SYSTEM_MODELS } from "@/lib/auth/system-models";
+
 export class AuthorizationModelService {
   private tupleRepo: TupleRepository;
 
@@ -18,10 +20,18 @@ export class AuthorizationModelService {
         .from(authorizationModels)
         .where(eq(authorizationModels.entityType, entityType));
 
-      if (!record) return null;
+      if (record) {
+        // The definition is stored as JSON in the DB
+        return record.definition as AuthorizationModelDefinition;
+      }
 
-      // The definition is stored as JSON in the DB
-      return record.definition as AuthorizationModelDefinition;
+      // Fallback: Check System Key Models
+      const systemModel = SYSTEM_MODELS.find(m => m.entityType === entityType);
+      if (systemModel) {
+        return systemModel;
+      }
+
+      return null;
     } catch (error) {
       console.error("AuthorizationModelService.getModel error:", error);
       return null;
@@ -77,7 +87,7 @@ export class AuthorizationModelService {
     for (const relation of oldRelations) {
       if (!newRelations.has(relation)) {
         // Relation was removed. Check if any tuples use it.
-        
+
         const count = await this.tupleRepo.countByRelation(entityType, relation);
         if (count > 0) {
           throw new Error(

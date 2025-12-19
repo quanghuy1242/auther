@@ -3,12 +3,21 @@
 import { guards } from "@/lib/auth/platform-guard";
 import { revalidatePath } from "next/cache";
 import {
+    oauthClientMetadataRepository,
+    oauthClientRepository,
+    authorizationModelRepository
+} from "@/lib/repositories";
+import { TupleRepository } from "@/lib/repositories/tuple-repository";
+import {
     policyTemplateRepo,
-    registrationContextRepo,
+    registrationContextRepo
 } from "@/lib/repositories/platform-access-repository";
-import { oauthClientMetadataRepository, oauthClientRepository } from "@/lib/repositories";
-import { authorizationModelRepository } from "@/lib/repositories";
 import type { PolicyTemplate, RegistrationContext } from "@/lib/repositories/platform-access-repository";
+import { AuthorizationModelService } from "@/lib/auth/authorization-model-service";
+import { SYSTEM_MODELS } from "@/lib/auth/system-models";
+import { AuthorizationModelDefinition } from "@/schemas/rebac";
+
+const authorizationModelService = new AuthorizationModelService();
 
 // Re-export types
 export type { PolicyTemplate, RegistrationContext };
@@ -17,9 +26,12 @@ export interface AuthorizationModel {
     id: string;
     entityType: string;
     relations: string[];
+    definition?: AuthorizationModelDefinition;
+    permissions?: string[];
     description: string | null;
     clientId: string | null;
     isSystem: boolean;
+    isOverridden?: boolean;
     createdAt: Date;
 }
 
@@ -94,6 +106,54 @@ export async function deletePolicyTemplate(
     }
 }
 
+export async function applyTemplateToUsers(data: {
+    templateId: string;
+    userIds: string[];
+}): Promise<{ success: boolean; error?: string; appliedCount?: number }> {
+    try {
+        await guards.platform.admin();
+
+        // Get the template
+        const template = await policyTemplateRepo.findById(data.templateId);
+        if (!template) {
+            return { success: false, error: "Template not found" };
+        }
+
+        if (data.userIds.length === 0) {
+            return { success: false, error: "No users selected" };
+        }
+
+        // Apply all permissions from the template to each user
+        let appliedCount = 0;
+        const tupleRepo = new TupleRepository();
+
+        for (const userId of data.userIds) {
+            for (const perm of template.permissions) {
+                const result = await tupleRepo.createIfNotExists({
+                    entityType: perm.entityType,
+                    entityId: perm.entityId || "*",
+                    relation: perm.relation,
+                    subjectType: "user",
+                    subjectId: userId,
+                });
+                if (result.created) {
+                    appliedCount++;
+                }
+            }
+        }
+
+        revalidatePath("/admin/access");
+        revalidatePath("/admin/users");
+        return { success: true, appliedCount };
+    } catch (error) {
+        console.error("applyTemplateToUsers error:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to apply template",
+        };
+    }
+}
+
 // ============================================================================
 // Authorization Models (Platform Features)
 // ============================================================================
@@ -102,22 +162,51 @@ export async function getAuthorizationModels(): Promise<AuthorizationModel[]> {
     await guards.platform.admin();
 
     const models = await authorizationModelRepository.findAll();
+    const systemEntityTypes = new Set(SYSTEM_MODELS.map(m => m.entityType));
 
-    // Convert to our format - extract relations from definition
-    return models.map(m => ({
-        id: m.id,
-        entityType: m.entityType,
-        relations: m.definition?.relations ? Object.keys(m.definition.relations) : [],
-        description: null,
-        clientId: null, // Platform models
-        isSystem: false,
-        createdAt: m.createdAt,
-    }));
+    // 1. Process Database Models
+    const processedDbModels = models.map(m => {
+        const isSystemOverride = systemEntityTypes.has(m.entityType);
+        const def = m.definition as AuthorizationModelDefinition;
+        return {
+            id: m.id,
+            entityType: m.entityType,
+            relations: Object.keys(def.relations || {}),
+            definition: def,
+            description: isSystemOverride ? SYSTEM_MODELS.find(s => s.entityType === m.entityType)?.description || null : null,
+            clientId: null,
+            isSystem: isSystemOverride, // It IS a system feature, but properly overridden
+            isOverridden: isSystemOverride,
+            createdAt: m.createdAt,
+        };
+    });
+
+    // 2. Identify System Models NOT in Database
+    const dbEntityTypes = new Set(processedDbModels.map(m => m.entityType));
+    const pureSystemModels = SYSTEM_MODELS
+        .filter(m => !dbEntityTypes.has(m.entityType))
+        .map(m => ({
+            id: `system-${m.entityType}`,
+            entityType: m.entityType,
+            relations: m.relations ? Object.keys(m.relations) : [],
+            definition: {
+                relations: m.relations,
+                permissions: m.permissions
+            } as AuthorizationModelDefinition,
+            description: m.description,
+            clientId: null,
+            isSystem: true,
+            isOverridden: false,
+            createdAt: new Date(),
+        }));
+
+    return [...pureSystemModels, ...processedDbModels];
 }
 
 export async function createAuthorizationModel(data: {
     entityType: string;
     relations: string[];
+    permissions?: Record<string, { relation: string }>; // New field for full definition
     description?: string;
 }): Promise<{ success: boolean; error?: string }> {
     try {
@@ -128,25 +217,40 @@ export async function createAuthorizationModel(data: {
             return { success: false, error: "Entity type is required" };
         }
 
-        // Check if entity type already exists
+        // Check if entity type already exists in custom models
         const existing = await authorizationModelRepository.findByEntityType(data.entityType);
         if (existing) {
             return { success: false, error: "Entity type already exists" };
         }
-
-        // Build definition with relations
-        const relations: Record<string, Record<string, unknown>> = {};
-        for (const rel of data.relations) {
-            if (rel.trim()) {
-                relations[rel.trim()] = {}; // Empty definition - can be extended
+        // If permissions are not provided (simple UI upgrade), try to preserve them from System Defaults
+        let permissions = data.permissions;
+        if (!permissions) {
+            const systemModel = SYSTEM_MODELS.find(m => m.entityType === data.entityType);
+            if (systemModel) {
+                permissions = systemModel.permissions;
             }
         }
 
-        if (Object.keys(relations).length === 0) {
+        // Construct definition
+        const rels: Record<string, string[] | { union: string[] }> = {};
+        for (const r of data.relations) {
+            // If this relation existed in system model, maybe preserve its hierarchy?
+            // For now, simplicity: Flatten it. The user "Overrode" it.
+            // If they want 'admin' to imply 'viewer', they need advanced mode (not built yet).
+            // Current simple mode = flat roles.
+            rels[r] = [];
+        }
+
+        if (Object.keys(rels).length === 0) { // Changed from `relations` to `rels`
             return { success: false, error: "At least one relation is required" };
         }
 
-        await authorizationModelRepository.upsert(data.entityType.trim(), { relations, permissions: {} });
+        const def = {
+            relations: rels,
+            permissions: permissions || {}
+        };
+
+        await authorizationModelService.upsertModel(data.entityType.trim(), def);
 
         revalidatePath("/admin/access");
         return { success: true };
@@ -178,6 +282,48 @@ export async function deleteAuthorizationModel(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Failed to delete model",
+        };
+    }
+}
+
+export async function updateAuthorizationModel(data: {
+    entityType: string;
+    relations: string[];
+    permissions?: Record<string, { relation: string }>;
+    description?: string;
+}): Promise<{ success: boolean; error?: string }> {
+    try {
+        await guards.platform.admin();
+
+        if (!data.entityType.trim()) {
+            return { success: false, error: "Entity type is required" };
+        }
+
+        // For updates, we skip the existence check and directly upsert
+        // Construct definition
+        const rels: Record<string, string[] | { union: string[] }> = {};
+        for (const r of data.relations) {
+            rels[r] = [];
+        }
+
+        if (Object.keys(rels).length === 0) {
+            return { success: false, error: "At least one relation is required" };
+        }
+
+        const def = {
+            relations: rels,
+            permissions: data.permissions || {}
+        };
+
+        await authorizationModelService.upsertModel(data.entityType.trim(), def);
+
+        revalidatePath("/admin/access");
+        return { success: true };
+    } catch (error) {
+        console.error("updateAuthorizationModel error:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update model",
         };
     }
 }
@@ -252,7 +398,7 @@ export async function toggleClientRegistrationContexts(
 }
 
 // ============================================================================
-// Platform Registration Contexts
+// Platform Sign-Up Flows
 // ============================================================================
 
 export async function getPlatformContexts(): Promise<RegistrationContext[]> {

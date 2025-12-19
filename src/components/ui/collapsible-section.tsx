@@ -40,22 +40,22 @@ export function CollapsibleSection({
     >
       <div className={cn("flex items-start justify-between p-6", headerClassName)}>
         <CollapsiblePrimitive.Trigger className="flex flex-1 items-center gap-4 text-left cursor-pointer focus:outline-none group">
+          <Icon
+            name="expand_more"
+            className={cn(
+              "text-gray-400 transition-transform duration-200 shrink-0",
+              isOpen && "rotate-180"
+            )}
+          />
           <div className="flex-1">
             <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
-              {icon && <Icon name={icon} size="sm" className="h-5 w-5 text-gray-400 group-hover:text-white transition-colors" />}
+              {icon && <Icon name={icon} size="xs" className="h-5 w-5 text-gray-400 group-hover:text-white transition-colors" />}
               {title}
             </h2>
             {description && (
               <p className="text-sm text-gray-400 mt-1">{description}</p>
             )}
           </div>
-          <Icon 
-            name="expand_more" 
-            className={cn(
-              "text-gray-400 transition-transform duration-200 shrink-0", 
-              isOpen && "rotate-180"
-            )} 
-          />
         </CollapsiblePrimitive.Trigger>
         {actions && (
           <div className="pl-4 flex items-center">
@@ -63,7 +63,7 @@ export function CollapsibleSection({
           </div>
         )}
       </div>
-      
+
       <CollapsiblePrimitive.Content className="data-[state=open]:animate-slide-down data-[state=closed]:animate-slide-up overflow-hidden">
         <div className="px-6 pb-6 pt-0 flex flex-col gap-6">
           {children}

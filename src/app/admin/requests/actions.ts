@@ -70,8 +70,8 @@ export async function getPendingRequests(): Promise<PermissionRequestWithDetails
 export async function getAllRequests(): Promise<PermissionRequestWithDetails[]> {
     await guards.platform.admin();
 
-    // For now, return platform pending requests - can be extended with pagination
-    const requests = await permissionRequestRepo.findPendingByClient(null);
+    // Return all platform requests (pending, approved, rejected)
+    const requests = await permissionRequestRepo.findAllByClient(null);
 
     return enrichRequestsWithUserDetails(requests);
 }

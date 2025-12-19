@@ -16,6 +16,7 @@ import {
     Label,
     Select,
     CopyableInput,
+    EmptyState,
 } from "@/components/ui";
 import { toast } from "sonner";
 import type {
@@ -128,17 +129,19 @@ export function InvitesTab() {
     return (
         <>
             <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <Icon name="mail" className="h-5 w-5" />
+                <CardHeader className="border-b border-[#243647] pb-6 flex-row items-start justify-between space-y-0">
+                    <div className="flex flex-1 items-center gap-4">
+                        <div className="flex-1">
+                            <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                                <Icon name="mail" size="xs" className="h-5 w-5 text-gray-400" />
                                 Platform Invites
                             </CardTitle>
-                            <CardDescription>
+                            <CardDescription className="text-sm text-gray-400 mt-1">
                                 Manage registration invitations for platform access
                             </CardDescription>
                         </div>
+                    </div>
+                    <div className="pl-4 flex items-center">
                         <Button
                             variant="secondary"
                             size="sm"
@@ -152,11 +155,21 @@ export function InvitesTab() {
                 </CardHeader>
                 <CardContent>
                     {contexts.length === 0 ? (
-                        <div className="text-center py-8 text-neutral-500">
-                            <Icon name="warning" className="h-8 w-8 mx-auto mb-2 opacity-50 text-amber-500" />
-                            <p>No registration contexts available</p>
-                            <p className="text-sm">Create a platform registration context first</p>
-                        </div>
+                        <EmptyState
+                            icon="warning"
+                            title="No platform sign-up flows configured"
+                            description="Create a platform registration context in Access Settings to enable invites"
+                            action={
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    leftIcon="settings"
+                                    onClick={() => window.location.href = "/admin/access"}
+                                >
+                                    Go to Access Settings
+                                </Button>
+                            }
+                        />
                     ) : invites.length > 0 ? (
                         <div className="space-y-6">
                             {/* Pending Invites */}
@@ -329,10 +342,10 @@ function InviteRow({
 }) {
     return (
         <div className={`flex items-center justify-between py-3 px-4 rounded-lg border ${consumed
-                ? "border-green-500/30 bg-green-500/10"
-                : expired
-                    ? "border-neutral-600 bg-neutral-800/30 opacity-60"
-                    : "border-neutral-700 bg-neutral-800/50"
+            ? "border-green-500/30 bg-green-500/10"
+            : expired
+                ? "border-neutral-600 bg-neutral-800/30 opacity-60"
+                : "border-neutral-700 bg-neutral-800/50"
             }`}>
             <div className="flex items-center gap-3">
                 <Icon

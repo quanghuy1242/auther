@@ -12,8 +12,14 @@ import {
     Label,
     Textarea,
     EmptyState,
+    Card,
+    CardHeader,
+    CardTitle,
+    CardDescription,
+    CardContent,
+    Select,
 } from "@/components/ui";
-import { CollapsibleSection } from "@/components/ui/collapsible-section";
+
 import { toast } from "sonner";
 import type {
     PolicyTemplate,
@@ -24,13 +30,17 @@ import type {
 import {
     createPolicyTemplate,
     deletePolicyTemplate,
+    applyTemplateToUsers,
     toggleClientRegistrationContexts,
     toggleContextEnabled,
     deleteContext,
     createPlatformContext,
     createAuthorizationModel,
+    updateAuthorizationModel,
     deleteAuthorizationModel,
 } from "./actions";
+import { getAllUsers } from "@/app/admin/users/actions";
+import type { UserPickerItem } from "@/app/admin/users/actions";
 
 // ============================================================================
 // Policy Templates Section
@@ -45,6 +55,14 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
     const [selectedTemplate, setSelectedTemplate] = React.useState<PolicyTemplate | null>(null);
     const [showCreate, setShowCreate] = React.useState(false);
     const [creating, setCreating] = React.useState(false);
+
+    // User assignment state
+    const [showAssign, setShowAssign] = React.useState(false);
+    const [userSearch, setUserSearch] = React.useState("");
+    const [availableUsers, setAvailableUsers] = React.useState<UserPickerItem[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = React.useState<string[]>([]);
+    const [assigning, setAssigning] = React.useState(false);
+    const [loadingUsers, setLoadingUsers] = React.useState(false);
 
     // Form state
     const [name, setName] = React.useState("");
@@ -109,21 +127,88 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
         setPermissions(updated);
     }
 
+    // User assignment functions
+    async function openAssignModal() {
+        if (!selectedTemplate) return;
+        setShowAssign(true);
+        setLoadingUsers(true);
+        try {
+            const users = await getAllUsers();
+            setAvailableUsers(users);
+        } catch (_e) {
+            toast.error("Failed to load users");
+        } finally {
+            setLoadingUsers(false);
+        }
+    }
+
+    async function handleUserSearch(query: string) {
+        setUserSearch(query);
+        if (query.trim()) {
+            setLoadingUsers(true);
+            try {
+                const users = await getAllUsers(query);
+                setAvailableUsers(users);
+            } finally {
+                setLoadingUsers(false);
+            }
+        }
+    }
+
+    async function handleAssign() {
+        if (!selectedTemplate || selectedUserIds.length === 0) return;
+        setAssigning(true);
+        try {
+            const result = await applyTemplateToUsers({
+                templateId: selectedTemplate.id,
+                userIds: selectedUserIds,
+            });
+            if (result.success) {
+                toast.success(`Applied template to ${selectedUserIds.length} user(s). ${result.appliedCount} new permissions granted.`);
+                resetAssign();
+            } else {
+                toast.error(result.error || "Failed to apply template");
+            }
+        } finally {
+            setAssigning(false);
+        }
+    }
+
+    function toggleUser(userId: string) {
+        setSelectedUserIds((prev) =>
+            prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+        );
+    }
+
+    function resetAssign() {
+        setShowAssign(false);
+        setUserSearch("");
+        setAvailableUsers([]);
+        setSelectedUserIds([]);
+    }
+
     const systemTemplates = templates.filter(t => t.isSystem);
     const customTemplates = templates.filter(t => !t.isSystem);
 
     return (
-        <CollapsibleSection
-            title="Policy Templates"
-            icon="shield"
-            description="Pre-configured permission bundles that can be applied to users"
-            defaultOpen
-            actions={
-                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                    Create Template
-                </Button>
-            }
-        >
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6 flex-row items-start justify-between space-y-0">
+                <div className="flex flex-1 items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="shield" size="xs" className="h-5 w-5 text-gray-400" />
+                            Policy Templates
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Pre-configured permission bundles that can be applied to users</CardDescription>
+                    </div>
+                </div>
+                <div className="pl-4 flex items-center">
+                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                        Create Template
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="!pt-6 flex flex-col gap-6">
                 {/* System Templates */}
                 {systemTemplates.length > 0 && (
                     <div>
@@ -132,7 +217,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                             {systemTemplates.map((template) => (
                                 <div
                                     key={template.id}
-                                    className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-800 cursor-pointer hover:border-neutral-300 dark:hover:border-neutral-600"
+                                    className="flex items-center justify-between rounded-lg border border-neutral-200 p-3 dark:border-[#243647] cursor-pointer hover:border-neutral-300 dark:hover:border-neutral-600"
                                     onClick={() => setSelectedTemplate(template)}
                                 >
                                     <div className="flex items-center gap-2">
@@ -156,7 +241,7 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                             {customTemplates.map((template) => (
                                 <div
                                     key={template.id}
-                                    className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-800 cursor-pointer hover:border-neutral-300 dark:hover:border-neutral-600 group"
+                                    className="flex items-center justify-between rounded-lg border border-neutral-200 p-3 dark:border-[#243647] cursor-pointer hover:border-neutral-300 dark:hover:border-neutral-600 group"
                                     onClick={() => setSelectedTemplate(template)}
                                 >
                                     <div className="flex items-center gap-2">
@@ -221,6 +306,92 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                             </div>
                         </div>
                     </div>
+                    <ModalFooter>
+                        <Button variant="secondary" onClick={() => setSelectedTemplate(null)}>
+                            Close
+                        </Button>
+                        <Button variant="primary" leftIcon="group_add" onClick={openAssignModal}>
+                            Assign to Users
+                        </Button>
+                    </ModalFooter>
+                </Modal>
+
+                {/* User Assignment Modal */}
+                <Modal
+                    isOpen={showAssign}
+                    onClose={resetAssign}
+                    title={`Assign "${selectedTemplate?.name}" to Users`}
+                >
+                    <div className="space-y-4">
+                        <div>
+                            <Label htmlFor="user-search">Search Users</Label>
+                            <Input
+                                id="user-search"
+                                value={userSearch}
+                                onChange={(e) => handleUserSearch(e.target.value)}
+                                placeholder="Search by name or email..."
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <Label>Select Users</Label>
+                                {selectedUserIds.length > 0 && (
+                                    <Badge variant="info">{selectedUserIds.length} selected</Badge>
+                                )}
+                            </div>
+                            <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg max-h-64 overflow-y-auto">
+                                {loadingUsers ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Icon name="hourglass_top" className="h-5 w-5 text-neutral-400 animate-spin" />
+                                    </div>
+                                ) : availableUsers.length === 0 ? (
+                                    <div className="text-center py-8 text-sm text-neutral-500">
+                                        {userSearch ? "No users found" : "No users available"}
+                                    </div>
+                                ) : (
+                                    availableUsers.map((user) => (
+                                        <div
+                                            key={user.id}
+                                            className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-700 last:border-b-0 ${selectedUserIds.includes(user.id) ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                                                }`}
+                                            onClick={() => toggleUser(user.id)}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUserIds.includes(user.id)}
+                                                onChange={() => toggleUser(user.id)}
+                                                className="h-4 w-4 rounded border-neutral-300"
+                                            />
+                                            {user.image ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={user.image} alt="" className="h-8 w-8 rounded-full" />
+                                            ) : (
+                                                <div className="h-8 w-8 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center">
+                                                    <Icon name="person" className="h-4 w-4 text-neutral-500" />
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-sm truncate">{user.name || "No Name"}</p>
+                                                <p className="text-xs text-neutral-500 truncate">{user.email}</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <ModalFooter>
+                        <Button variant="secondary" onClick={resetAssign}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleAssign}
+                            disabled={assigning || selectedUserIds.length === 0}
+                        >
+                            {assigning ? "Applying..." : `Apply to ${selectedUserIds.length || 0} User(s)`}
+                        </Button>
+                    </ModalFooter>
                 </Modal>
 
                 {/* Create Template Modal */}
@@ -261,34 +432,39 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                                     No permissions added yet
                                 </p>
                             ) : (
-                                <div className="space-y-2">
-                                    {permissions.map((perm, idx) => (
-                                        <div key={idx} className="flex items-center gap-2">
-                                            <select
-                                                className="flex-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                                                value={perm.entityType}
-                                                onChange={(e) => updatePermission(idx, "entityType", e.target.value)}
-                                            >
-                                                <option value="">Select entity...</option>
-                                                {models.map(m => (
-                                                    <option key={m.id} value={m.entityType}>{m.entityType}</option>
-                                                ))}
-                                            </select>
-                                            <select
-                                                className="flex-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                                                value={perm.relation}
-                                                onChange={(e) => updatePermission(idx, "relation", e.target.value)}
-                                            >
-                                                <option value="">Select relation...</option>
-                                                {models.find(m => m.entityType === perm.entityType)?.relations.map(r => (
-                                                    <option key={r} value={r}>{r}</option>
-                                                ))}
-                                            </select>
-                                            <Button variant="ghost" size="sm" onClick={() => removePermission(idx)}>
-                                                <Icon name="close" className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    ))}
+                                <div className="space-y-3">
+                                    {permissions.map((perm, idx) => {
+                                        const entityOptions = models.map(m => ({ value: m.entityType, label: m.entityType }));
+                                        const relationOptions = models.find(m => m.entityType === perm.entityType)?.relations.map(r => ({ value: r, label: r })) || [];
+
+                                        return (
+                                            <div key={idx} className="flex items-center gap-2">
+                                                <Select
+                                                    options={entityOptions}
+                                                    value={perm.entityType}
+                                                    onChange={(val) => updatePermission(idx, "entityType", val)}
+                                                    placeholder="Select entity..."
+                                                    className="flex-1 min-w-0"
+                                                />
+                                                <Select
+                                                    options={relationOptions}
+                                                    value={perm.relation}
+                                                    onChange={(val) => updatePermission(idx, "relation", val)}
+                                                    placeholder="Select relation..."
+                                                    disabled={!perm.entityType}
+                                                    className="flex-1 min-w-0"
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => removePermission(idx)}
+                                                >
+                                                    <Icon name="close" size="xs" />
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -302,7 +478,8 @@ export function PolicyTemplatesSection({ templates, models }: PolicyTemplatesSec
                         </Button>
                     </ModalFooter>
                 </Modal>
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }
 
@@ -315,9 +492,10 @@ interface AuthorizationModelsSectionProps {
 }
 
 export function AuthorizationModelsSection({ models }: AuthorizationModelsSectionProps) {
-    const [showCreate, setShowCreate] = React.useState(false);
+    const [showModal, setShowModal] = React.useState(false);
     const [creating, setCreating] = React.useState(false);
     const [deleting, setDeleting] = React.useState<string | null>(null);
+    const [editingModel, setEditingModel] = React.useState<AuthorizationModel | null>(null);
 
     // Form state
     const [entityType, setEntityType] = React.useState("");
@@ -326,9 +504,17 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
     function resetForm() {
         setEntityType("");
         setRelationsInput("");
+        setEditingModel(null);
     }
 
-    async function handleCreate() {
+    function openEdit(model: AuthorizationModel) {
+        setEditingModel(model);
+        setEntityType(model.entityType);
+        setRelationsInput(model.definition?.relations ? Object.keys(model.definition.relations).join(", ") : "");
+        setShowModal(true);
+    }
+
+    async function handleSave() {
         if (!entityType.trim()) {
             toast.error("Entity type is required");
             return;
@@ -342,16 +528,25 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
 
         setCreating(true);
         try {
-            const result = await createAuthorizationModel({
+            // If editing, use update; otherwise use create
+            const permissionsArg = editingModel?.definition?.permissions;
+            const actionPayload = {
                 entityType: entityType.trim(),
                 relations,
-            });
+                description: editingModel?.description || undefined,
+                permissions: permissionsArg
+            };
+
+            const result = editingModel
+                ? await updateAuthorizationModel(actionPayload)
+                : await createAuthorizationModel(actionPayload);
+
             if (result.success) {
-                toast.success("Model created");
-                setShowCreate(false);
+                toast.success(editingModel ? "Model updated" : "Model created");
+                setShowModal(false);
                 resetForm();
             } else {
-                toast.error(result.error || "Failed to create model");
+                toast.error(result.error || "Failed to save model");
             }
         } finally {
             setCreating(false);
@@ -372,101 +567,171 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
         }
     }
 
-    // Group models: platform first, then features
-    const platformModel = models.find(m => m.entityType === "platform");
-    const featureModels = models.filter(m => m.entityType !== "platform");
+    // Helper to render the role-permission visual
+    const renderVisualization = (model: AuthorizationModel) => {
+        const definition = model.definition;
+        if (!definition) return null;
+
+        return (
+            <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-[#243647]">
+                <div className="space-y-3">
+                    {definition.relations && Object.keys(definition.relations).map((role) => {
+                        const grants = definition.permissions
+                            ? Object.entries(definition.permissions)
+                                .filter(([_, def]) => def.relation === role)
+                                .map(([perm]) => perm)
+                            : [];
+                        const relationDef = definition.relations[role];
+                        const inheritance = Array.isArray(relationDef)
+                            ? relationDef
+                            : (relationDef && typeof relationDef === 'object' && 'union' in relationDef)
+                                ? (relationDef.union ?? [])
+                                : [];
+
+                        return (
+                            <div key={role} className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+                                <div className="min-w-[100px] flex-shrink-0">
+                                    <Badge variant="default" className="font-mono text-xs bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                                        {role}
+                                    </Badge>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                                    {grants.length > 0 ? (
+                                        grants.map(perm => (
+                                            <Badge key={perm} variant="default" className="text-[10px] px-1 py-0 h-5 bg-transparent text-neutral-500 border border-neutral-200 dark:border-neutral-700">
+                                                {perm}
+                                            </Badge>
+                                        ))
+                                    ) : (
+                                        inheritance.length > 0 ? (
+                                            <span className="text-xs text-neutral-400 italic">Inherits: {inheritance.join(", ")}</span>
+                                        ) : (
+                                            <span className="text-xs text-neutral-400 italic">No direct permissions</span>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     return (
-        <CollapsibleSection
-            title="Authorization Models"
-            icon="account_tree"
-            description="Define relations for platform features"
-            defaultOpen
-            actions={
-                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                    Add Model
-                </Button>
-            }
-        >
-                {/* Platform Model (highlighted) */}
-                {platformModel && (
-                    <CollapsibleSection
-                        title={
-                            <div className="flex items-center gap-2">
-                                <span className="font-semibold">Platform</span>
-                                <Badge variant="info">Core</Badge>
-                            </div>
-                        }
-                        description={platformModel.description || undefined}
-                        actions={
-                            <Badge variant="default">{platformModel.relations.length} relations</Badge>
-                        }
-                    >
-                        <div className="flex flex-wrap gap-2">
-                            {platformModel.relations.map((rel) => (
-                                <Badge key={rel} variant="default" className="font-mono text-xs">
-                                    {rel}
-                                </Badge>
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6 flex-row items-start justify-between space-y-0">
+                <div className="flex flex-1 items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="account_tree" size="xs" className="h-5 w-5 text-gray-400" />
+                            Authorization Models
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Define relations for platform features</CardDescription>
+                    </div>
+                </div>
+                <div className="pl-4 flex items-center">
+                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowModal(true)}>
+                        Add Model
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="!pt-6 flex flex-col gap-6">
+                <div className="space-y-6">
+                    {/* System Models Channel */}
+                    <div>
+                        <h4 className="text-sm font-medium text-neutral-500 mb-3 flex items-center gap-2">
+                            <Icon name="dns" size="xs" className="h-4 w-4" />
+                            System Features
+                        </h4>
+                        <div className="grid gap-4">
+                            {models.filter(m => m.isSystem).map((model) => (
+                                <div
+                                    key={model.entityType}
+                                    className="rounded-lg border border-neutral-200 dark:border-[#243647] p-4 bg-neutral-50/50 dark:bg-neutral-900/20"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold capitalize font-mono text-sm">{model.entityType}</span>
+                                                <Badge variant="info">System</Badge>
+                                                {model.isOverridden && <Badge variant="warning">Overridden</Badge>}
+                                            </div>
+                                            {model.description && (
+                                                <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                                                    {model.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(model)}>
+                                                <Icon name="edit" size="xs" className="text-neutral-500" />
+                                            </Button>
+                                            {model.isOverridden && (
+                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-orange-100 dark:hover:bg-orange-900/30" onClick={() => handleDelete(model.entityType)} disabled={deleting === model.entityType} title="Reset to Default">
+                                                    <Icon name="history" size="xs" className="text-orange-500" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {renderVisualization(model)}
+                                </div>
                             ))}
                         </div>
-                    </CollapsibleSection>
-                )}
+                    </div>
 
-                {/* Feature Models */}
-                {featureModels.map((model) => (
-                    <CollapsibleSection
-                        key={model.id}
-                        title={
-                            <div className="flex items-center gap-2">
-                                <span className="font-semibold capitalize">{model.entityType}</span>
-                                {model.isSystem && (
-                                    <Badge variant="default">System</Badge>
-                                )}
-                            </div>
-                        }
-                        description={model.description || undefined}
-                        actions={
-                            <div className="flex items-center gap-2">
-                                <Badge variant="default">{model.relations.length} relations</Badge>
-                                {!model.isSystem && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDelete(model.entityType);
-                                        }}
-                                        disabled={deleting === model.entityType}
+                    {/* Custom Models Channel */}
+                    <div>
+                        <h4 className="text-sm font-medium text-neutral-500 mb-3 flex items-center gap-2">
+                            <Icon name="extension" size="xs" className="h-4 w-4" />
+                            Custom Models
+                        </h4>
+                        <div className="grid gap-4">
+                            {models.filter(m => !m.isSystem).length > 0 ? (
+                                models.filter(m => !m.isSystem).map((model) => (
+                                    <div
+                                        key={model.id}
+                                        className="rounded-lg border border-neutral-200 dark:border-[#243647] p-4"
                                     >
-                                        <Icon name="delete" size="xs" className="h-4 w-4 text-red-500" />
-                                    </Button>
-                                )}
-                            </div>
-                        }
-                    >
-                        <div className="flex flex-wrap gap-2">
-                            {model.relations.map((rel) => (
-                                <Badge key={rel} variant="default" className="font-mono text-xs">
-                                    {rel}
-                                </Badge>
-                            ))}
+                                        <div className="flex items-start justify-between">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold capitalize">{model.entityType}</span>
+                                                </div>
+                                                {model.description && (
+                                                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                                                        {model.description}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center space-x-1">
+                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(model)}>
+                                                    <Icon name="edit" size="xs" className="text-neutral-500" />
+                                                </Button>
+                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={() => handleDelete(model.entityType)} disabled={deleting === model.entityType}>
+                                                    <Icon name="delete" size="xs" className="text-red-500" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        {renderVisualization(model)}
+                                    </div>
+                                ))
+                            ) : (
+                                <EmptyState
+                                    icon="account_tree"
+                                    title="No custom models defined"
+                                    description="Create models to define permissions for your own modules"
+                                />
+                            )}
                         </div>
-                    </CollapsibleSection>
-                ))}
+                    </div>
+                </div>
 
-                {models.length === 0 && (
-                    <EmptyState
-                        icon="account_tree"
-                        title="No authorization models defined"
-                        description="Create models to define feature permissions"
-                    />
-                )}
-
-                {/* Create Model Modal */}
+                {/* Create/Edit Model Modal */}
                 <Modal
-                    isOpen={showCreate}
-                    onClose={() => { setShowCreate(false); resetForm(); }}
-                    title="Create Authorization Model"
+                    isOpen={showModal}
+                    onClose={() => { setShowModal(false); resetForm(); }}
+                    title={editingModel ? "Edit Authorization Model" : "Create Authorization Model"}
                 >
                     <div className="space-y-4">
                         <div>
@@ -476,9 +741,10 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                                 value={entityType}
                                 onChange={(e) => setEntityType(e.target.value)}
                                 placeholder="e.g., reports, analytics, billing"
+                                disabled={!!editingModel} // Cannot change ID
                             />
                             <p className="text-xs text-neutral-500 mt-1">
-                                Lowercase, no spaces. Used as permission namespace.
+                                {editingModel ? "Entity type cannot be changed." : "Lowercase, no spaces. Used as permission namespace."}
                             </p>
                         </div>
                         <div>
@@ -493,17 +759,25 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                                 Define permission levels for this entity type.
                             </p>
                         </div>
+                        {editingModel && editingModel.isSystem && (
+                            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-100 dark:border-blue-800">
+                                <p className="text-xs text-blue-700 dark:text-blue-300">
+                                    <strong>Note:</strong> Editing this system model will create a database override. You can revert to defaults anytime.
+                                </p>
+                            </div>
+                        )}
                     </div>
                     <ModalFooter>
-                        <Button variant="secondary" onClick={() => { setShowCreate(false); resetForm(); }}>
+                        <Button variant="secondary" onClick={() => { setShowModal(false); resetForm(); }}>
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={handleCreate} disabled={creating}>
-                            {creating ? "Creating..." : "Create Model"}
+                        <Button variant="primary" onClick={handleSave} disabled={creating}>
+                            {creating ? "Saving..." : (editingModel ? "Save Changes" : "Create Model")}
                         </Button>
                     </ModalFooter>
                 </Modal>
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }
 
@@ -536,17 +810,24 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
     const disabledClients = clients.filter(c => !c.allowsRegistrationContexts);
 
     return (
-        <CollapsibleSection
-            title="Client Registration Whitelist"
-            icon="app_registration"
-            description="Only whitelisted clients can create registration contexts for user sign-up"
-            defaultOpen
-        >
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6">
+                <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="app_registration" size="xs" className="h-5 w-5 text-gray-400" />
+                            Client Registration Whitelist
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Only whitelisted clients can create registration contexts for user sign-up</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="!pt-6 flex flex-col gap-6">
                 <div className="space-y-4">
                     {/* Enabled clients */}
                     {enabledClients.length > 0 && (
                         <div>
-                            <h4 className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-1">
+                            <h4 className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center gap-2">
                                 <Icon name="check_circle" size="xs" className="h-4 w-4" />
                                 Enabled ({enabledClients.length})
                             </h4>
@@ -578,7 +859,7 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
                     {/* Disabled clients */}
                     {disabledClients.length > 0 && (
                         <div>
-                            <h4 className="text-sm font-medium text-neutral-500 mb-2 flex items-center gap-1">
+                            <h4 className="text-sm font-medium text-neutral-500 mb-2 flex items-center gap-2">
                                 <Icon name="block" size="xs" className="h-4 w-4" />
                                 Disabled ({disabledClients.length})
                             </h4>
@@ -586,7 +867,7 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
                                 {disabledClients.map((client) => (
                                     <div
                                         key={client.clientId}
-                                        className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 p-3"
+                                        className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-[#243647] p-3"
                                     >
                                         <span className="font-medium text-neutral-600 dark:text-neutral-400">
                                             {client.name || client.clientId}
@@ -609,12 +890,13 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
                         />
                     )}
                 </div>
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }
 
 // ============================================================================
-// Platform Registration Contexts Section
+// Platform Sign-Up Flows Section
 // ============================================================================
 
 interface PlatformContextsSectionProps {
@@ -718,23 +1000,30 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
     }
 
     return (
-        <CollapsibleSection
-            title="Platform Registration Contexts"
-            icon="person_add"
-            description="Sign-up flows that grant platform-level permissions"
-            defaultOpen
-            actions={
-                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                    Create Context
-                </Button>
-            }
-        >
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6 flex-row items-start justify-between space-y-0">
+                <div className="flex flex-1 items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="person_add" size="xs" className="h-5 w-5 text-gray-400" />
+                            Platform Sign-Up Flows
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Sign-up flows that grant platform-level permissions</CardDescription>
+                    </div>
+                </div>
+                <div className="pl-4 flex items-center">
+                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                        Create Context
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="!pt-6 flex flex-col gap-6">
                 {contexts.length > 0 ? (
                     <div className="space-y-3">
                         {contexts.map((context) => (
                             <div
                                 key={context.id}
-                                className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4"
+                                className="rounded-lg border border-neutral-200 dark:border-[#243647] p-4"
                             >
                                 <div className="flex items-start justify-between">
                                     <div className="space-y-1">
@@ -770,7 +1059,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                 </div>
 
                                 {/* Context Details */}
-                                <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700 space-y-2">
+                                <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-[#243647] space-y-2">
                                     {/* Grants */}
                                     <div className="flex items-center gap-2 text-sm">
                                         <span className="text-neutral-500">Grants:</span>
@@ -864,34 +1153,39 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                     No grants added yet
                                 </p>
                             ) : (
-                                <div className="space-y-2">
-                                    {grants.map((grant, idx) => (
-                                        <div key={idx} className="flex items-center gap-2">
-                                            <select
-                                                className="flex-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                                                value={grant.entityType}
-                                                onChange={(e) => updateGrant(idx, "entityType", e.target.value)}
-                                            >
-                                                <option value="">Select entity...</option>
-                                                {models.map(m => (
-                                                    <option key={m.id} value={m.entityType}>{m.entityType}</option>
-                                                ))}
-                                            </select>
-                                            <select
-                                                className="flex-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                                                value={grant.relation}
-                                                onChange={(e) => updateGrant(idx, "relation", e.target.value)}
-                                            >
-                                                <option value="">Select relation...</option>
-                                                {models.find(m => m.entityType === grant.entityType)?.relations.map(r => (
-                                                    <option key={r} value={r}>{r}</option>
-                                                ))}
-                                            </select>
-                                            <Button variant="ghost" size="sm" onClick={() => removeGrant(idx)}>
-                                                <Icon name="close" className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    ))}
+                                <div className="space-y-3">
+                                    {grants.map((grant, idx) => {
+                                        const entityOptions = models.map(m => ({ value: m.entityType, label: m.entityType }));
+                                        const relationOptions = models.find(m => m.entityType === grant.entityType)?.relations.map(r => ({ value: r, label: r })) || [];
+
+                                        return (
+                                            <div key={idx} className="flex items-center gap-2">
+                                                <Select
+                                                    options={entityOptions}
+                                                    value={grant.entityType}
+                                                    onChange={(val) => updateGrant(idx, "entityType", val)}
+                                                    placeholder="Select entity..."
+                                                    className="flex-1 min-w-0"
+                                                />
+                                                <Select
+                                                    options={relationOptions}
+                                                    value={grant.relation}
+                                                    onChange={(val) => updateGrant(idx, "relation", val)}
+                                                    placeholder="Select relation..."
+                                                    disabled={!grant.entityType}
+                                                    className="flex-1 min-w-0"
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => removeGrant(idx)}
+                                                >
+                                                    <Icon name="close" size="xs" />
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -905,6 +1199,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                         </Button>
                     </ModalFooter>
                 </Modal>
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }

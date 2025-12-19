@@ -65,9 +65,7 @@ export function AdminLayoutClient({
               className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-hover-primary rounded-lg transition-colors"
             >
               {item.icon && (
-                <span className="material-symbols-outlined text-[18px]">
-                  {item.icon}
-                </span>
+                <Icon name={item.icon} size="sm" />
               )}
               {item.label}
             </Link>

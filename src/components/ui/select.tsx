@@ -43,7 +43,7 @@ export function Select({
   triggerClassName,
 }: SelectProps & { triggerClassName?: string }) {
   return (
-    <div className={cn("space-y-1 rounded-md", className)}>
+    <div className={cn("rounded-md", label && "space-y-1", className)}>
       {label && <Label required={required}>{label}</Label>}
       <SelectPrimitive.Root
         value={value}
@@ -53,7 +53,7 @@ export function Select({
       >
         <SelectPrimitive.Trigger
           className={cn(
-            "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm placeholder:text-gray-500",
+            "flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-sm placeholder:text-gray-500",
             "bg-input text-white",
             "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
             "disabled:cursor-not-allowed disabled:opacity-50",

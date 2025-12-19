@@ -228,6 +228,21 @@ export class PermissionRequestRepository {
             .where(eq(permissionRequests.userId, userId));
     }
 
+    async findAllByClient(clientId: string | null): Promise<PermissionRequest[]> {
+        if (clientId === null) {
+            return db
+                .select()
+                .from(permissionRequests)
+                .where(sql`${permissionRequests.clientId} IS NULL`)
+                .orderBy(sql`${permissionRequests.requestedAt} DESC`);
+        }
+        return db
+            .select()
+            .from(permissionRequests)
+            .where(eq(permissionRequests.clientId, clientId))
+            .orderBy(sql`${permissionRequests.requestedAt} DESC`);
+    }
+
     async create(
         data: Omit<NewPermissionRequest, "id">
     ): Promise<PermissionRequest> {

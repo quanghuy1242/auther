@@ -12,9 +12,14 @@ import {
     Select,
     Switch,
     Tabs,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CardDescription,
     EmptyState,
 } from "@/components/ui";
-import { CollapsibleSection } from "@/components/ui/collapsible-section";
+
 import { toast } from "sonner";
 import type {
     PermissionRequestWithDetails,
@@ -70,19 +75,24 @@ export function PendingRequestsSection({ requests }: PendingRequestsSectionProps
     const pendingRequests = requests.filter(r => r.status === "pending");
 
     return (
-        <CollapsibleSection
-            title={
-                <span className="flex items-center gap-2">
-                    Pending Requests
-                    {pendingRequests.length > 0 && (
-                        <Badge variant="warning">{pendingRequests.length}</Badge>
-                    )}
-                </span>
-            }
-            icon="pending_actions"
-            description="Permission escalation requests awaiting approval"
-            defaultOpen
-        >
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6">
+                <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="pending_actions" size="xs" className="h-5 w-5 text-gray-400" />
+                            <span className="flex items-center gap-2">
+                                Pending Requests
+                                {pendingRequests.length > 0 && (
+                                    <Badge variant="warning">{pendingRequests.length}</Badge>
+                                )}
+                            </span>
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Permission escalation requests awaiting approval</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-6 flex flex-col gap-6">
                 {pendingRequests.length > 0 ? (
                     <div className="space-y-3">
                         {pendingRequests.map((request) => (
@@ -142,7 +152,8 @@ export function PendingRequestsSection({ requests }: PendingRequestsSectionProps
                         description="All permission requests have been processed"
                     />
                 )}
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }
 
@@ -155,18 +166,160 @@ interface RequestHistorySectionProps {
 }
 
 export function RequestHistorySection({ requests }: RequestHistorySectionProps) {
-    const processedRequests = requests.filter(r => r.status !== "pending");
+    // Filter state
+    const [statusFilter, setStatusFilter] = React.useState<"all" | "approved" | "rejected">("all");
+    const [userSearch, setUserSearch] = React.useState("");
+    const [relationFilter, setRelationFilter] = React.useState<string>("all");
+    const [dateFilter, setDateFilter] = React.useState<"all" | "today" | "week" | "month">("all");
+
+    // Get all non-pending requests
+    const allProcessedRequests = requests.filter(r => r.status !== "pending");
+
+    // Get unique relations for filter dropdown
+    const uniqueRelations = React.useMemo(() => {
+        const relations = new Set(allProcessedRequests.map(r => r.relation));
+        return Array.from(relations).sort();
+    }, [allProcessedRequests]);
+
+    // Apply filters
+    const filteredRequests = React.useMemo(() => {
+        let filtered = allProcessedRequests;
+
+        // Status filter
+        if (statusFilter !== "all") {
+            filtered = filtered.filter(r => r.status === statusFilter);
+        }
+
+        // User search (case-insensitive)
+        if (userSearch.trim()) {
+            const searchLower = userSearch.toLowerCase();
+            filtered = filtered.filter(r =>
+                (r.userName?.toLowerCase().includes(searchLower)) ||
+                (r.userId.toLowerCase().includes(searchLower))
+            );
+        }
+
+        // Relation filter
+        if (relationFilter !== "all") {
+            filtered = filtered.filter(r => r.relation === relationFilter);
+        }
+
+        // Date filter
+        if (dateFilter !== "all") {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            let cutoffDate: Date;
+
+            switch (dateFilter) {
+                case "today":
+                    cutoffDate = startOfToday;
+                    break;
+                case "week":
+                    cutoffDate = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case "month":
+                    cutoffDate = new Date(startOfToday.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    break;
+                default:
+                    cutoffDate = new Date(0);
+            }
+
+            filtered = filtered.filter(r => {
+                const resolvedDate = r.resolvedAt || r.requestedAt;
+                return resolvedDate >= cutoffDate;
+            });
+        }
+
+        return filtered;
+    }, [allProcessedRequests, statusFilter, userSearch, relationFilter, dateFilter]);
+
+    const hasActiveFilters = statusFilter !== "all" || userSearch.trim() || relationFilter !== "all" || dateFilter !== "all";
+
+    function clearFilters() {
+        setStatusFilter("all");
+        setUserSearch("");
+        setRelationFilter("all");
+        setDateFilter("all");
+    }
 
     return (
-        <CollapsibleSection
-            title="Request History"
-            icon="history"
-            description="Previously processed permission requests"
-            defaultOpen
-        >
-                {processedRequests.length > 0 ? (
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6">
+                <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="history" size="xs" className="h-5 w-5 text-gray-400" />
+                            Request History
+                            {allProcessedRequests.length > 0 && (
+                                <Badge variant="default">{allProcessedRequests.length}</Badge>
+                            )}
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Previously processed permission requests</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-6 flex flex-col gap-6">
+                {/* Filters */}
+                {allProcessedRequests.length > 0 && (
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Select
+                                value={statusFilter}
+                                onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+                                options={[
+                                    { value: "all", label: "All statuses" },
+                                    { value: "approved", label: "Approved" },
+                                    { value: "rejected", label: "Rejected" },
+                                ]}
+                                className="w-36"
+                            />
+                            <Select
+                                value={dateFilter}
+                                onChange={(v) => setDateFilter(v as typeof dateFilter)}
+                                options={[
+                                    { value: "all", label: "All time" },
+                                    { value: "today", label: "Today" },
+                                    { value: "week", label: "Last 7 days" },
+                                    { value: "month", label: "Last 30 days" },
+                                ]}
+                                className="w-36"
+                            />
+                            {uniqueRelations.length > 1 && (
+                                <Select
+                                    value={relationFilter}
+                                    onChange={(v) => setRelationFilter(v)}
+                                    options={[
+                                        { value: "all", label: "All relations" },
+                                        ...uniqueRelations.map(r => ({ value: r, label: r })),
+                                    ]}
+                                    className="w-36"
+                                />
+                            )}
+                            <Input
+                                value={userSearch}
+                                onChange={(e) => setUserSearch(e.target.value)}
+                                placeholder="Search user..."
+                                className="w-40"
+                            />
+                            {hasActiveFilters && (
+                                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                                    <Icon name="close" size="xs" className="mr-1" />
+                                    Clear
+                                </Button>
+                            )}
+                        </div>
+                        {hasActiveFilters && (
+                            <p className="text-xs text-neutral-500">
+                                Showing {filteredRequests.length} of {allProcessedRequests.length} requests
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* Results */}
+                {filteredRequests.length > 0 ? (
                     <div className="space-y-2">
-                        {processedRequests.map((request) => (
+                        {filteredRequests.map((request) => (
                             <div
                                 key={request.id}
                                 className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3"
@@ -196,13 +349,25 @@ export function RequestHistorySection({ requests }: RequestHistorySectionProps) 
                             </div>
                         ))}
                     </div>
+                ) : allProcessedRequests.length > 0 ? (
+                    <EmptyState
+                        icon="filter_alt"
+                        title="No matching requests"
+                        description="Try adjusting your filters"
+                        action={
+                            <Button variant="secondary" size="sm" onClick={clearFilters}>
+                                Clear Filters
+                            </Button>
+                        }
+                    />
                 ) : (
                     <EmptyState
                         icon="history"
                         title="No request history"
                     />
                 )}
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }
 
@@ -301,17 +466,24 @@ export function AutomationRulesSection({ rules }: AutomationRulesSectionProps) {
     }
 
     return (
-        <CollapsibleSection
-            title="Automation Rules"
-            icon="auto_fix_high"
-            description="Configure automatic handling of permission requests"
-            defaultOpen
-            actions={
-                <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                    Add Rule
-                </Button>
-            }
-        >
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6 flex-row items-start justify-between space-y-0">
+                <div className="flex flex-1 items-center gap-4">
+                    <div className="flex-1">
+                        <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                            <Icon name="auto_fix_high" size="xs" className="h-5 w-5 text-gray-400" />
+                            Automation Rules
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Configure automatic handling of permission requests</CardDescription>
+                    </div>
+                </div>
+                <div className="pl-4 flex items-center">
+                    <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
+                        Add Rule
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="pt-6 flex flex-col gap-6">
                 {rules.length > 0 ? (
                     <div className="space-y-2">
                         {rules.map((rule) => (
@@ -466,7 +638,8 @@ export function AutomationRulesSection({ rules }: AutomationRulesSectionProps) {
                         </Button>
                     </ModalFooter>
                 </Modal>
-        </CollapsibleSection>
+            </CardContent>
+        </Card>
     );
 }
 

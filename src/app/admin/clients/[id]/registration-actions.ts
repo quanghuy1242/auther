@@ -91,13 +91,13 @@ export async function createClientContext(
 
 export async function toggleClientContext(
     clientId: string,
-    contextId: string,
+    contextSlug: string,
     enabled: boolean
 ): Promise<{ success: boolean; error?: string }> {
     try {
         await guards.clients.update();
 
-        await registrationContextRepo.update(contextId, { enabled });
+        await registrationContextRepo.update(contextSlug, { enabled });
 
         revalidatePath(`/admin/clients/${clientId}`);
         return { success: true };
@@ -112,12 +112,12 @@ export async function toggleClientContext(
 
 export async function deleteClientContext(
     clientId: string,
-    contextId: string
+    contextSlug: string
 ): Promise<{ success: boolean; error?: string }> {
     try {
         await guards.clients.update();
 
-        await registrationContextRepo.delete(contextId);
+        await registrationContextRepo.delete(contextSlug);
 
         revalidatePath(`/admin/clients/${clientId}`);
         return { success: true };
