@@ -879,11 +879,14 @@ export function AuthorizationModelsSection({ models }: AuthorizationModelsSectio
                                             key={idx}
                                             name={rel.name}
                                             subjects={rel.subjects}
+                                            isHierarchy={rel.isHierarchy}
                                             availableRelations={relations.filter(r => r.name !== rel.name && r.name.trim()).map(r => r.name)}
                                             onNameChange={(name) => handleUpdateRelation(idx, "name", name)}
                                             onSubjectsChange={(subjects) => handleUpdateRelation(idx, "subjects", subjects)}
+                                            onToggleHierarchy={(isHierarchy) => handleUpdateRelation(idx, "isHierarchy", isHierarchy)}
                                             onRemove={() => handleRemoveRelation(idx)}
                                             isExisting={rel.isExisting}
+                                            hideHierarchy={true}
                                         />
                                     ))}
                                 </div>

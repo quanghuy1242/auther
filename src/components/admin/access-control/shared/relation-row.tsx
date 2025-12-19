@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Input, Icon } from "@/components/ui";
+import { Input, Icon, Switch } from "@/components/ui";
 import { SubjectBadge, type Subject } from "./subject-badge";
 import { AddSubjectPopover } from "./add-subject-popover";
 
@@ -16,17 +16,21 @@ interface RelationRowProps {
     onRemove: () => void;
     disabled?: boolean;
     isExisting?: boolean; // If true, name field is disabled (existing relation cannot be renamed)
+    hideHierarchy?: boolean; // If true, hide the recursive toggle
 }
 
 export function RelationRow({
     name,
     subjects,
+    isHierarchy = false,
     availableRelations,
     onNameChange,
     onSubjectsChange,
+    onToggleHierarchy,
     onRemove,
     disabled,
     isExisting,
+    hideHierarchy,
 }: RelationRowProps) {
     const handleRemoveSubject = (index: number) => {
         onSubjectsChange(subjects.filter((_, i) => i !== index));
@@ -73,6 +77,23 @@ export function RelationRow({
                     />
                 </div>
             </div>
+
+            {/* Hierarchy Toggle - conditionally shown */}
+            {!hideHierarchy && (
+                <div className="flex flex-col items-center space-y-1">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider text-center w-full cursor-help" title="Allows subjects to be nested (e.g. group hierarchies)">
+                        Recursive?
+                    </label>
+                    <div className="h-8 flex items-center justify-center">
+                        <Switch
+                            checked={isHierarchy}
+                            onChange={(val) => !disabled && onToggleHierarchy?.(val)}
+                            disabled={disabled}
+                            className="scale-90"
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Delete Button */}
             <div className="pt-6">
