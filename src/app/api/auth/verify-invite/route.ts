@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { registrationContextService } from "@/lib/services/registration-context-service";
-import { queueContextGrant } from "@/lib/pipelines/registration-grants";
+import { queueContextGrant, queuePlatformContextGrants } from "@/lib/pipelines/registration-grants";
 
 /**
  * API Route: POST /api/auth/verify-invite
  * 
  * Verifies a signed invite token for invite-only registration contexts.
  * If valid, queues the context grant for application after user creation.
+ * Also queues all global platform contexts.
  * 
  * Request body:
  * {
@@ -70,6 +71,9 @@ export async function POST(request: NextRequest) {
             verification.context.slug,
             verification.invite?.id
         );
+
+        // Also queue all global platform contexts
+        await queuePlatformContextGrants(email);
 
         return NextResponse.json({
             valid: true,

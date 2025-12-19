@@ -17,6 +17,7 @@ import {
     CardTitle,
     CardDescription,
     EmptyState,
+    Select,
 } from "@/components/ui";
 
 import { toast } from "sonner";
@@ -40,9 +41,10 @@ interface RegistrationTabProps {
     clientId: string;
     contexts: RegistrationContext[];
     allowsContexts: boolean;
+    entityTypes: Array<{ id: string; name: string; relations: string[] }>;
 }
 
-export function RegistrationTab({ clientId, contexts, allowsContexts }: RegistrationTabProps) {
+export function RegistrationTab({ clientId, contexts, allowsContexts, entityTypes }: RegistrationTabProps) {
     const [showCreate, setShowCreate] = React.useState(false);
     const [creating, setCreating] = React.useState(false);
     const [updating, setUpdating] = React.useState<string | null>(null);
@@ -52,7 +54,7 @@ export function RegistrationTab({ clientId, contexts, allowsContexts }: Registra
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
     const [originsText, setOriginsText] = React.useState("");
-    const [grants, setGrants] = React.useState<Array<{ relation: string }>>([]);
+    const [grants, setGrants] = React.useState<Array<{ entityTypeId: string; relation: string }>>([]);;
 
     async function handleCreate() {
         if (!slug.trim()) {
@@ -124,18 +126,33 @@ export function RegistrationTab({ clientId, contexts, allowsContexts }: Registra
     }
 
     function addGrant() {
-        setGrants([...grants, { relation: "" }]);
+        // Start with empty entityTypeId and relation - user will select from dropdown
+        setGrants([...grants, { entityTypeId: "", relation: "" }]);
     }
 
     function removeGrant(idx: number) {
         setGrants(grants.filter((_, i) => i !== idx));
     }
 
-    function updateGrant(idx: number, relation: string) {
+    function updateGrant(idx: number, entityTypeId: string, relation: string) {
         const updated = [...grants];
-        updated[idx] = { relation };
+        updated[idx] = { entityTypeId, relation };
         setGrants(updated);
     }
+
+    // Build flat options for Select: value = "entityTypeId:relation", label = "name → relation"
+    const grantOptions = React.useMemo(() => {
+        const options: Array<{ value: string; label: string }> = [];
+        for (const et of entityTypes) {
+            for (const rel of et.relations) {
+                options.push({
+                    value: `${et.id}:${rel}`,  // Use ID for stable references
+                    label: `${et.name} → ${rel}`,  // Show name for display
+                });
+            }
+        }
+        return options;
+    }, [entityTypes]);
 
     if (!allowsContexts) {
         return (
@@ -317,33 +334,58 @@ export function RegistrationTab({ clientId, contexts, allowsContexts }: Registra
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <Label>Permission Grants</Label>
-                            <Button variant="ghost" size="sm" leftIcon="add" onClick={addGrant}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                leftIcon="add"
+                                onClick={addGrant}
+                                disabled={grantOptions.length === 0}
+                            >
                                 Add
                             </Button>
                         </div>
-                        {grants.length === 0 ? (
+                        {grantOptions.length === 0 ? (
+                            <p className="text-sm text-amber-500 text-center py-4 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                                No authorization model configured. Define relations in the Access Control tab first.
+                            </p>
+                        ) : grants.length === 0 ? (
                             <p className="text-sm text-neutral-500 text-center py-4">
                                 No grants added yet
                             </p>
                         ) : (
                             <div className="space-y-2">
-                                {grants.map((grant, idx) => (
-                                    <div key={idx} className="flex items-center gap-2">
-                                        <Input
-                                            value={grant.relation}
-                                            onChange={(e) => updateGrant(idx, e.target.value)}
-                                            placeholder="e.g., viewer, editor"
-                                            className="flex-1"
-                                        />
-                                        <Button variant="ghost" size="sm" onClick={() => removeGrant(idx)}>
-                                            <Icon name="close" className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ))}
+                                {grants.map((grant, idx) => {
+                                    const selectedValue = grant.entityTypeId && grant.relation
+                                        ? `${grant.entityTypeId}:${grant.relation}`
+                                        : "";
+                                    return (
+                                        <div key={idx} className="flex items-center gap-2">
+                                            <Select
+                                                value={selectedValue}
+                                                onChange={(value) => {
+                                                    // Parse "entityTypeId:relation" value back to components
+                                                    const [entityTypeId, relation] = value.split(":");
+                                                    updateGrant(idx, entityTypeId, relation);
+                                                }}
+                                                placeholder="Select entity type → relation..."
+                                                options={grantOptions}
+                                                className="flex-1"
+                                            />
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={() => removeGrant(idx)}
+                                            >
+                                                <Icon name="close" size="xs" />
+                                            </Button>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                         <p className="text-xs text-neutral-500">
-                            These are client-level permissions (e.g., viewer, editor, admin)
+                            Select entity type and relation pairs from the authorization model
                         </p>
                     </div>
                 </div>

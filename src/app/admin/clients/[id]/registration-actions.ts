@@ -9,7 +9,7 @@ import {
     type RegistrationContext,
     type PermissionRequest,
 } from "@/lib/repositories/platform-access-repository";
-import { oauthClientMetadataRepository } from "@/lib/repositories";
+import { oauthClientMetadataRepository, authorizationModelRepository } from "@/lib/repositories";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 
 // Re-export types
@@ -41,6 +41,36 @@ export async function getClientRegistrationStatus(clientId: string): Promise<Cli
     };
 }
 
+/**
+ * Get available relations from the client's authorization model.
+ * Returns entity types with their stable IDs for grant references.
+ */
+export async function getClientRelations(
+    clientId: string
+): Promise<{
+    entityTypes: Array<{ id: string; name: string; relations: string[] }>;
+    error?: string;
+}> {
+    try {
+        await guards.clients.view();
+
+        // Find ALL authorization models for this client with their stable IDs
+        const entityTypes = await authorizationModelRepository.findAllForClientWithIds(clientId);
+
+        if (entityTypes.length === 0) {
+            return { entityTypes: [], error: "No authorization model configured for this client" };
+        }
+
+        return { entityTypes };
+    } catch (error) {
+        console.error("getClientRelations error:", error);
+        return {
+            entityTypes: [],
+            error: error instanceof Error ? error.message : "Failed to get relations",
+        };
+    }
+}
+
 export async function createClientContext(
     clientId: string,
     data: {
@@ -48,7 +78,7 @@ export async function createClientContext(
         name: string;
         description?: string;
         allowedOrigins?: string[];
-        grants: Array<{ relation: string }>;
+        grants: Array<{ entityTypeId: string; relation: string }>;
     }
 ): Promise<{ success: boolean; context?: RegistrationContext; error?: string }> {
     try {
@@ -66,7 +96,7 @@ export async function createClientContext(
             return { success: false, error: "Context with this slug already exists" };
         }
 
-        // Create context - grants are client-scoped (no entityType = this client)
+        // Create context with entityTypeId (stable reference) + relation grants
         const context = await registrationContextRepo.create({
             slug: data.slug,
             name: data.name,
@@ -74,7 +104,7 @@ export async function createClientContext(
             clientId, // Client-owned context
             allowedOrigins: data.allowedOrigins || null,
             allowedDomains: null,
-            grants: data.grants.map(g => ({ entityType: undefined, relation: g.relation })),
+            grants: data.grants.map(g => ({ entityTypeId: g.entityTypeId, relation: g.relation })),
             enabled: true,
         });
 

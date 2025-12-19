@@ -107,6 +107,9 @@ export async function validateOriginForContext(
 /**
  * Middleware helper to validate and queue context grant during sign-up.
  * Call this at the start of sign-up flow when a context slug is provided.
+ * 
+ * Also queues all enabled global platform contexts to ensure
+ * new users get platform-level grants in addition to context-specific ones.
  */
 export async function validateAndQueueContextGrant(
     email: string,
@@ -119,8 +122,11 @@ export async function validateAndQueueContextGrant(
     }
 
     // Queue the context grant for application after user creation
-    const { queueContextGrant } = await import("@/lib/pipelines/registration-grants");
+    const { queueContextGrant, queuePlatformContextGrants } = await import("@/lib/pipelines/registration-grants");
     queueContextGrant(email, contextSlug);
+
+    // Also queue all global platform contexts
+    await queuePlatformContextGrants(email);
 
     return { valid: true, contextSlug };
 }

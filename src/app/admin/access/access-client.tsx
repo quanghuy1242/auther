@@ -914,7 +914,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
     const [originsText, setOriginsText] = React.useState("");
-    const [grants, setGrants] = React.useState<Array<{ entityType: string; relation: string }>>([]);
+    const [grants, setGrants] = React.useState<Array<{ entityTypeId: string; relation: string }>>([]);
 
     async function handleToggleEnabled(id: string, currentValue: boolean) {
         setUpdating(id);
@@ -986,18 +986,32 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
     }
 
     function addGrant() {
-        setGrants([...grants, { entityType: "", relation: "" }]);
+        setGrants([...grants, { entityTypeId: "", relation: "" }]);
     }
 
     function removeGrant(idx: number) {
         setGrants(grants.filter((_, i) => i !== idx));
     }
 
-    function updateGrant(idx: number, field: "entityType" | "relation", value: string) {
+    function updateGrant(idx: number, entityTypeId: string, relation: string) {
         const updated = [...grants];
-        updated[idx] = { ...updated[idx], [field]: value };
+        updated[idx] = { entityTypeId, relation };
         setGrants(updated);
     }
+
+    // Build options for entity type select (using model ID as value)
+    const entityOptions = models.map(m => ({ value: m.id, label: m.entityType }));
+
+    // Helper to get relations for a model by ID
+    const getRelationsForModel = (modelId: string) => {
+        const model = models.find(m => m.id === modelId);
+        return model?.relations.map(r => ({ value: r, label: r })) || [];
+    };
+
+    // Helper to get display name for an entityTypeId
+    const getEntityTypeName = (entityTypeId: string) => {
+        return models.find(m => m.id === entityTypeId)?.entityType || entityTypeId;
+    };
 
     return (
         <Card>
@@ -1066,7 +1080,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                         <div className="flex flex-wrap gap-1">
                                             {context.grants.map((grant, idx) => (
                                                 <Badge key={idx} variant="default" className="text-xs font-mono">
-                                                    {grant.entityType ? `${grant.entityType}:` : ""}{grant.relation}
+                                                    {getEntityTypeName(grant.entityTypeId)}:{grant.relation}
                                                 </Badge>
                                             ))}
                                         </div>
@@ -1155,24 +1169,23 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                             ) : (
                                 <div className="space-y-3">
                                     {grants.map((grant, idx) => {
-                                        const entityOptions = models.map(m => ({ value: m.entityType, label: m.entityType }));
-                                        const relationOptions = models.find(m => m.entityType === grant.entityType)?.relations.map(r => ({ value: r, label: r })) || [];
+                                        const relationOptions = getRelationsForModel(grant.entityTypeId);
 
                                         return (
                                             <div key={idx} className="flex items-center gap-2">
                                                 <Select
                                                     options={entityOptions}
-                                                    value={grant.entityType}
-                                                    onChange={(val) => updateGrant(idx, "entityType", val)}
+                                                    value={grant.entityTypeId}
+                                                    onChange={(val) => updateGrant(idx, val, "")}
                                                     placeholder="Select entity..."
                                                     className="flex-1 min-w-0"
                                                 />
                                                 <Select
                                                     options={relationOptions}
                                                     value={grant.relation}
-                                                    onChange={(val) => updateGrant(idx, "relation", val)}
+                                                    onChange={(val) => updateGrant(idx, grant.entityTypeId, val)}
                                                     placeholder="Select relation..."
-                                                    disabled={!grant.entityType}
+                                                    disabled={!grant.entityTypeId}
                                                     className="flex-1 min-w-0"
                                                 />
                                                 <Button

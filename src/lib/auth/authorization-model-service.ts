@@ -3,6 +3,7 @@ import { authorizationModels } from "@/db/rebac-schema";
 import { eq } from "drizzle-orm";
 import { authorizationModelSchema, AuthorizationModelDefinition } from "@/schemas/rebac";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
+import { registrationContextRepo } from "@/lib/repositories/platform-access-repository";
 
 import { SYSTEM_MODELS } from "@/lib/auth/system-models";
 
@@ -73,13 +74,21 @@ export class AuthorizationModelService {
   }
 
   /**
-   * Ensures that removing a relation/permission doesn't leave orphaned tuples.
+   * Ensures that removing a relation/permission doesn't leave orphaned tuples or grants.
    */
   private async checkDependencySafety(
     entityType: string,
     oldModel: AuthorizationModelDefinition,
     newModel: AuthorizationModelDefinition
   ): Promise<void> {
+    // Get the model ID for checking registration context grants
+    const [modelRecord] = await db
+      .select({ id: authorizationModels.id })
+      .from(authorizationModels)
+      .where(eq(authorizationModels.entityType, entityType));
+
+    const modelId = modelRecord?.id;
+
     // Check for removed relations
     const oldRelations = Object.keys(oldModel.relations);
     const newRelations = new Set(Object.keys(newModel.relations));
@@ -87,12 +96,21 @@ export class AuthorizationModelService {
     for (const relation of oldRelations) {
       if (!newRelations.has(relation)) {
         // Relation was removed. Check if any tuples use it.
-
-        const count = await this.tupleRepo.countByRelation(entityType, relation);
-        if (count > 0) {
+        const tupleCount = await this.tupleRepo.countByRelation(entityType, relation);
+        if (tupleCount > 0) {
           throw new Error(
-            `Cannot remove relation '${relation}' from entity '${entityType}' because there are ${count} active permission tuples relying on it.`
+            `Cannot remove relation '${relation}' from entity '${entityType}' because there are ${tupleCount} active permission tuples relying on it.`
           );
+        }
+
+        // Check if any registration context grants use it
+        if (modelId) {
+          const grantCount = await registrationContextRepo.countGrantsByEntityTypeIdAndRelation(modelId, relation);
+          if (grantCount > 0) {
+            throw new Error(
+              `Cannot remove relation '${relation}' from entity '${entityType}' because there are ${grantCount} registration context grants using it.`
+            );
+          }
         }
       }
     }

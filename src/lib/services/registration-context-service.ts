@@ -7,6 +7,7 @@ import {
 } from "@/lib/repositories/platform-access-repository";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import { OAuthClientMetadataRepository } from "@/lib/repositories/oauth-client-metadata-repository";
+import { authorizationModelRepository } from "@/lib/repositories";
 
 const tupleRepo = new TupleRepository();
 const metadataRepo = new OAuthClientMetadataRepository();
@@ -219,31 +220,30 @@ export class RegistrationContextService {
     /**
      * Apply grants from a registration context to a user.
      * This creates access_tuples for the new user.
+     * Uses entityTypeId to look up current entity type name (survives renames).
      */
     async applyContextGrants(
         context: RegistrationContext,
         userId: string
     ): Promise<void> {
         for (const grant of context.grants) {
-            if (context.clientId) {
-                // Client-scoped context: grant on the client
-                await tupleRepo.createIfNotExists({
-                    entityType: `client_${context.clientId}`,
-                    entityId: context.clientId,
-                    relation: grant.relation,
-                    subjectType: "user",
-                    subjectId: userId,
-                });
-            } else if (grant.entityType) {
-                // Platform context with explicit entity type
-                await tupleRepo.createIfNotExists({
-                    entityType: grant.entityType,
-                    entityId: "*",
-                    relation: grant.relation,
-                    subjectType: "user",
-                    subjectId: userId,
-                });
+            // Look up authorization model by ID to get current entity type name
+            const model = await authorizationModelRepository.findById(grant.entityTypeId);
+
+            if (!model) {
+                console.warn(`applyContextGrants: No model found for entityTypeId ${grant.entityTypeId}`);
+                continue;
             }
+
+            // Create tuple using the current (possibly renamed) entity type
+            await tupleRepo.createIfNotExists({
+                entityType: model.entityType, // e.g., "client_abc:invoice" (current name)
+                entityTypeId: model.id, // Stable ID reference
+                entityId: "*", // Wildcard for all entities of this type
+                relation: grant.relation,
+                subjectType: "user",
+                subjectId: userId,
+            });
         }
     }
 

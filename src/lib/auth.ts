@@ -23,7 +23,7 @@ import {
 } from "@/lib/utils/auth-middleware";
 import { checkOAuthClientAccess } from "@/lib/utils/oauth-authorization";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
-import { createPipelineDatabaseHooks } from "@/lib/pipelines";
+import { createPipelineDatabaseHooks, applyClientContextGrants } from "@/lib/pipelines";
 
 const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
 
@@ -159,6 +159,15 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
             Location: errorUrl.toString(),
           },
         });
+      }
+
+      // Apply registration context grants for this client (idempotent)
+      // This ensures existing users get the client's registration context permissions
+      try {
+        await applyClientContextGrants(clientId, userId);
+      } catch (err) {
+        console.error("Failed to apply client context grants:", err);
+        // Non-blocking: don't fail the authorization if grant application fails
       }
     }
   }

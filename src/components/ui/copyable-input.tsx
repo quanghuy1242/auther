@@ -60,9 +60,9 @@ export function CopyableInput({
             title="Copy to clipboard"
           >
             {copied === value ? (
-              <Icon name="check" className="text-lg mt-1" />
+              <Icon name="check" className="text-lg mt-1" size="xs" />
             ) : (
-              <Icon name="content_copy" className="text-lg mt-1" />
+              <Icon name="content_copy" className="text-lg mt-1" size="xs" />
             )}
           </button>
         )}

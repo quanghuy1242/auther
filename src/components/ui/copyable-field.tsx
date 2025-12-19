@@ -22,11 +22,11 @@ export interface CopyableFieldProps {
  *   copyable 
  * />
  */
-export function CopyableField({ 
-  label, 
-  value, 
+export function CopyableField({
+  label,
+  value,
   copyable = true,
-  className 
+  className
 }: CopyableFieldProps) {
   const [copied, setCopied] = React.useState(false);
 
@@ -53,9 +53,9 @@ export function CopyableField({
           title="Copy to clipboard"
         >
           {copied ? (
-            <Icon name="check" className="!text-xl text-green-400" />
+            <Icon name="check" className="!text-xl text-green-400" size="xs" />
           ) : (
-            <Icon name="content_copy" className="!text-xl" />
+            <Icon name="content_copy" className="!text-xl" size="xs" />
           )}
         </button>
       )}

@@ -31,11 +31,11 @@ export const registrationContexts = sqliteTable(
         allowedDomains: text("allowed_domains", { mode: "json" }).$type<string[]>(), // Email domain restrictions
 
         // Grants: references to existing authorization model relations
-        // Format: [{ relation: "commenter" }] for client contexts
-        // Format: [{ entityType: "platform", relation: "member" }] for platform contexts
+        // entityTypeId = authorization_models.id (stable across renames)
+        // relation = relation name within that model
         grants: text("grants", { mode: "json" })
             .notNull()
-            .$type<Array<{ entityType?: string; relation: string }>>(),
+            .$type<Array<{ entityTypeId: string; relation: string }>>(),
 
         enabled: integer("enabled", { mode: "boolean" }).default(true),
 

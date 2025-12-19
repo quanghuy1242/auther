@@ -4,3 +4,4 @@
 export { HOOK_REGISTRY, type HookName, type HookInput, type HookOutput } from "./definitions";
 export { PipelineIntegrator, type PipelineMetadata } from "./integrator";
 export { createPipelineDatabaseHooks, beforeSigninPipeline } from "./auth-hooks";
+export { applyClientContextGrants } from "./registration-grants";

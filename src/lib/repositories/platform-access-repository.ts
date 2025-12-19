@@ -96,6 +96,34 @@ export class RegistrationContextRepository {
         }
         return context.allowedOrigins.includes(origin);
     }
+
+    /**
+     * Count how many registration context grants use a specific entityTypeId and relation.
+     * Used for dependency safety checks before removing relations from models.
+     */
+    async countGrantsByEntityTypeIdAndRelation(
+        entityTypeId: string,
+        relation: string
+    ): Promise<number> {
+        try {
+            // Need to query all contexts and check their grants JSON
+            const allContexts = await db.select().from(registrationContexts);
+
+            let count = 0;
+            for (const ctx of allContexts) {
+                const grants = ctx.grants as Array<{ entityTypeId: string; relation: string }>;
+                for (const grant of grants) {
+                    if (grant.entityTypeId === entityTypeId && grant.relation === relation) {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        } catch (error) {
+            console.error("RegistrationContextRepository.countGrantsByEntityTypeIdAndRelation error:", error);
+            return 0;
+        }
+    }
 }
 
 // ========================================

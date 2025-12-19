@@ -411,7 +411,7 @@ export async function createPlatformContext(data: {
     name: string;
     description?: string;
     allowedOrigins?: string[];
-    grants: Array<{ entityType?: string; relation: string }>;
+    grants: Array<{ entityTypeId: string; relation: string }>;
 }): Promise<{ success: boolean; context?: RegistrationContext; error?: string }> {
     try {
         await guards.platform.admin();
@@ -429,7 +429,7 @@ export async function createPlatformContext(data: {
             clientId: null, // Platform context
             allowedOrigins: data.allowedOrigins || null,
             allowedDomains: null,
-            grants: data.grants,
+            grants: data.grants, // Now uses entityTypeId
             enabled: true,
         });
 
