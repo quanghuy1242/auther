@@ -26,7 +26,7 @@ export function SubjectBadge({ subject, onRemove, disabled }: SubjectBadgeProps)
                     onClick={onRemove}
                     className="ml-1 text-gray-500 hover:text-red-400"
                 >
-                    <Icon name="close" className="text-[10px] font-bold" />
+                    <Icon name="close" size="xs" className="pt-2" />
                 </button>
             )}
         </Badge>

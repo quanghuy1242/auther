@@ -5,7 +5,7 @@ import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { oauthApplication, oauthAccessToken } from "@/db/schema";
 import { eq, desc, count } from "drizzle-orm";
-import { requireAuth } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { parseRedirectUrls, findInvalidUrl } from "@/lib/client-utils";
@@ -50,7 +50,7 @@ export type UpdateClientState = {
  */
 export const getClientById = cache(async (clientId: string): Promise<ClientDetail | null> => {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     return await unstable_cache(
       async () => {
@@ -153,7 +153,7 @@ export async function updateClient(
   formData: FormData
 ): Promise<UpdateClientState> {
   try {
-    await requireAuth();
+    await guards.clients.update();
 
     const rawData = {
       name: formData.get("name"),
@@ -306,7 +306,7 @@ export async function updateClient(
  */
 export async function rotateClientSecret(clientId: string): Promise<{ success: boolean; secret?: string; error?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.update();
 
     // Check if client exists and has a secret
     const [client] = await db
@@ -360,7 +360,7 @@ export async function rotateClientSecret(clientId: string): Promise<{ success: b
  */
 export async function toggleClientStatus(clientId: string, disabled: boolean): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.update();
 
     await db
       .update(oauthApplication)
@@ -390,7 +390,7 @@ export async function toggleClientStatus(clientId: string, disabled: boolean): P
  */
 export async function deleteClient(clientId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.delete();
 
     // Revoke all tokens first to ensure referential integrity if cascading isn't set up or to be safe
     await db

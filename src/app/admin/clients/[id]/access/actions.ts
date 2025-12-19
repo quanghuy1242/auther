@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { headers } from "next/headers";
-import { requireAuth } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
+import { getSession } from "@/lib/session";
 import { db } from "@/lib/db";
 import { user } from "@/db/auth-schema";
 import { userGroup } from "@/db/app-schema";
@@ -36,7 +37,7 @@ export async function updateClientAccessPolicy(
   data: z.infer<typeof updateClientPolicySchema>
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const validated = updateClientPolicySchema.parse(data);
 
@@ -90,7 +91,7 @@ export async function updateClientAccessPolicy(
  */
 export async function getClientMetadata(clientId: string) {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const metadata = await oauthClientMetadataRepository.findByClientId(clientId);
 
@@ -141,7 +142,7 @@ export async function checkResourceDependencies(
   defaultPermissionConflicts: string[];
 }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
     const _headers = await headers();
 
     // Get client metadata to check default permissions
@@ -248,7 +249,7 @@ export async function checkResourceDependencies(
  */
 export async function getClientApiKeys(clientId: string) {
   try {
-    await requireAuth();
+    await guards.clients.view();
     const _headers = await headers();
 
     // Check access C1/C2 (must be admin/owner to view keys?)
@@ -334,7 +335,9 @@ export async function createClientApiKey(
   data: z.infer<typeof createApiKeySchema>
 ): Promise<ApiKeyResult> {
   try {
-    const session = await requireAuth();
+    await guards.clients.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
     const validated = createApiKeySchema.parse(data);
 
     // 1. Verify caller is admin/owner (C2)
@@ -419,7 +422,7 @@ export async function createClientApiKey(
  */
 export async function revokeClientApiKey(keyId: string): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // 1. Revoke in Better Auth (sets status to disabled/revoked?)
     // Better Auth's revokeApiKey usually deletes or disables.
@@ -467,7 +470,7 @@ export async function createUserGroup(
   data: z.infer<typeof createGroupSchema>
 ): Promise<AssignUserResult & { groupId?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const validated = createGroupSchema.parse(data);
 
@@ -503,7 +506,7 @@ export async function addUserToGroup(
   groupId: string
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // Check if user is already in group
     const groups = await userGroupRepository.getUserGroups(userId);
@@ -534,7 +537,7 @@ export async function removeUserFromGroup(
   groupId: string
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     await userGroupRepository.removeMember(groupId, userId);
 
@@ -553,7 +556,7 @@ export async function removeUserFromGroup(
  */
 export async function getAllGroups() {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const groups = await userGroupRepository.findAll();
 
@@ -580,7 +583,7 @@ export async function getAllGroups() {
  */
 export async function getUserGroups(userId: string) {
   try {
-    await requireAuth();
+    await guards.clients.view();
     return await userGroupRepository.getUserGroups(userId);
   } catch (error) {
     console.error("getUserGroups error:", error);
@@ -617,7 +620,7 @@ interface PlatformAccessEntry {
  */
 export async function getPlatformAccessList(clientId: string): Promise<PlatformAccessEntry[]> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const tuples = await tupleRepository.findByEntity("oauth_client", clientId);
     const validTuples = tuples.filter((t) =>
@@ -678,7 +681,9 @@ export async function getCurrentUserAccessLevel(
   canManageAccess: boolean;  // C2: owner or admin
 }> {
   try {
-    const session = await requireAuth();
+    await guards.clients.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
     const userId = session.user.id;
 
     const { PermissionService } = await import("@/lib/auth/permission-service");
@@ -707,7 +712,7 @@ export async function grantPlatformAccess(
   relation: PlatformRelation
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // C2: Verify caller is admin/owner of this client
     const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
@@ -790,7 +795,7 @@ export async function revokePlatformAccess(
   cascade: boolean = false
 ): Promise<AssignUserResult & { scopedPermissionsRevoked?: number }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // Check for scoped permissions before revoking
     const scopedCount = await getScopedPermissionCount(clientId, subjectType, subjectId);
@@ -863,7 +868,7 @@ export async function getAuthorizationModels(
   clientId: string
 ): Promise<{ models: ClientAuthorizationModels; error?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const entityTypes = await authorizationModelRepository.findAllForClient(clientId);
 
@@ -913,7 +918,7 @@ export async function updateEntityTypeModel(
   permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>
 ): Promise<AssignUserResult & { warnings?: string[] }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // C1: Verify caller is admin/owner
     const { canEditModel } = await getCurrentUserAccessLevel(clientId);
@@ -1051,7 +1056,7 @@ export async function deleteEntityTypeModel(
   entityTypeName: string
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const result = await authorizationModelRepository.deleteEntityTypeForClient(
       clientId,
@@ -1084,7 +1089,7 @@ export async function renameEntityType(
   newName: string
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const oldFullType = `client_${clientId}:${oldName}`;
     const newFullType = `client_${clientId}:${newName}`;
@@ -1137,7 +1142,7 @@ export async function getAuthorizationModel(
   clientId: string
 ): Promise<{ model: AuthorizationModelDefinition | null; error?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
     const model = await authorizationModelRepository.findByClientId(clientId);
     return { model };
   } catch (error) {
@@ -1155,7 +1160,7 @@ export async function updateAuthorizationModel(
   definition: AuthorizationModelDefinition
 ): Promise<AssignUserResult & { warnings?: string[] }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
     const entityType = `client_${clientId}`;
     const validation = await authorizationModelRepository.preValidateUpdate(
       entityType,
@@ -1202,7 +1207,7 @@ interface ScopedPermissionEntry {
  */
 export async function getScopedPermissions(clientId: string): Promise<ScopedPermissionEntry[]> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // Use prefix match to find all entity types for this client (e.g., client_abc123:invoice, client_abc123:report)
     const scopedEntityTypePrefix = `client_${clientId}:`;
@@ -1311,7 +1316,7 @@ export async function grantScopedPermission(
   condition?: string // Optional Lua script for per-grant ABAC
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // C2: Verify caller is admin
     const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
@@ -1402,7 +1407,7 @@ export async function revokeScopedPermission(
   tupleId: string
 ): Promise<AssignUserResult> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     // Verify ownership of the tuple before revoking
     const tuple = await tupleRepository.findById(tupleId);
@@ -1481,7 +1486,7 @@ export async function getSubjectPermissions(
   subjectId: string
 ): Promise<Tuple[]> {
   try {
-    await requireAuth();
+    await guards.clients.view();
     return await tupleRepository.findBySubject(subjectType, subjectId);
   } catch (error) {
     console.error("getSubjectPermissions error:", error);
@@ -1503,7 +1508,7 @@ export async function checkRelationUsage(
   relation: string
 ): Promise<{ inUse: boolean; count: number }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const fullEntityType = `client_${clientId}:${entityTypeName}`;
     const count = await tupleRepository.countByRelation(fullEntityType, relation);
@@ -1525,7 +1530,7 @@ export async function checkApiKeyDependencies(
   relation: string
 ): Promise<{ hasApiKeyDependencies: boolean; apiKeyCount: number }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const scopedEntityType = `client_${clientId}`;
     const tuples = await tupleRepository.findByEntityType(scopedEntityType);
@@ -1557,7 +1562,7 @@ export async function checkScopedPermissionsForUser(
   subjectId: string
 ): Promise<{ count: number; permissions: Array<{ entityId: string; relation: string }> }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     const scopedEntityType = `client_${clientId}`;
     const tuples = await tupleRepository.findByEntityType(scopedEntityType);
@@ -1624,7 +1629,7 @@ export async function testPolicyScript(
   context: Record<string, unknown>
 ): Promise<{ result: boolean; executionTimeMs: number; error?: string }> {
   try {
-    await requireAuth();
+    await guards.clients.view();
 
     return await testLuaPolicy(script, context);
   } catch (error) {

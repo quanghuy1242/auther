@@ -10,6 +10,7 @@
 import type { BetterAuthOptions } from "better-auth";
 import { PipelineIntegrator } from "./integrator";
 import { emitWebhookEvent } from "../webhooks/delivery-service";
+import { applyRegistrationContextGrants } from "./registration-grants";
 
 // =============================================================================
 // DATABASE HOOKS (user.create, session.create, etc.)
@@ -42,6 +43,14 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
 
                 // AFTER: Async hook (runs AFTER user insert)
                 async after(user) {
+                    // Apply registration context grants if applicable
+                    // The context slug is passed via user metadata during sign-up
+                    try {
+                        await applyRegistrationContextGrants(user.id, user.email);
+                    } catch (err) {
+                        console.error("Failed to apply registration context grants:", err);
+                    }
+
                     // Fire-and-forget pipeline with user metadata for tracing
                     afterSignupPipeline({
                         user: {

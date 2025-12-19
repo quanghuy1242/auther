@@ -78,7 +78,7 @@ const BreadcrumbSeparator = ({
   <li
     role="presentation"
     aria-hidden="true"
-    className={cn("[&>svg]:size-3.5", className)}
+    className={cn("inline-flex items-center [&>svg]:size-3.5", className)}
     {...props}
   >
     {children ?? <Icon name="chevron_right" size="sm" className="text-gray-500" />}

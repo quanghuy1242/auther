@@ -51,7 +51,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
   // Prepare default values from webhook data - memoized to prevent infinite loops
   const defaultValues = useMemo(() => ({
     displayName: webhook.displayName || "",
-    url: webhook.url,
+    url: webhook.url || "", // Convert null to empty string for form
     isActive: webhook.isActive,
     eventTypes: webhook.subscriptions.map((sub) => sub.eventType),
     retryPolicy: webhook.retryPolicy as "none" | "standard" | "aggressive",
@@ -143,10 +143,10 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
 
                 {/* Form Actions */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between pt-6 mt-6 border-t border-gray-700">
-                  <Button 
-                    type="button" 
-                    variant="danger" 
-                    size="sm" 
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
                     onClick={() => setShowDeleteModal(true)}
                   >
                     Delete Webhook
@@ -263,11 +263,11 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     <div className="max-w-6xl mx-auto px-4 sm:px-6">
       <PageHeading
         title={webhook.displayName || "Edit Webhook"}
-        description={webhook.url}
+        description={webhook.url || "No URL configured yet"}
       />
 
       <Tabs tabs={tabs} defaultIndex={0} />
-      
+
       {/* Delete Confirmation Modal */}
       <Modal
         isOpen={showDeleteModal}

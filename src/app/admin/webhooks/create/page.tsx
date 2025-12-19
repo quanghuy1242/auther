@@ -23,7 +23,7 @@ export default function CreateWebhookPage() {
   const defaultValues = {
     displayName: "",
     url: "",
-    isActive: true,
+    isActive: false, // Disabled by default since URL may not be set initially
     eventTypes: [] as string[],
     retryPolicy: "standard" as const,
     deliveryFormat: "json" as const,

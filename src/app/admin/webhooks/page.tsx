@@ -4,6 +4,7 @@ import { Button } from "@/components/ui";
 import Link from "next/link";
 import { WebhooksClient } from "./webhooks-client";
 import { getWebhooks, getDeliveryStats } from "./actions";
+import { guards } from "@/lib/auth/platform-guard";
 
 export const metadata: Metadata = {
   title: "Webhooks",
@@ -20,6 +21,9 @@ interface PageProps {
 }
 
 export default async function WebhooksPage({ searchParams }: PageProps) {
+  // Require webhooks:view permission
+  await guards.webhooks.view();
+
   const params = await searchParams;
   const page = parseInt(params.page || "1", 10);
   const pageSize = 10;
@@ -49,7 +53,7 @@ export default async function WebhooksPage({ searchParams }: PageProps) {
   };
 
   return (
-    <PageContainer maxWidth="7xl">
+    <PageContainer>
       <PageHeading
         title="Webhooks"
         description="Manage webhook endpoints and monitor delivery performance"

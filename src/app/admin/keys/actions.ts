@@ -3,7 +3,7 @@
 import { rotateJwksIfNeeded } from "@/lib/jwks-rotation";
 import { jwksRepository } from "@/lib/repositories";
 import type { JwksKeyWithStatus } from "@/lib/repositories";
-import { requireAdmin } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
 
 // Re-export type
 export type { JwksKeyWithStatus as JwksKey };
@@ -21,7 +21,7 @@ export interface RotationResult {
  */
 export async function getJwksKeys(): Promise<JwksKeyWithStatus[]> {
   try {
-    await requireAdmin();
+    await guards.keys.view();
     return await jwksRepository.findAllWithStatus();
   } catch (error) {
     console.error("Failed to fetch JWKS keys:", error);
@@ -34,7 +34,7 @@ export async function getJwksKeys(): Promise<JwksKeyWithStatus[]> {
  */
 export async function rotateKeys(): Promise<RotationResult> {
   try {
-    await requireAdmin();
+    await guards.keys.rotate();
     const result = await rotateJwksIfNeeded();
 
     return {

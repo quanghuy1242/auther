@@ -126,12 +126,12 @@ export function PermissionTagInput({
                   onClick={() => handleRemove(value)}
                   disabled={disabled}
                   className={cn(
-                    "flex h-4 w-4 items-center justify-center rounded-full bg-slate-600 text-slate-300 hover:bg-slate-500 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400",
+                    "flex h-5 w-5 items-center justify-center rounded-full bg-slate-600 text-slate-300 hover:bg-slate-500 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   title="Remove permission"
                 >
-                  <Icon name="close" className="text-[10px] font-bold" />
+                  <Icon name="close" size="xs" className="scale-80 pt-1" />
                 </button>
               </Badge>
             )

@@ -3,6 +3,7 @@ import * as React from "react";
 import { PageHeading, PageContainer } from "@/components/layout";
 import { getSessions } from "../actions";
 import { SessionsClient } from "./sessions-client";
+import { guards } from "@/lib/auth/platform-guard";
 
 export const metadata: Metadata = {
   title: "Sessions",
@@ -16,6 +17,9 @@ export default async function SessionsPage({
 }: {
   searchParams: Promise<{ page?: string; search?: string; activeOnly?: string }>;
 }) {
+  // Require sessions:viewAll permission
+  await guards.sessions.viewAll();
+
   const params = await searchParams;
   const page = Number(params.page) || 1;
   const search = params.search || "";

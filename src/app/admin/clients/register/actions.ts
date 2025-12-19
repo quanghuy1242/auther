@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
+import { getSession } from "@/lib/session";
 import { db } from "@/lib/db";
 import { oauthApplication } from "@/db/schema";
 import { randomBytes } from "crypto";
@@ -31,7 +32,9 @@ export async function registerClient(
   formData: FormData
 ): Promise<{ success: boolean; errors?: Record<string, string>; data?: unknown; error?: string }> {
   try {
-    const session = await requireAuth();
+    await guards.clients.create();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     const rawData = {
       name: formData.get("name"),

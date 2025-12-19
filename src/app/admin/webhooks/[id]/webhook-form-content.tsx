@@ -10,10 +10,10 @@ import {
   EventSelector,
 } from "@/components/forms";
 import { WEBHOOK_EVENT_TYPES } from "@/lib/constants";
-import { 
-  RETRY_POLICY_OPTIONS, 
-  DELIVERY_FORMAT_OPTIONS, 
-  REQUEST_METHOD_OPTIONS 
+import {
+  RETRY_POLICY_OPTIONS,
+  DELIVERY_FORMAT_OPTIONS,
+  REQUEST_METHOD_OPTIONS
 } from "@/schemas/webhooks";
 
 export function WebhookFormContent() {
@@ -35,22 +35,32 @@ export function WebhookFormContent() {
           name="url"
           label="Webhook URL"
           placeholder="https://api.example.com/webhook-receiver"
-          required
-          helperText="The endpoint that will receive webhook events"
+          helperText="Optional - can be configured later. Webhook stays disabled until URL is set."
         />
       </div>
 
       {/* Status Toggle */}
-      <div 
-        className="flex items-start gap-3 p-4 rounded-lg border border-white/10"
-        style={{ backgroundColor: '#1a2632' }}
-      >
-        <ControlledCheckbox
-          name="isActive"
-          label="Enable webhook"
-          description="Toggle to activate or deactivate this webhook endpoint"
-        />
-      </div>
+      {(() => {
+        const urlValue = form.watch("url");
+        const hasUrl = urlValue && urlValue.trim() !== "";
+        return (
+          <div
+            className="flex items-start gap-3 p-4 rounded-lg border border-white/10"
+            style={{ backgroundColor: '#1a2632' }}
+          >
+            <ControlledCheckbox
+              name="isActive"
+              label="Enable webhook"
+              description={
+                hasUrl
+                  ? "Toggle to activate or deactivate this webhook endpoint"
+                  : "Add a URL to enable this webhook"
+              }
+              disabled={!hasUrl}
+            />
+          </div>
+        );
+      })()}
 
       {/* Event Subscriptions */}
       <EventSelector

@@ -7,29 +7,29 @@
 // Component Variants
 // ============================================================================
 
-export type ButtonVariant = 
-  | "primary" 
-  | "secondary" 
-  | "ghost" 
-  | "danger" 
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "danger"
   | "success";
 
-export type BadgeVariant = 
-  | "default" 
-  | "success" 
-  | "warning" 
-  | "danger" 
+export type BadgeVariant =
+  | "default"
+  | "success"
+  | "warning"
+  | "danger"
   | "info";
 
-export type InputVariant = 
-  | "default" 
-  | "error" 
+export type InputVariant =
+  | "default"
+  | "error"
   | "success";
 
-export type AlertVariant = 
-  | "info" 
-  | "warning" 
-  | "error" 
+export type AlertVariant =
+  | "info"
+  | "warning"
+  | "error"
   | "success";
 
 // ============================================================================
@@ -37,7 +37,7 @@ export type AlertVariant =
 // ============================================================================
 
 export type Size = "xs" | "sm" | "md" | "lg" | "xl";
-export type IconSize = "sm" | "md" | "lg" | "xl";
+export type IconSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 // ============================================================================
 // Design System Colors
@@ -46,28 +46,28 @@ export type IconSize = "sm" | "md" | "lg" | "xl";
 export const colors = {
   primary: "#1773cf",
   primaryHover: "#145ba8",
-  
+
   background: {
     light: "#f6f7f8",
     dark: "#111921",
   },
-  
+
   content: {
     light: "#ffffff",
     dark: "#18232f",
   },
-  
+
   card: {
     light: "#ffffff",
     dark: "#1a2632",
   },
-  
+
   border: {
     light: "#e5e7eb",
     dark: "#243647",
     darker: "#344d65",
   },
-  
+
   text: {
     light: {
       primary: "#111827",
@@ -78,14 +78,14 @@ export const colors = {
       secondary: "#93adc8",
     },
   },
-  
+
   hover: {
     light: "#f3f4f6",
     dark: "#243647",
   },
-  
+
   sidebar: "#1a2632",
-  
+
   status: {
     success: "#28a745",
     warning: "#FFC107",
@@ -111,7 +111,7 @@ export type PolymorphicComponentProps<
   E extends React.ElementType,
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   P = {}
-> = P & 
+> = P &
   Omit<React.ComponentPropsWithoutRef<E>, keyof P> & {
     as?: E;
   };
@@ -259,7 +259,7 @@ export interface WebhookEndpointEntity {
   id: string;
   userId: string;
   displayName: string;
-  url: string;
+  url: string | null; // Nullable - webhooks can be created without URL (pending setup)
   encryptedSecret: string;
   isActive: boolean;
   retryPolicy: WebhookRetryPolicy;

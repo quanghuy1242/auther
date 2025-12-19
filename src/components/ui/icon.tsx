@@ -9,10 +9,11 @@ export interface IconProps {
 }
 
 const sizeMap: Record<IconSize, string> = {
-  sm: "text-[18px]",
-  md: "text-[24px]",
-  lg: "text-[32px]",
-  xl: "text-[40px]",
+  xs: "!text-[20px]",
+  sm: "!text-[24px]",
+  md: "!text-[32px]",
+  lg: "!text-[40px]",
+  xl: "!text-[48px]",
 };
 
 /**
@@ -23,16 +24,16 @@ const sizeMap: Record<IconSize, string> = {
  * <Icon name="person" size="md" />
  * <Icon name="check_circle" filled className="text-green-500" />
  */
-export function Icon({ 
-  name, 
-  size = "md", 
-  filled = false, 
-  className 
+export function Icon({
+  name,
+  size = "xs",
+  filled = false,
+  className
 }: IconProps) {
   return (
     <span
       className={cn(
-        "material-symbols-outlined scale-85",
+        "material-symbols-outlined inline-flex items-center justify-center -translate-y-[2px]",
         sizeMap[size],
         filled && "fill",
         className

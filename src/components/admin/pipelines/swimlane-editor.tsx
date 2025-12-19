@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui";
 import { toast } from "sonner";
 import { Swimlane, SWIMLANE_DEFINITIONS } from "./swimlanes";
-import { ScriptEditorModal } from "./editor-modal";
+import { ScriptEditorModal } from "./script-editor-modal";
 import { ScriptPickerModal } from "./script-picker-modal";
 import type { HookName } from "@/lib/pipelines/definitions";
 import { HOOK_REGISTRY as hookRegistry } from "@/lib/pipelines/definitions";
@@ -19,6 +19,7 @@ import {
 } from "@/app/admin/pipelines/actions";
 
 import { PipelineGuideModal } from "./pipeline-guide-modal";
+import type { DagContext, ScriptMetadata } from "@/components/ui/code-editor/extensions/lua/analysis/dag-context";
 
 interface SwimlaneEditorProps {
     initialScripts: Script[];
@@ -42,6 +43,7 @@ export function SwimlaneEditor({
     const [targetHook, setTargetHook] = useState<HookName | null>(null);
     const [targetExecutionMode, setTargetExecutionMode] = useState<"blocking" | "async" | "enrichment" | undefined>(undefined);
     const [previousScriptCode, setPreviousScriptCode] = useState<string | undefined>(undefined);
+    const [dagContext, setDagContext] = useState<DagContext | undefined>(undefined);
 
     // Script picker modal state
     const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -62,6 +64,35 @@ export function SwimlaneEditor({
         return map;
     }, [pipelineConfig, scripts]);
 
+    // Helper: Compute previousScriptCode from a layer index
+    const computePreviousScriptCode = useCallback((hookName: HookName, layerIndex: number): string | undefined => {
+        const layers = pipelineConfig[hookName] || [];
+        if (layerIndex <= 0 || !layers[layerIndex - 1]?.length) return undefined;
+
+        const prevScriptCodes = layers[layerIndex - 1]
+            .map(id => scripts.find(s => s.id === id)?.code)
+            .filter((code): code is string => !!code);
+
+        if (prevScriptCodes.length === 0) return undefined;
+        return prevScriptCodes.join("\n\n-- parallel script --\n\n");
+    }, [pipelineConfig, scripts]);
+
+    // Helper: Build DagContext for a hook
+    const buildDagContext = useCallback((hookName: HookName, currentLayerIdx: number, currentScriptId: string | null): DagContext => {
+        const layers = pipelineConfig[hookName] || [];
+        const dagLayers: ScriptMetadata[][] = layers.map((layer, layerIdx) =>
+            layer.map(id => {
+                const s = scripts.find(sc => sc.id === id);
+                return s ? { id: s.id, name: s.name, code: s.code, layerIndex: layerIdx } : null;
+            }).filter((s): s is ScriptMetadata => s !== null)
+        );
+        return {
+            layers: dagLayers,
+            currentLayer: currentLayerIdx,
+            currentScriptId,
+        };
+    }, [pipelineConfig, scripts]);
+
     // When clicking on "Add Parallel" or "Add New Layer"
     const handleAddScript = useCallback((hookName: HookName, layerIndex?: number) => {
         const hookDef = hookRegistry[hookName];
@@ -73,9 +104,26 @@ export function SwimlaneEditor({
 
     // When creating new from picker
     const handleCreateNewScript = useCallback(() => {
+        if (!targetHook) {
+            setPreviousScriptCode(undefined);
+            setEditingScript(null);
+            setIsEditorOpen(true);
+            return;
+        }
+
+        const layers = pipelineConfig[targetHook] || [];
+        // Determine the layer index for the new script
+        const newLayerIdx = targetLayerIndex ?? layers.length;
+
+        // Compute previous script's code using helper
+        setPreviousScriptCode(computePreviousScriptCode(targetHook, newLayerIdx));
+
+        // Build DAG context using helper
+        setDagContext(buildDagContext(targetHook, newLayerIdx, null));
+
         setEditingScript(null);
         setIsEditorOpen(true);
-    }, []);
+    }, [targetHook, targetLayerIndex, pipelineConfig, computePreviousScriptCode, buildDagContext]);
 
     // When selecting existing script from picker
     const handleSelectExistingScript = useCallback((script: Script) => {
@@ -113,28 +161,24 @@ export function SwimlaneEditor({
         setTargetExecutionMode(hookDef?.type);
         setEditingScript(script);
 
-        // Compute previous script's code for context.prev completions
-        // Find which layer this script is in and get the first script from the previous layer
+        // Find which layer this script is in
         const layers = pipelineConfig[hookName] || [];
-        let prevCode: string | undefined;
+        let currentLayerIndex = -1;
         for (let i = 0; i < layers.length; i++) {
             if (layers[i].includes(script.id)) {
-                // Found the layer, get ALL scripts from previous layer for merged context.prev
-                if (i > 0 && layers[i - 1].length > 0) {
-                    // Collect code from all parallel scripts in previous layer
-                    const prevScriptCodes = layers[i - 1]
-                        .map(id => scripts.find(s => s.id === id)?.code)
-                        .filter((code): code is string => !!code);
-                    // Concatenate so extractReturnSchema picks up all return fields
-                    prevCode = prevScriptCodes.join("\n\n-- parallel script --\n\n");
-                }
+                currentLayerIndex = i;
                 break;
             }
         }
-        setPreviousScriptCode(prevCode);
+
+        // Compute previous script's code using helper
+        setPreviousScriptCode(computePreviousScriptCode(hookName, currentLayerIndex));
+
+        // Build DAG context using helper
+        setDagContext(buildDagContext(hookName, currentLayerIndex, script.id));
 
         setIsEditorOpen(true);
-    }, [pipelineConfig, scripts]);
+    }, [pipelineConfig, computePreviousScriptCode, buildDagContext]);
 
     // Handle script drop (drag & drop)
     const handleDropScript = useCallback((scriptId: string, hookName: HookName, layerIndex?: number) => {
@@ -344,6 +388,7 @@ export function SwimlaneEditor({
                 executionMode={targetExecutionMode}
                 hookName={targetHook || undefined}
                 previousScriptCode={previousScriptCode}
+                dagContext={dagContext}
                 onSave={handleScriptSave}
                 onDelete={handleScriptDelete}
             />

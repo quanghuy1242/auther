@@ -42,18 +42,21 @@ export function Select({
   name,
   triggerClassName,
 }: SelectProps & { triggerClassName?: string }) {
+  const EMPTY_VALUE_SENTINEL = "__EMPTY__"
+  const internalValue = value === "" ? EMPTY_VALUE_SENTINEL : value
+
   return (
-    <div className={cn("space-y-1 rounded-md", className)}>
+    <div className={cn("rounded-md", label && "space-y-1", className)}>
       {label && <Label required={required}>{label}</Label>}
       <SelectPrimitive.Root
-        value={value}
-        onValueChange={onChange}
+        value={internalValue}
+        onValueChange={(val) => onChange(val === EMPTY_VALUE_SENTINEL ? "" : val)}
         disabled={disabled}
         name={name}
       >
         <SelectPrimitive.Trigger
           className={cn(
-            "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm placeholder:text-gray-500",
+            "flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-sm placeholder:text-gray-500",
             "bg-input text-white",
             "focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white",
             "disabled:cursor-not-allowed disabled:opacity-50",
@@ -81,7 +84,7 @@ export function Select({
               {options.map((option) => (
                 <SelectPrimitive.Item
                   key={option.value}
-                  value={option.value}
+                  value={option.value === "" ? EMPTY_VALUE_SENTINEL : option.value}
                   disabled={option.disabled}
                   className={cn(
                     "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-primary focus:text-white data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"

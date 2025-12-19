@@ -20,6 +20,8 @@ const mainNavItems: NavItem[] = [
 ];
 
 const settingsNavItems: NavItem[] = [
+  { label: "Access", href: "/admin/access", icon: "shield" },
+  { label: "Requests", href: "/admin/requests", icon: "approval" },
   { label: "Configuration", href: "/admin/settings", icon: "settings" },
 ];
 

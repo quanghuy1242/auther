@@ -40,26 +40,30 @@ export function generateBreadcrumbs(pathname: string, dynamicLabels?: Record<str
         const relativePath = fullPath.replace(/^\/admin/, "") || fullPath;
         const isLast = i === segments.length - 1;
 
-        // Check if this is a dynamic segment (UUID pattern or "edit")
+        // Check for specific dynamic overrides first
+        const dynamicLabel =
+          dynamicLabels?.[fullPath] ??
+          dynamicLabels?.[relativePath] ??
+          (relativePath.startsWith("/") ? dynamicLabels?.[relativePath.slice(1)] : undefined);
+
+        if (dynamicLabel) {
+          items.push({
+            label: dynamicLabel,
+            href: isLast ? undefined : fullPath,
+          });
+          continue;
+        }
+
+        // Check if this is a dynamic segment (UUID pattern)
         const isDynamic = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segments[i]);
 
         if (isDynamic) {
-          const relativeKey = relativePath.startsWith("/")
-            ? relativePath
-            : `/${relativePath}`;
-          const dynamicLabel =
-            dynamicLabels?.[fullPath] ??
-            dynamicLabels?.[relativeKey] ??
-            dynamicLabels?.[relativeKey.slice(1)];
-
-          if (dynamicLabel) {
-            // Use provided dynamic label (e.g., client name, user email)
-            items.push({
-              label: dynamicLabel,
-              href: isLast ? undefined : fullPath,
-            });
-          }
-
+          // If it's a UUID but has no label, prefer showing nothing or a short ID?
+          // Existing behavior: if isDynamic and NO label, it skips pushing?
+          // Looking at original code:
+          // if (isDynamic) { ... if (dynamicLabel) { push } continue }
+          // So if isDynamic is true and no label is found, it SKIPS the item entirely (e.g. renders nothing for that segment).
+          // That seems intentional for UUIDs.
           continue;
         }
 

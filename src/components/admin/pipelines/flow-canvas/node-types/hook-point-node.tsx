@@ -8,7 +8,6 @@ import type { HookName } from "@/lib/pipelines/definitions";
 
 // Pipeline engine limits (keep in sync with pipeline-engine.ts)
 const MAX_CHAIN_DEPTH = 10; // Max layers in DAG
-const MAX_PARALLEL_NODES = 5; // Max scripts per layer
 
 // Simple inner node types for the subflow
 const InnerForkNode = memo(({ data }: { data: { label: string; color: string } }) => (

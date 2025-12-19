@@ -1,6 +1,7 @@
 "use server";
 
-import { requireAdmin } from "@/lib/session";
+import { getSession } from "@/lib/session";
+import { guards } from "@/lib/auth/platform-guard";
 import { webhookRepository, userRepository } from "@/lib/repositories";
 import {
   encryptSecret,
@@ -72,7 +73,9 @@ export async function getWebhooks(params: {
   eventType?: string;
 }): Promise<GetWebhooksResult> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     const page = Math.max(1, params.page || 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize || 10));
@@ -120,7 +123,9 @@ export async function getWebhookById(
   id: string
 ): Promise<WebhookEndpointWithSubscriptions | null> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     const webhook = await webhookRepository.findByIdWithSubscriptions(id);
 
@@ -148,7 +153,9 @@ export async function getDeliveryHistory(
   }
 ): Promise<GetDeliveryHistoryResult> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Verify ownership
     const webhook = await webhookRepository.findById(webhookId);
@@ -189,7 +196,9 @@ export async function getDeliveryHistory(
  */
 export async function getDeliveryStats(): Promise<WebhookDeliveryStats> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
     return await webhookRepository.getDeliveryStats(session.user.id);
   } catch (error) {
     console.error("Failed to fetch delivery stats:", error);
@@ -216,7 +225,9 @@ export async function createWebhook(
   formData: FormData
 ): Promise<WebhookFormState> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.create();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Parse and validate form data
     const eventTypesRaw = formData.get("eventTypes");
@@ -246,14 +257,18 @@ export async function createWebhook(
     const plainSecret = generateWebhookSecret();
     const encryptedSecret = encryptSecret(plainSecret);
 
+    // Force isActive to false if no URL is provided
+    const hasUrl = data.url && data.url.trim() !== "";
+    const effectiveIsActive = hasUrl ? data.isActive : false;
+
     // Create endpoint
     const endpoint = await webhookRepository.create({
       id,
       userId: session.user.id,
       displayName: data.displayName,
-      url: data.url,
+      url: data.url || null,
       encryptedSecret,
-      isActive: data.isActive,
+      isActive: effectiveIsActive,
       retryPolicy: data.retryPolicy as WebhookRetryPolicy,
       deliveryFormat: data.deliveryFormat as WebhookDeliveryFormat,
       requestMethod: data.requestMethod as WebhookRequestMethod,
@@ -308,7 +323,9 @@ export async function updateWebhook(
   formData: FormData
 ): Promise<WebhookFormState> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.update();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -342,11 +359,15 @@ export async function updateWebhook(
 
     const data = result.data;
 
+    // Force isActive to false if no URL is provided
+    const hasUrl = data.url && data.url.trim() !== "";
+    const effectiveIsActive = hasUrl ? data.isActive : false;
+
     // Update endpoint
     const updated = await webhookRepository.update(webhookId, {
       displayName: data.displayName,
-      url: data.url,
-      isActive: data.isActive,
+      url: data.url || null,
+      isActive: effectiveIsActive,
       retryPolicy: data.retryPolicy as WebhookRetryPolicy,
       deliveryFormat: data.deliveryFormat as WebhookDeliveryFormat,
       requestMethod: data.requestMethod as WebhookRequestMethod,
@@ -396,7 +417,9 @@ export async function deleteWebhook(webhookId: string): Promise<{
   error?: string;
 }> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.delete();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -437,7 +460,9 @@ export async function regenerateSecret(webhookId: string): Promise<{
   secret?: string;
 }> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.update();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -490,7 +515,9 @@ export async function toggleWebhookStatus(
   error?: string;
 }> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.update();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -535,7 +562,9 @@ export async function getDecryptedSecret(webhookId: string): Promise<{
   secret?: string;
 }> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.view();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     // Verify ownership
     const existing = await webhookRepository.findById(webhookId);
@@ -576,7 +605,9 @@ export async function testWebhook(
   webhookId: string
 ): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
-    const session = await requireAdmin();
+    await guards.webhooks.test();
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
 
     const webhook = await webhookRepository.findByIdWithSubscriptions(webhookId);
     if (!webhook || webhook.userId !== session.user.id) {

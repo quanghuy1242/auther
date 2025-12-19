@@ -3,6 +3,7 @@ import { authorizationModels } from "@/db/rebac-schema";
 import { eq } from "drizzle-orm";
 import { authorizationModelSchema, AuthorizationModelDefinition } from "@/schemas/rebac";
 import { TupleRepository } from "./tuple-repository";
+import { registrationContextRepo } from "./platform-access-repository";
 
 export interface AuthorizationModelEntity {
     id: string;
@@ -50,6 +51,32 @@ export class AuthorizationModelRepository {
             };
         } catch (error) {
             console.error("AuthorizationModelRepository.findByEntityType error:", error);
+            return null;
+        }
+    }
+
+    /**
+     * Find an authorization model by its ID (UUID)
+     * Used for stable lookups that survive entity type renames.
+     */
+    async findById(id: string): Promise<AuthorizationModelEntity | null> {
+        try {
+            const [record] = await db
+                .select()
+                .from(authorizationModels)
+                .where(eq(authorizationModels.id, id));
+
+            if (!record) return null;
+
+            return {
+                id: record.id,
+                entityType: record.entityType,
+                definition: record.definition as AuthorizationModelDefinition,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt,
+            };
+        } catch (error) {
+            console.error("AuthorizationModelRepository.findById error:", error);
             return null;
         }
     }
@@ -103,6 +130,40 @@ export class AuthorizationModelRepository {
         } catch (error) {
             console.error("AuthorizationModelRepository.findAllForClient error:", error);
             return {};
+        }
+    }
+
+    /**
+     * Get all authorization models for a client with their stable IDs.
+     * Used for grant references that survive entity type renames.
+     * Returns array of { id, name, relations }
+     */
+    async findAllForClientWithIds(clientId: string): Promise<Array<{
+        id: string;
+        name: string;
+        relations: string[];
+    }>> {
+        try {
+            const prefix = `client_${clientId}:`;
+            const records = await db.select().from(authorizationModels);
+
+            const result: Array<{ id: string; name: string; relations: string[] }> = [];
+            for (const record of records) {
+                if (record.entityType.startsWith(prefix)) {
+                    const name = record.entityType.slice(prefix.length);
+                    const definition = record.definition as AuthorizationModelDefinition;
+                    const relations = Object.keys(definition.relations || {}).sort();
+                    if (relations.length > 0) {
+                        result.push({ id: record.id, name, relations });
+                    }
+                }
+            }
+            // Sort by name for consistent UI display
+            result.sort((a, b) => a.name.localeCompare(b.name));
+            return result;
+        } catch (error) {
+            console.error("AuthorizationModelRepository.findAllForClientWithIds error:", error);
+            return [];
         }
     }
 
@@ -240,7 +301,7 @@ export class AuthorizationModelRepository {
 
     /**
      * Delete an authorization model by entity type
-     * Only succeeds if no tuples reference its relations
+     * Only succeeds if no tuples or registration context grants reference its relations
      */
     async delete(entityType: string): Promise<{ deleted: boolean; error?: string }> {
         try {
@@ -249,14 +310,24 @@ export class AuthorizationModelRepository {
                 return { deleted: false, error: "Model not found" };
             }
 
-            // Check if any tuples still reference this entity type
+            // Check if any tuples or grants still reference this entity type
             const relations = Object.keys(existing.definition.relations);
             for (const relation of relations) {
-                const count = await this.tupleRepo.countByRelation(entityType, relation);
-                if (count > 0) {
+                // Check tuples
+                const tupleCount = await this.tupleRepo.countByRelation(entityType, relation);
+                if (tupleCount > 0) {
                     return {
                         deleted: false,
-                        error: `Cannot delete model: ${count} tuples still use relation '${relation}'`,
+                        error: `Cannot delete model: ${tupleCount} tuples still use relation '${relation}'`,
+                    };
+                }
+
+                // Check registration context grants
+                const grantCount = await registrationContextRepo.countGrantsByEntityTypeIdAndRelation(existing.id, relation);
+                if (grantCount > 0) {
+                    return {
+                        deleted: false,
+                        error: `Cannot delete model: ${grantCount} registration context grants still use relation '${relation}'`,
                     };
                 }
             }

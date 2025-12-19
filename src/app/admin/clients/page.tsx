@@ -5,6 +5,7 @@ import { PageHeading, PageContainer } from "@/components/layout";
 import { Button } from "@/components/ui";
 import { getOAuthClients } from "./actions";
 import { ClientsClient } from "./clients-client";
+import { guards } from "@/lib/auth/platform-guard";
 
 export const metadata: Metadata = {
   title: "OAuth Client Management",
@@ -20,6 +21,9 @@ interface ClientsPageProps {
 }
 
 export default async function ClientsPage({ searchParams }: ClientsPageProps) {
+  // Require clients:view permission
+  await guards.clients.view();
+
   const params = await searchParams;
   const page = parseInt(params.page || "1", 10);
   const search = params.search || "";

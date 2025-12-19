@@ -108,6 +108,12 @@ export const oauthClientMetadata = sqliteTable(
     allowsApiKeys: integer("allows_api_keys", { mode: "boolean" }).notNull().default(false),
     defaultApiKeyPermissions: text("default_api_key_permissions"), // JSON: { "projects": ["read"] }
     accessPolicy: text("access_policy").notNull().default("all_users"), // 'all_users' | 'restricted'
+    // Whether this client can create registration contexts
+    // Must be enabled by platform admin before client can create sign-up flows
+    allowsRegistrationContexts: integer("allows_registration_contexts", {
+      mode: "boolean",
+    })
+      .default(false),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -133,7 +139,7 @@ export const webhookEndpoint = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
-    url: text("url").notNull(),
+    url: text("url"), // Nullable - webhooks can be created without URL (pending setup)
     encryptedSecret: text("encrypted_secret").notNull(), // Store encrypted webhook signing secret
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     retryPolicy: text("retry_policy").notNull().default("standard"), // e.g., "none", "standard", "aggressive"

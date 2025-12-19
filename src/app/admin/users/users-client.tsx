@@ -18,13 +18,13 @@ export function UsersClient({ initialData }: UsersClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = React.useTransition();
-  
+
   const filterStatus = (searchParams.get("verified") === "true" ? "verified" : searchParams.get("verified") === "false" ? "unverified" : "all") as "all" | "verified" | "unverified";
 
   const handleSearch = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
     const currentSearch = params.get("search") || "";
-    
+
     // Avoid redundant navigation
     if (value === currentSearch) return;
 
@@ -110,7 +110,12 @@ export function UsersClient({ initialData }: UsersClientProps) {
               key: "email",
               header: "Email",
               render: (user) => (
-                <span className="text-sm font-medium text-white">{user.email}</span>
+                <Link
+                  href={`/admin/users/${user.id}`}
+                  className="font-medium text-blue-400 hover:underline"
+                >
+                  {user.email}
+                </Link>
               ),
             },
             {

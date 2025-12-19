@@ -13,6 +13,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { useBreadcrumbContext } from "@/components/layout/breadcrumb-context"
 
 export interface BreadcrumbsProps {
   items?: BreadcrumbItemType[]
@@ -25,14 +26,15 @@ export interface BreadcrumbsProps {
  */
 export function Breadcrumbs({ items: customItems }: BreadcrumbsProps) {
   const pathname = usePathname()
-  const items = customItems || generateBreadcrumbs(pathname)
-  
+  const { labels } = useBreadcrumbContext()
+  const items = customItems || generateBreadcrumbs(pathname, labels)
+
   return (
     <Breadcrumb>
       <BreadcrumbList>
         {items.map((item, index) => {
           const isLast = index === items.length - 1
-          
+
           return (
             <React.Fragment key={index}>
               <BreadcrumbItem>

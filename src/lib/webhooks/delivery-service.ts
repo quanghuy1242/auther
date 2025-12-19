@@ -188,6 +188,12 @@ export async function deliverWebhook(
       return { success: false, status: "failed" };
     }
 
+    // Guard: Skip delivery if endpoint has no URL configured
+    if (!endpoint.url || endpoint.url.trim() === "") {
+      console.error("Endpoint has no URL configured:", endpointId);
+      return { success: false, status: "failed" };
+    }
+
     // Decrypt secret
     const secret = decryptSecret(endpoint.encryptedSecret);
 

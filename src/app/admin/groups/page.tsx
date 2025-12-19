@@ -5,6 +5,7 @@ import { PageHeading, PageContainer } from "@/components/layout";
 import { Button } from "@/components/ui";
 import { getGroups } from "./actions";
 import { GroupsClient } from "./groups-client";
+import { guards } from "@/lib/auth/platform-guard";
 
 export const metadata: Metadata = {
     title: "Group Management",
@@ -19,6 +20,9 @@ interface GroupsPageProps {
 }
 
 export default async function GroupsPage({ searchParams }: GroupsPageProps) {
+    // Require groups:view permission
+    await guards.groups.view();
+
     const params = await searchParams;
     const page = parseInt(params.page || "1", 10);
     const search = params.search || "";
