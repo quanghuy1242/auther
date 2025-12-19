@@ -19,6 +19,7 @@ import {
     EmptyState,
 } from "@/components/ui";
 import { toast } from "sonner";
+import Link from "next/link";
 import type {
     InviteWithContext,
     RegistrationContext,
@@ -160,14 +161,15 @@ export function InvitesTab() {
                             title="No platform sign-up flows configured"
                             description="Create a platform registration context in Access Settings to enable invites"
                             action={
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    leftIcon="settings"
-                                    onClick={() => window.location.href = "/admin/access"}
-                                >
-                                    Go to Access Settings
-                                </Button>
+                                <Link href="/admin/access">
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        leftIcon="settings"
+                                    >
+                                        Go to Access Settings
+                                    </Button>
+                                </Link>
                             }
                         />
                     ) : invites.length > 0 ? (
