@@ -3,6 +3,7 @@
 import { pipelineRepository } from "@/lib/auth/pipeline-repository";
 import { HOOK_REGISTRY, type HookName } from "@/lib/pipelines/definitions";
 import { guards } from "@/lib/auth/platform-guard";
+import { metricsService } from "@/lib/services";
 
 // =============================================================================
 // TYPES
@@ -113,6 +114,9 @@ export async function saveGraph(
                 await pipelineRepository.updateExecutionPlan(triggerEvent, plan);
             }
         }
+
+        // Metric: pipeline graph saved
+        void metricsService.count("admin.pipeline.graph.save.count", 1);
 
         return { success: true };
     } catch (error) {
@@ -518,6 +522,12 @@ export async function updateSecret(
         if (!updated) {
             return { success: false, error: "Secret not found" };
         }
+
+        // Metric: secret rotated (if value changed)
+        if (data.value) {
+            void metricsService.count("admin.pipeline.secret.rotate.count", 1);
+        }
+
         return { success: true };
     } catch (error) {
         console.error("Failed to update secret:", error);

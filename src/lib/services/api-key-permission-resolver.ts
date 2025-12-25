@@ -1,6 +1,7 @@
 import { tupleRepository, authorizationModelRepository } from "@/lib/repositories";
 import { PermissionService } from "@/lib/auth/permission-service";
 import { type ABACContext } from "@/lib/auth/abac-context";
+import { metricsService } from "./metrics-service";
 
 /**
  * Resolved permission structure for JWT payload.
@@ -119,11 +120,12 @@ export class ApiKeyPermissionResolver {
     /**
      * Resolve all permissions for an API key.
      * Returns a map of entityId → granted permissions.
-     * 
+     *
      * NOTE: This returns potential permissions. If ABAC policies are defined,
      * they must be evaluated at access time using checkPermissionWithABAC().
      */
     async resolvePermissions(apiKeyId: string): Promise<ResolvedPermissions> {
+        const startTime = performance.now();
         const permissions: ResolvedPermissions = {};
 
         // Step 1: Find all groups this API key belongs to
@@ -135,16 +137,23 @@ export class ApiKeyPermissionResolver {
         ];
 
         // Add groups to subject list
+        let groupCount = 0;
         for (const t of groupTuples) {
             if (t.entityType === "group" && t.relation === "member") {
                 subjects.push({ type: "group", id: t.entityId });
+                groupCount++;
             }
         }
+
+        // Metric: groups count for this API key
+        await metricsService.histogram("apikey.groups.count", groupCount);
 
         // Step 2: Find all tuples for the API key AND its groups
         const tuples = await tupleRepository.findBySubjects(subjects);
 
         if (tuples.length === 0) {
+            const duration = performance.now() - startTime;
+            await metricsService.histogram("apikey.resolve.duration_ms", duration);
             return permissions;
         }
 
@@ -190,24 +199,29 @@ export class ApiKeyPermissionResolver {
             }
         }
 
+        // Metric: resolution duration
+        const duration = performance.now() - startTime;
+        await metricsService.histogram("apikey.resolve.duration_ms", duration);
+
         return permissions;
     }
 
     /**
      * Resolve all permissions for an API key with ABAC metadata.
      * Returns permissions AND which ones require ABAC evaluation at access time.
-     * 
+     *
      * USE THIS METHOD for JWT generation so consuming services know when
      * to call POST /api/auth/check-permission vs using JWT permissions directly.
-     * 
+     *
      * A permission requires ABAC evaluation if:
      * 1. The permission has a policy defined in the authorization model (permission-level ABAC)
      * 2. The tuple granting the permission has a condition attached (tuple-level ABAC)
-     * 
+     *
      * @param apiKeyId - The API key ID to resolve permissions for
      * @returns {permissions, abac_required} for JWT payload
      */
     async resolvePermissionsWithABACInfo(apiKeyId: string): Promise<ResolvedPermissionsWithABAC> {
+        const startTime = performance.now();
         const permissions: ResolvedPermissions = {};
         const abac_required: ResolvedPermissions = {};
 
@@ -225,6 +239,8 @@ export class ApiKeyPermissionResolver {
         const tuples = await tupleRepository.findBySubjects(subjects);
 
         if (tuples.length === 0) {
+            const duration = performance.now() - startTime;
+            await metricsService.histogram("apikey.resolve.duration_ms", duration);
             return { permissions, abac_required };
         }
 
@@ -236,6 +252,8 @@ export class ApiKeyPermissionResolver {
             existing.push(tuple);
             tuplesByEntityType.set(tuple.entityType, existing);
         }
+
+        let abacRequiredCount = 0;
 
         // Step 4: For each entity type, resolve permissions and check for ABAC
         for (const [entityType, entityTuples] of tuplesByEntityType) {
@@ -268,6 +286,7 @@ export class ApiKeyPermissionResolver {
                                 // Mark as ABAC required if either level has a policy
                                 if ((permissionHasPolicy || tupleHasCondition) && !abac_required[entityKey].includes(permName)) {
                                     abac_required[entityKey].push(permName);
+                                    abacRequiredCount++;
                                 }
                             }
                         }
@@ -280,6 +299,7 @@ export class ApiKeyPermissionResolver {
                     // If tuple has condition, the relation itself needs ABAC
                     if (tupleHasCondition && !abac_required[entityKey].includes(tuple.relation)) {
                         abac_required[entityKey].push(tuple.relation);
+                        abacRequiredCount++;
                     }
                 }
             }
@@ -290,6 +310,15 @@ export class ApiKeyPermissionResolver {
             if (abac_required[key].length === 0) {
                 delete abac_required[key];
             }
+        }
+
+        // Metrics
+        const duration = performance.now() - startTime;
+        await metricsService.histogram("apikey.resolve.duration_ms", duration);
+
+        // Track how often ABAC is required
+        if (abacRequiredCount > 0) {
+            await metricsService.count("apikey.abac.required", abacRequiredCount);
         }
 
         return { permissions, abac_required };

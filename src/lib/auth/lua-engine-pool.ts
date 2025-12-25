@@ -1,5 +1,6 @@
 import { LuaFactory, LuaEngine } from "wasmoon";
 import { getWasmPath } from "../utils/wasm-path";
+import { metricsService } from "@/lib/services";
 
 export interface PooledEngine {
     engine: LuaEngine;
@@ -32,7 +33,15 @@ export class LuaEnginePool {
 
         // THROTTLE: Check if we're at max concurrent
         const activeCount = this.pool.filter(p => p.inUse).length + this.creatingCount;
+
+        // Metric: current active and waiting gauges
+        void metricsService.gauge("lua.pool.active", activeCount);
+        void metricsService.gauge("lua.pool.waiting", this.waitingQueue.length);
+
         if (activeCount >= this.maxConcurrent) {
+            // Metric: pool exhausted event
+            void metricsService.count("lua.pool.exhausted", 1);
+
             // Wait for a release signal
             await new Promise<void>(resolve => this.waitingQueue.push(resolve));
         }

@@ -11,6 +11,7 @@ import {
 } from "@/lib/repositories/platform-access-repository";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import { userRepository } from "@/lib/repositories";
+import { metricsService } from "@/lib/services";
 
 // Re-export types
 export type { PermissionRequest, PermissionRule };
@@ -123,6 +124,9 @@ export async function approveRequest(
         // Update request status
         await permissionRequestRepo.resolve(requestId, "approved", session.user.id);
 
+        // Metric: permission request approved
+        void metricsService.count("admin.permission_request.approve.count", 1);
+
         revalidatePath("/admin/requests");
         return { success: true };
     } catch (error) {
@@ -158,6 +162,9 @@ export async function rejectRequest(
 
         // Update request status
         await permissionRequestRepo.resolve(requestId, "rejected", session.user.id, reason);
+
+        // Metric: permission request rejected
+        void metricsService.count("admin.permission_request.reject.count", 1);
 
         revalidatePath("/admin/requests");
         return { success: true };

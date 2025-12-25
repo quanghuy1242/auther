@@ -2,6 +2,7 @@ import { luaEnginePool } from "./lua-engine-pool";
 import { pipelineRepository } from "./pipeline-repository";
 import { createHash } from "crypto";
 import { AsyncLocalStorage } from "async_hooks";
+import { metricsService } from "@/lib/services";
 
 // Storage for async context propagation of tracing parent/depth
 const spanContextStorage = new AsyncLocalStorage<{ spanId: string; depth: number }>();
@@ -80,6 +81,8 @@ export class PipelineEngine {
         context: Record<string, unknown>,
         metadata?: { userId?: string; requestIp?: string }
     ): Promise<PipelineResult> {
+        const executionStart = performance.now();
+
         // === TRACING: Start trace ===
         const traceId = crypto.randomUUID();
         const traceStartedAt = new Date();
@@ -89,6 +92,8 @@ export class PipelineEngine {
 
         // If no plan exists, we default to ALLOW (no trace needed)
         if (!plan || plan.length === 0) {
+            const duration = performance.now() - executionStart;
+            void metricsService.histogram("pipeline.execute.duration_ms", duration, { trigger: triggerEvent, result: "no_plan" });
             return { allowed: true };
         }
 
@@ -286,6 +291,11 @@ export class PipelineEngine {
                         resultData: undefined,
                         spans,
                     });
+
+                    // Metric: blocked execution
+                    const duration = performance.now() - executionStart;
+                    void metricsService.histogram("pipeline.execute.duration_ms", duration, { trigger: triggerEvent, result: "blocked" });
+
                     return {
                         allowed: false,
                         error: res.error || `Blocked by pipeline policy (Node: ${res.id})`,
@@ -327,6 +337,11 @@ export class PipelineEngine {
             resultData: this.truncateJson(accumulatedData, this.MAX_TRACE_CONTEXT_SIZE),
             spans,
         });
+
+        // Metric: successful execution
+        const duration = performance.now() - executionStart;
+        void metricsService.histogram("pipeline.execute.duration_ms", duration, { trigger: triggerEvent, result: "success" });
+        void metricsService.histogram("pipeline.execute.nodes.count", spans.length, { trigger: triggerEvent });
 
         return { allowed: true, data: accumulatedData };
     }
@@ -597,6 +612,15 @@ export class PipelineEngine {
                                 throw err;
                             }
                         });
+                    },
+                    // USER-DEFINED METRICS: helpers.metrics.count/gauge
+                    metrics: {
+                        count: (name: string, value = 1, tags?: Record<string, string>) => {
+                            void metricsService.recordUserMetric(name, value, "count", tags);
+                        },
+                        gauge: (name: string, value: number, tags?: Record<string, string>) => {
+                            void metricsService.recordUserMetric(name, value, "gauge", tags);
+                        },
                     },
                 };
 

@@ -9,6 +9,7 @@ import { getClientStats } from "@/app/admin/clients/actions";
 import { getJwksKeys } from "@/app/admin/keys/actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
 import { guards } from "@/lib/auth/platform-guard";
+import { metricsService } from "@/lib/services";
 
 /**
  * Sign out the current user
@@ -134,6 +135,11 @@ export async function revokeSession(sessionId: string) {
     await guards.sessions.revokeAll();
     const success = await sessionRepository.delete(sessionId);
 
+    if (success) {
+      // Metric: admin session revocation
+      await metricsService.count("admin.session.revoke", 1, { actor_type: "admin", reason: "manual" });
+    }
+
     return { success };
   } catch (error) {
     console.error("Failed to revoke session:", error);
@@ -152,6 +158,11 @@ export async function revokeExpiredSessions() {
   try {
     await guards.sessions.revokeAll();
     const count = await sessionRepository.deleteExpired();
+
+    if (count > 0) {
+      // Metric: bulk session revocation (expired cleanup)
+      await metricsService.count("admin.session.revoke", count, { actor_type: "admin", reason: "expiry" });
+    }
 
     return { success: true, count };
   } catch (error) {
