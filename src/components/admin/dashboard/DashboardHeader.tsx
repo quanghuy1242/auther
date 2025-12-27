@@ -15,6 +15,8 @@ interface DashboardHeaderProps {
     onRefresh: () => void | Promise<void>;
     /** Whether data is currently loading */
     isLoading?: boolean;
+    /** Whether SSE stream is connected */
+    isStreamConnected?: boolean;
 }
 
 const PERIOD_OPTIONS = [
@@ -30,7 +32,7 @@ const PERIOD_OPTIONS = [
  * - Auto-refresh toggle (15s interval, pauses when tab hidden)
  * - Manual refresh button
  */
-export function DashboardHeader({ onRefresh, isLoading = false }: DashboardHeaderProps) {
+export function DashboardHeader({ onRefresh, isLoading = false, isStreamConnected = false }: DashboardHeaderProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -74,8 +76,15 @@ export function DashboardHeader({ onRefresh, isLoading = false }: DashboardHeade
                 />
             </div>
 
-            {/* Refresh Controls */}
+            {/* Live Indicator + Refresh Controls */}
             <div className="flex items-center gap-4">
+                {/* Live streaming indicator */}
+                {isStreamConnected && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-green-500/20 rounded-full">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-xs font-medium text-green-400">Live</span>
+                    </div>
+                )}
                 {/* Auto-refresh toggle */}
                 <div className="flex items-center gap-2">
                     <Switch
