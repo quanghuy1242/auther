@@ -7,10 +7,11 @@ import {
 } from "@/lib/repositories/platform-access-repository";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import { OAuthClientMetadataRepository } from "@/lib/repositories/oauth-client-metadata-repository";
-import { authorizationModelRepository } from "@/lib/repositories";
+import { AuthorizationModelRepository } from "@/lib/repositories/authorization-model-repository";
 
 const tupleRepo = new TupleRepository();
 const metadataRepo = new OAuthClientMetadataRepository();
+const authzModelRepo = new AuthorizationModelRepository(tupleRepo);
 
 // Get HMAC secret from environment
 const INVITE_SECRET = process.env.INVITE_HMAC_SECRET || "default-secret-change-me";
@@ -228,7 +229,7 @@ export class RegistrationContextService {
     ): Promise<void> {
         for (const grant of context.grants) {
             // Look up authorization model by ID to get current entity type name
-            const model = await authorizationModelRepository.findById(grant.entityTypeId);
+            const model = await authzModelRepo.findById(grant.entityTypeId);
 
             if (!model) {
                 console.warn(`applyContextGrants: No model found for entityTypeId ${grant.entityTypeId}`);

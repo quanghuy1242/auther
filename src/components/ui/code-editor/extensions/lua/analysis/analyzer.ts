@@ -759,7 +759,7 @@ export class SemanticAnalyzer {
             ) {
                 const methodName = memberExpr.identifier.name;
                 const helperDef = this.definitionLoader.getHelper(methodName);
-                if (helperDef?.async) {
+                if (helperDef?.kind === "function" && (helperDef as { async?: boolean }).async) {
                     // Check if wrapped in await
                     // This would require parent context - simplified check here
                     // Full implementation would track await wrapping

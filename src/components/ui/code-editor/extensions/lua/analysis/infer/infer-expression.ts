@@ -42,7 +42,7 @@ export interface InferContext {
     getDefinitionLoader: () => {
         getGlobal: (name: string) => unknown;
         getLibrary: (name: string) => { fields?: Record<string, unknown> } | undefined;
-        getHelper: (name: string) => { returns?: { type: string } } | undefined;
+        getHelper: (name: string) => { kind: string; async?: boolean; returns?: { type: string } } | undefined;
         getLibraryMethod: (lib: string, method: string) => { kind: string; returns?: { type: string } } | undefined;
         getContextFieldsForHook: (hookName?: string) => Record<string, { kind: string; type?: string; optional?: boolean }>;
         getType: (typeName: string) => { fields?: Record<string, { type: string }> } | undefined;

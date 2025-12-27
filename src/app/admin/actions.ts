@@ -9,6 +9,7 @@ import { getClientStats } from "@/app/admin/clients/actions";
 import { getJwksKeys } from "@/app/admin/keys/actions";
 import { JWKS_ROTATION_INTERVAL_MS } from "@/lib/constants";
 import { guards } from "@/lib/auth/platform-guard";
+import { metricsService } from "@/lib/services";
 
 /**
  * Sign out the current user
@@ -134,6 +135,11 @@ export async function revokeSession(sessionId: string) {
     await guards.sessions.revokeAll();
     const success = await sessionRepository.delete(sessionId);
 
+    if (success) {
+      // Metric: admin session revocation
+      await metricsService.count("admin.session.revoke", 1, { actor_type: "admin", reason: "manual" });
+    }
+
     return { success };
   } catch (error) {
     console.error("Failed to revoke session:", error);
@@ -153,6 +159,11 @@ export async function revokeExpiredSessions() {
     await guards.sessions.revokeAll();
     const count = await sessionRepository.deleteExpired();
 
+    if (count > 0) {
+      // Metric: bulk session revocation (expired cleanup)
+      await metricsService.count("admin.session.revoke", count, { actor_type: "admin", reason: "expiry" });
+    }
+
     return { success: true, count };
   } catch (error) {
     console.error("Failed to revoke expired sessions:", error);
@@ -166,3 +177,148 @@ export async function revokeExpiredSessions() {
   }
 }
 
+// ============================================================================
+// Dashboard Metrics Actions
+// ============================================================================
+
+import { metricsRepository } from "@/lib/repositories";
+
+export type Period = "24h" | "7d" | "30d" | "12mo";
+
+/**
+ * Get period configuration (time range and interval)
+ */
+function getPeriodRange(period: Period): { from: Date; to: Date; intervalSeconds: number } {
+  const now = new Date();
+  const to = now;
+  let from: Date;
+  let intervalSeconds: number;
+
+  switch (period) {
+    case "24h":
+      from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      intervalSeconds = 3600; // 1 hour buckets
+      break;
+    case "7d":
+      from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      intervalSeconds = 6 * 3600; // 6 hour buckets
+      break;
+    case "30d":
+      from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      intervalSeconds = 24 * 3600; // 1 day buckets
+      break;
+    case "12mo":
+      from = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      intervalSeconds = 30 * 24 * 3600; // ~1 month buckets
+      break;
+  }
+
+  return { from, to, intervalSeconds };
+}
+
+/**
+ * Get time-series data for a metric
+ * Returns array of { timestamp, value } for charting
+ */
+export async function getMetricsTimeSeries(
+  name: string,
+  period: Period,
+  tags?: Record<string, string>
+) {
+  try {
+    await guards.platform.member();
+    const { from, to, intervalSeconds } = getPeriodRange(period);
+
+    const data = await metricsRepository.getTimeSeries(
+      name,
+      from,
+      to,
+      intervalSeconds,
+      tags
+    );
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to fetch metrics time series:", error);
+    return { success: false, data: [], error: String(error) };
+  }
+}
+
+/**
+ * Get aggregate statistics for a metric
+ * Returns { sum, avg, count, min, max }
+ */
+export async function getMetricsAggregate(
+  name: string,
+  period: Period,
+  tags?: Record<string, string>
+) {
+  try {
+    await guards.platform.member();
+    const { from, to } = getPeriodRange(period);
+
+    const stats = await metricsRepository.getAggregateStats(name, from, to, tags);
+
+    return { success: true, stats };
+  } catch (error) {
+    console.error("Failed to fetch metrics aggregate:", error);
+    return {
+      success: false,
+      stats: { sum: 0, avg: 0, count: 0, min: 0, max: 0 },
+      error: String(error),
+    };
+  }
+}
+
+/**
+ * Get breakdown of metric counts grouped by a tag
+ * Returns { [tagValue]: count }
+ */
+export async function getMetricsBreakdown(
+  name: string,
+  period: Period,
+  groupByTag: string
+) {
+  try {
+    await guards.platform.member();
+    const { from, to } = getPeriodRange(period);
+
+    const breakdown = await metricsRepository.getBreakdown(name, from, to, groupByTag);
+
+    return { success: true, breakdown };
+  } catch (error) {
+    console.error("Failed to fetch metrics breakdown:", error);
+    return { success: false, breakdown: {}, error: String(error) };
+  }
+}
+
+/**
+ * Get latest gauge value for a metric
+ */
+export async function getLatestGauge(name: string) {
+  try {
+    await guards.platform.member();
+    const value = await metricsRepository.getLatestGauge(name);
+
+    return { success: true, value };
+  } catch (error) {
+    console.error("Failed to fetch latest gauge:", error);
+    return { success: false, value: null, error: String(error) };
+  }
+}
+
+/**
+ * Get available user-defined metric names
+ * Returns list of metric names with 'user' type
+ */
+export async function getUserMetricNames() {
+  try {
+    await guards.platform.member();
+    const names = await metricsRepository.getUserMetricNames();
+
+    return { success: true, names };
+  } catch (error) {
+    console.error("Failed to fetch user metric names:", error);
+    return { success: false, names: [], error: String(error) };
+  }
+}

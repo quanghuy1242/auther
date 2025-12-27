@@ -16,6 +16,7 @@ import type { PolicyTemplate, RegistrationContext } from "@/lib/repositories/pla
 import { AuthorizationModelService } from "@/lib/auth/authorization-model-service";
 import { SYSTEM_MODELS } from "@/lib/auth/system-models";
 import { AuthorizationModelDefinition } from "@/schemas/rebac";
+import { metricsService } from "@/lib/services";
 
 const authorizationModelService = new AuthorizationModelService();
 
@@ -252,6 +253,9 @@ export async function createAuthorizationModel(data: {
 
         await authorizationModelService.upsertModel(data.entityType.trim(), def);
 
+        // Metric: policy change (auth model created)
+        void metricsService.count("admin.policy.change.count", 1, { action: "create" });
+
         revalidatePath("/admin/access");
         return { success: true };
     } catch (error) {
@@ -320,6 +324,9 @@ export async function updateAuthorizationModel(data: {
         };
 
         await authorizationModelService.upsertModel(data.entityType.trim(), def);
+
+        // Metric: policy change (auth model updated)
+        void metricsService.count("admin.policy.change.count", 1, { action: "update" });
 
         revalidatePath("/admin/access");
         return { success: true };

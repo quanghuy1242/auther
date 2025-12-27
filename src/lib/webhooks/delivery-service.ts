@@ -17,6 +17,7 @@ import {
   type WebhookEventType,
 } from "@/lib/constants";
 import type { WebhookDeliveryStatus } from "@/lib/types";
+import { metricsService } from "@/lib/services";
 
 const qstash = new Client({
   token: env.QSTASH_TOKEN,
@@ -80,6 +81,7 @@ export async function emitWebhookEvent(
   eventType: WebhookEventType,
   data: Record<string, unknown>
 ): Promise<void> {
+  const emitStart = performance.now();
   try {
     // Generate event ID
     const eventId = generateWebhookEventId();
@@ -110,6 +112,9 @@ export async function emitWebhookEvent(
       return;
     }
 
+    // Metric: webhook event emission
+    void metricsService.count("webhook.emit.count", endpoints.length, { event_type: eventType });
+
     // Enqueue delivery jobs for each endpoint
     const queuePromises = endpoints.map(async (endpoint) => {
       const deliveryId = generateWebhookDeliveryId();
@@ -131,16 +136,25 @@ export async function emitWebhookEvent(
 
       const queueUrl = resolveWebhookDeliveryQueueUrl();
 
-      const result = await qstash.publishJSON({
-        url: queueUrl,
-        body: job,
-        retries: endpoint.retryPolicy === "none" ? 0 : 3,
-      });
-
-      return result;
+      try {
+        const result = await qstash.publishJSON({
+          url: queueUrl,
+          body: job,
+          retries: endpoint.retryPolicy === "none" ? 0 : 3,
+        });
+        return result;
+      } catch (err) {
+        // Metric: QStash publish error
+        void metricsService.count("qstash.publish.error.count", 1);
+        throw err;
+      }
     });
 
     await Promise.allSettled(queuePromises);
+
+    // Metric: emit duration
+    const emitDuration = performance.now() - emitStart;
+    void metricsService.histogram("webhook.emit.duration_ms", emitDuration, { event_type: eventType });
   } catch (error) {
     console.error("Failed to emit webhook event:", {
       userId,
@@ -235,6 +249,9 @@ export async function deliverWebhook(
     // Determine status
     const success = response.ok;
     const status: WebhookDeliveryStatus = success ? "success" : "failed";
+
+    // Metric: delivery completed
+    void metricsService.histogram("webhook.delivery.duration_ms", durationMs, { status, response_code: String(responseCode) });
 
     return {
       success,

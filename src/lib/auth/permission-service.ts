@@ -4,6 +4,7 @@ import { UserGroupRepository } from "@/lib/repositories/user-group-repository";
 import { UserRepository } from "@/lib/repositories/user-repository";
 import { LuaPolicyEngine } from "@/lib/auth/policy-engine";
 import { abacRepository } from "@/lib/repositories/abac-repository";
+import { metricsService } from "@/lib/services";
 
 export class PermissionService {
   private tupleRepo: TupleRepository;
@@ -22,7 +23,7 @@ export class PermissionService {
 
   /**
    * Check if a subject has a specific permission on an entity.
-   * 
+   *
    * @param subjectType 'user' | 'apikey' | 'group'
    * @param subjectId The ID of the actor
    * @param entityType The type of resource (e.g. 'invoice')
@@ -38,11 +39,15 @@ export class PermissionService {
     permission: string,
     context: Record<string, unknown> = {}
   ): Promise<boolean> {
+    const checkStart = performance.now();
     try {
       // 0. Global Admin Bypass
       if (subjectType === "user") {
         const user = await this.userRepo.findById(subjectId);
         if (user && user.role === "admin") {
+          const duration = performance.now() - checkStart;
+          void metricsService.histogram("authz.check.duration_ms", duration, { result: "admin_bypass", entity_type: entityType });
+          void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "admin_bypass" });
           return true;
         }
       }
@@ -51,6 +56,9 @@ export class PermissionService {
       const model = await this.modelService.getModel(entityType);
       if (!model) {
         console.debug(`No authorization model found for entity type '${entityType}'. Denying access.`);
+        const duration = performance.now() - checkStart;
+        void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: "no_model", entity_type: entityType });
+        void metricsService.count("authz.decision.count", 1, { result: "denied", source: "no_model" });
         return false;
       }
 
@@ -58,6 +66,9 @@ export class PermissionService {
       const permDef = model.permissions[permission];
       if (!permDef) {
         console.warn(`Permission '${permission}' not defined in model for '${entityType}'. Denying access.`);
+        const duration = performance.now() - checkStart;
+        void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: "no_permission", entity_type: entityType });
+        void metricsService.count("authz.decision.count", 1, { result: "denied", source: "no_permission" });
         return false;
       }
       const requiredRelation = permDef.relation;
@@ -82,13 +93,18 @@ export class PermissionService {
 
           if (direct) {
             // Priority: tuple-level condition > permission-level policy
-            return await this.evaluatePolicy(direct.condition, permDef, context, {
+            const allowed = await this.evaluatePolicy(direct.condition, permDef, context, {
               entityType,
               entityId,
               permission,
               subjectType,
               subjectId,
             });
+            const duration = performance.now() - checkStart;
+            const result = allowed ? "allowed" : "denied";
+            void metricsService.histogram("authz.check.duration_ms", duration, { result, entity_type: entityType });
+            void metricsService.count("authz.decision.count", 1, { result, source: "tuple" });
+            return allowed;
           }
 
           // B. Wildcard Match
@@ -102,20 +118,31 @@ export class PermissionService {
 
           if (wildcard) {
             // Priority: tuple-level condition > permission-level policy
-            return await this.evaluatePolicy(wildcard.condition, permDef, context, {
+            const allowed = await this.evaluatePolicy(wildcard.condition, permDef, context, {
               entityType,
               entityId,
               permission,
               subjectType,
               subjectId,
             });
+            const duration = performance.now() - checkStart;
+            const result = allowed ? "allowed" : "denied";
+            void metricsService.histogram("authz.check.duration_ms", duration, { result, entity_type: entityType });
+            void metricsService.count("authz.decision.count", 1, { result, source: "wildcard_tuple" });
+            return allowed;
           }
         }
       }
 
+      const duration = performance.now() - checkStart;
+      void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: "no_tuple", entity_type: entityType });
+      void metricsService.count("authz.decision.count", 1, { result: "denied", source: "no_tuple" });
       return false;
     } catch (error) {
       console.error("PermissionService.checkPermission error:", error);
+      const duration = performance.now() - checkStart;
+      void metricsService.histogram("authz.check.duration_ms", duration, { result: "error", entity_type: entityType });
+      void metricsService.count("authz.error.count", 1, { stage: "check_permission" });
       return false;
     }
   }
@@ -132,6 +159,7 @@ export class PermissionService {
     const subjects = new Map<string, { type: string, id: string }>();
     const queue = [{ type, id }];
     const key = (t: string, i: string) => `${t}:${i}`;
+    let traversalDepth = 0;
 
     subjects.set(key(type, id), { type, id });
 
@@ -184,7 +212,12 @@ export class PermissionService {
           }
         }
       }
+      traversalDepth++;
     }
+
+    // Metric: ReBAC traversal depth and fan-out
+    void metricsService.histogram("authz.rebac.traversal_depth", traversalDepth, { entity_type: type });
+    void metricsService.histogram("authz.rebac.subjects_expanded", subjects.size, { entity_type: type });
 
     return Array.from(subjects.values());
   }

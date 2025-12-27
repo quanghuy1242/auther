@@ -24,6 +24,7 @@ import {
 import { checkOAuthClientAccess } from "@/lib/utils/oauth-authorization";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 import { createPipelineDatabaseHooks, applyClientContextGrants } from "@/lib/pipelines";
+import { metricsService } from "@/lib/services";
 
 const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
 
@@ -142,6 +143,9 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
       const accessCheck = await checkOAuthClientAccess(userId, clientId);
 
       if (!accessCheck.allowed) {
+        // Metric: OIDC authorize access denied
+        void metricsService.count("oidc.authorize.access_denied.count", 1, { reason: accessCheck.reason || "unknown" });
+
         // Return an OAuth error response
         const errorUrl = new URL(requestUrl.searchParams.get("redirect_uri") || "/");
         errorUrl.searchParams.set("error", "access_denied");
@@ -199,6 +203,52 @@ export const auth = betterAuth({
   trustedOrigins,
   hooks: {
     before: beforeHook,
+    after: createAuthMiddleware(async (ctx) => {
+      // Metric: Login attempts (sign-in path)
+      if (ctx.path.startsWith("/sign-in")) {
+        const hasSession = !!ctx.context.session;
+        void metricsService.count("auth.login.attempt", 1, {
+          method: ctx.body?.provider || "email",
+          status: hasSession ? "success" : "failure"
+        });
+      }
+
+      // Metric: Registration success (sign-up path with new session)
+      if (ctx.path.startsWith("/sign-up")) {
+        const newSession = ctx.context.newSession;
+        if (newSession) {
+          void metricsService.count("auth.register.success", 1, { method: "email" });
+          void metricsService.count("auth.session.created.count", 1, { source: "register" });
+        }
+      }
+
+      // Metric: Session created via any successful auth
+      if (ctx.context.newSession && !ctx.path.startsWith("/sign-up")) {
+        void metricsService.count("auth.session.created.count", 1, { source: ctx.path.split("/")[1] || "unknown" });
+      }
+
+      // Metric: API key issued (create endpoint success)
+      if (ctx.path.includes("/api-key/create") && ctx.context.returned) {
+        void metricsService.count("apikey.issued.count", 1);
+      }
+
+      // Metric: API key revoked (delete endpoint success)
+      if (ctx.path.includes("/api-key/delete") && ctx.context.returned) {
+        void metricsService.count("apikey.revoked.count", 1, { reason: "user_initiated" });
+      }
+
+      // Metric: OAuth PKCE failure detection (error in authorize response)
+      if (ctx.path.includes("/authorize") && ctx.context.returned) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const returnedBody = ctx.context.returned as any;
+        if (returnedBody?.error === "invalid_request" && returnedBody?.error_description?.includes("PKCE")) {
+          void metricsService.count("oauth.pkce.failure.count", 1, { reason: "code_challenge_missing" });
+        }
+        if (returnedBody?.error === "invalid_request" && returnedBody?.error_description?.includes("redirect_uri")) {
+          void metricsService.count("oauth.redirect_uri.invalid.count", 1);
+        }
+      }
+    }),
   },
   databaseHooks: createPipelineDatabaseHooks(),
   plugins: [
@@ -209,6 +259,25 @@ export const auth = betterAuth({
       apiKeyHeaders: ["x-api-key"],
       rateLimit: {
         enabled: false, // Per-key rate limiting disabled by default
+      },
+      // Custom API key getter to track missing headers
+      customAPIKeyGetter: (ctx) => {
+        const key = ctx.request?.headers.get("x-api-key");
+        if (!key && ctx.path.includes("/api-key/verify")) {
+          // Metric: API key header missing on verify endpoint
+          void metricsService.count("apikey.auth.missing.count", 1);
+        }
+        return key ?? null;
+      },
+      // Custom API key validator to track invalid keys
+      customAPIKeyValidator: async ({ key }) => {
+        // We return true to let built-in validation run (checking DB)
+        // But if key format is obviously invalid, track it
+        if (!key || key.length < 10) {
+          void metricsService.count("apikey.auth.invalid.count", 1, { reason: "malformed" });
+          return false;
+        }
+        return true;
       },
     }),
     jwt({

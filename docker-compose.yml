@@ -222,7 +222,7 @@ services:
       - ./tsconfig.json:/app/tsconfig.json:ro
       - ./drizzle.config.ts:/app/drizzle.config.ts:ro
       - ./drizzle:/app/drizzle:ro
-    command: sh -c "echo '🌱 Seeding admin user...' && sleep 5 && node_modules/.bin/tsx scripts/seed-admin-user.ts && echo '🌱 Seeding OAuth clients...' && node_modules/.bin/tsx scripts/seed-oauth-clients-for-tests.ts && echo '✅ Seeding complete'"
+    command: sh -c "echo '🌱 Seeding admin user...' && sleep 5 && node_modules/.bin/tsx scripts/seed-admin-user.ts && echo '🌱 Seeding OAuth clients...' && node_modules/.bin/tsx scripts/seed-oauth-clients-for-tests.ts && echo '🌱 Seeding metrics data...' && node_modules/.bin/tsx scripts/seed-metrics.ts && echo '✅ Seeding complete'"
     depends_on:
       db-migrate:
         condition: service_completed_successfully
