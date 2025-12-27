@@ -42,7 +42,7 @@ export function DashboardHeader({ onRefresh, isLoading = false, isStreamConnecte
     // Auto-refresh hook
     const { isEnabled, toggleEnabled, isRefreshing, refresh, nextRefreshIn } = useAutoRefresh({
         intervalMs: 15000, // 15 seconds as per spec
-        defaultEnabled: true,
+        defaultEnabled: false,
         onRefresh,
     });
 
