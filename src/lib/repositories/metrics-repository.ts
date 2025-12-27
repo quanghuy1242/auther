@@ -90,7 +90,7 @@ export class MetricsRepository {
                     : sql<number>`sum(${metrics.value})`;
 
         // SQLite strftime-based bucketing
-        const bucket = sql<number>`(${metrics.timestamp} / ${intervalSeconds * 1000}) * ${intervalSeconds * 1000}`;
+        const bucket = sql<number>`floor(${metrics.timestamp} / ${intervalSeconds * 1000}) * ${intervalSeconds * 1000}`;
 
         const results = await db
             .select({
@@ -123,5 +123,154 @@ export class MetricsRepository {
             .where(lte(metrics.createdAt, cutoff));
 
         return result.rowsAffected ?? 0;
+    }
+
+    /**
+     * Get time-series data for dashboard charts with optional tag filtering
+     * Returns data points bucketed by interval
+     */
+    async getTimeSeries(
+        name: string,
+        from: Date,
+        to: Date,
+        intervalSeconds: number,
+        tags?: Record<string, string>
+    ): Promise<{ timestamp: number; value: number }[]> {
+        const bucket = sql<number>`floor(${metrics.timestamp} / ${intervalSeconds * 1000}) * ${intervalSeconds * 1000}`;
+
+        const conditions = [
+            eq(metrics.name, name),
+            gte(metrics.timestamp, from),
+            lte(metrics.timestamp, to),
+        ];
+
+        // Add tag filters using json_extract for SQLite
+        if (tags) {
+            for (const [key, value] of Object.entries(tags)) {
+                conditions.push(
+                    sql`json_extract(${metrics.tags}, ${`$.${key}`}) = ${value}`
+                );
+            }
+        }
+
+        const results = await db
+            .select({
+                bucket,
+                value: sql<number>`sum(${metrics.value})`,
+            })
+            .from(metrics)
+            .where(and(...conditions))
+            .groupBy(bucket)
+            .orderBy(bucket);
+
+        return results.map((r) => ({
+            timestamp: r.bucket,
+            value: r.value ?? 0,
+        }));
+    }
+
+    /**
+     * Get aggregate statistics for a metric (sum, avg, count, p50, p95)
+     */
+    async getAggregateStats(
+        name: string,
+        from: Date,
+        to: Date,
+        tags?: Record<string, string>
+    ): Promise<{ sum: number; avg: number; count: number; min: number; max: number }> {
+        const conditions = [
+            eq(metrics.name, name),
+            gte(metrics.timestamp, from),
+            lte(metrics.timestamp, to),
+        ];
+
+        if (tags) {
+            for (const [key, value] of Object.entries(tags)) {
+                conditions.push(
+                    sql`json_extract(${metrics.tags}, ${`$.${key}`}) = ${value}`
+                );
+            }
+        }
+
+        const [result] = await db
+            .select({
+                sum: sql<number>`COALESCE(sum(${metrics.value}), 0)`,
+                avg: sql<number>`COALESCE(avg(${metrics.value}), 0)`,
+                count: sql<number>`count(*)`,
+                min: sql<number>`COALESCE(min(${metrics.value}), 0)`,
+                max: sql<number>`COALESCE(max(${metrics.value}), 0)`,
+            })
+            .from(metrics)
+            .where(and(...conditions));
+
+        return {
+            sum: result?.sum ?? 0,
+            avg: result?.avg ?? 0,
+            count: result?.count ?? 0,
+            min: result?.min ?? 0,
+            max: result?.max ?? 0,
+        };
+    }
+
+    /**
+     * Get breakdown of metric counts grouped by a tag value
+     */
+    async getBreakdown(
+        name: string,
+        from: Date,
+        to: Date,
+        groupByTag: string
+    ): Promise<Record<string, number>> {
+        const tagValue = sql<string>`json_extract(${metrics.tags}, ${`$.${groupByTag}`})`;
+
+        const results = await db
+            .select({
+                tagValue,
+                count: sql<number>`sum(${metrics.value})`,
+            })
+            .from(metrics)
+            .where(
+                and(
+                    eq(metrics.name, name),
+                    gte(metrics.timestamp, from),
+                    lte(metrics.timestamp, to)
+                )
+            )
+            .groupBy(tagValue);
+
+        const breakdown: Record<string, number> = {};
+        for (const r of results) {
+            if (r.tagValue) {
+                breakdown[r.tagValue] = r.count ?? 0;
+            }
+        }
+        return breakdown;
+    }
+
+    /**
+     * Get the latest gauge value for a metric
+     */
+    async getLatestGauge(name: string): Promise<number | null> {
+        const [result] = await db
+            .select({ value: metrics.value })
+            .from(metrics)
+            .where(eq(metrics.name, name))
+            .orderBy(desc(metrics.timestamp))
+            .limit(1);
+
+        return result?.value ?? null;
+    }
+
+    /**
+     * Get distinct user-defined metric names
+     */
+    async getUserMetricNames(): Promise<string[]> {
+        const results = await db
+            .selectDistinct({ name: metrics.name })
+            .from(metrics)
+            .where(eq(metrics.metricType, "user"))
+            .limit(100);
+
+        return results.map((r) => r.name);
     }
 }

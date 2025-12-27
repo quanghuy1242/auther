@@ -278,39 +278,487 @@ When possible, build dashboards from these sources and only add `metrics` rows f
 ---
 
 ## 6. Dashboard Strategy
-We will build a dedicated "Observability" page in the Admin UI.
 
-### Panel 1: System Health (Infrastructure)
-*   **API Latency:** P95/P99 of `http.request.duration`.
-*   **Lua Pool Health:** `lua.pool.active` vs `lua.pool.waiting`.
-*   **JWKS Status:** Key age gauge (Green < 24h, Red > 48h).
-*   **Queue Health:** QStash verification errors (Security alert).
-*   **Email Delivery:** Success rate % (Resend).
+Enhance the existing `/admin` homepage with dynamic metrics visualization using **Recharts** (already installed). The dashboard retains the current layout pattern (stats cards → quick actions → data panels) while adding time-series charts and interactive controls.
 
-### Panel 2: Pipeline Performance
-*   **Throughput:** Executions per minute by `trigger_event`.
-*   **System Overhead:** `PipelineEngine` logic vs `Script.Execution`.
+### 6.1. Global Controls
 
-### Panel 3: Security & Identity
-*   **ReBAC Complexity:** Avg `authz.rebac.traversal_depth` (Performance warning if high).
-*   **API Key Usage:** `apikey.abac.required` rate (Shows complexity of current auth models).
-*   **Auth Failures:** Spikes in `auth.login.attempt` (status=fail).
-*   **OIDC Health:** authorize/token/userinfo error rate, by error reason.
-*   **JWT Phase:** Call latency during permissions resolution.
-*   **ABAC Errors:** Spikes in `abac_audit_logs` where `result=error`.
+#### Period Selector
+A single period selector at the top of the dashboard applies to **all panels**:
 
-### Panel 4: User Logic (Business)
-*   **Custom Counters:** Aggregated user-defined metrics.
+| Period | Label | Data Points | Aggregation |
+| :--- | :--- | :--- | :--- |
+| 24h | Last 24 Hours | ~24 (hourly) | Hourly rollups |
+| 7d | Last 7 Days | ~168 (hourly) or ~7 (daily) | Hourly/Daily |
+| 30d | Last 30 Days | ~30 (daily) | Daily rollups |
+| 12mo | Last 12 Months | ~12 (monthly) | Monthly rollups |
 
-### Panel 5: Webhook Reliability
-*   **Success Rate:** `webhook.emit.success` / `webhook.emit.attempt`.
-*   **Latency:** `webhook.emit.duration` distribution.
-*   **Queue Security:** QStash signature verification failures.
-*   **Retries/Backoff:** Delivery retry counts and time-to-success.
+**Implementation:** `<Select>` component from Radix UI, stored in URL search params for shareability.
 
-### Panel 6: Admin Audit
-*   **Interventions:** Count of `admin.session.revoke`.
-*   **Activity:** Frequency of `admin.stats.view`.
+#### Auto-Refresh
+- Auto-refresh every **15 seconds** when the browser tab is active
+- Uses `visibilitychange` event to pause when tab is hidden
+- Manual refresh button with loading state indicator
+- Disable auto-refresh option (toggle)
+
+**Implementation:** `useEffect` with `setInterval` + `document.visibilityState` check.
+
+---
+
+### 6.2. Dashboard Layout
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Period: [24h ▼]                           [↻ Auto-refresh: ON] │
+├─────────────────────────────────────────────────────────────────┤
+│                        QUICK STATS (4 cards)                    │
+│  [Total Users] [OAuth Clients] [Active Sessions] [JWKS Health]  │
+├─────────────────────────────────────────────────────────────────┤
+│                      QUICK ACTIONS (3 cards)                    │
+│     [Create User]    [Register Client]    [Rotate JWKS]         │
+├────────────────────────────────┬────────────────────────────────┤
+│   AUTHENTICATION ACTIVITY      │     AUTHORIZATION HEALTH       │
+│   (AreaChart - stacked)        │     (BarChart - grouped)       │
+├────────────────────────────────┴────────────────────────────────┤
+│                      RECENT SIGN-INS (Table)                    │
+├────────────────────────────────┬────────────────────────────────┤
+│      PIPELINE EXECUTIONS       │       WEBHOOK RELIABILITY      │
+│   (LineChart - by trigger)     │      (DonutChart + stats)      │
+├────────────────────────────────┴────────────────────────────────┤
+│                      ADMIN ACTIVITY (Table)                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 6.3. Chart Panels Detail
+
+#### Panel A: Authentication Activity
+**Chart Type:** `<AreaChart>` (stacked)  
+**Purpose:** Show authentication volume and success/failure trends
+
+| Metric | Series | Color |
+| :--- | :--- | :--- |
+| `auth.login.attempt` (status=success) | Successful Logins | Green |
+| `auth.login.attempt` (status=fail) | Failed Logins | Red |
+| `auth.register.success` | New Registrations | Blue |
+| `auth.session.created.count` | Sessions Created | Purple |
+
+**Aggregation:** Sum per time bucket  
+**Tooltip:** Shows exact counts for each series
+
+---
+
+#### Panel B: Authorization Health
+**Chart Type:** `<BarChart>` (grouped)  
+**Purpose:** Compare authorization decision outcomes and performance
+
+| Metric | Bar | Notes |
+| :--- | :--- | :--- |
+| `authz.decision.count` (result=allowed) | Allowed | Green |
+| `authz.decision.count` (result=denied) | Denied | Orange |
+| `authz.error.count` | Errors | Red |
+
+**Secondary View (toggle):**
+| Metric | Chart | Notes |
+| :--- | :--- | :--- |
+| `authz.check.duration` | LineChart (p50/p95) | Latency percentiles |
+| `authz.rebac.traversal_depth` | Histogram bars | Distribution |
+| `authz.rebac.subjects_expanded` | Histogram bars | Fan-out distribution |
+
+---
+
+#### Panel C: Pipeline Executions
+**Chart Type:** `<LineChart>` (multi-series)  
+**Purpose:** Track pipeline throughput by trigger event
+
+| Metric | Series | Notes |
+| :--- | :--- | :--- |
+| `pipeline.exec.duration` | P50, P95 lines | Latency percentiles |
+| Grouped by `trigger_event` tag | Separate lines | Top 5 triggers |
+
+**Stat Cards (inline):**
+| Metric | Display |
+| :--- | :--- |
+| `lua.pool.active` | Current gauge |
+| `lua.pool.waiting` | Current gauge (alert if > 0) |
+| `lua.pool.exhausted` | Total count in period |
+
+---
+
+#### Panel D: Webhook Reliability
+**Chart Type:** `<PieChart>` / `<DonutChart>` + Stats  
+**Purpose:** Show delivery success rate and failures
+
+| Metric | Segment | Color |
+| :--- | :--- | :--- |
+| `webhook.emit.count` - errors | Successful | Green |
+| `qstash.publish.error.count` | Failed | Red |
+
+**Stat Cards (inline):**
+| Metric | Display |
+| :--- | :--- |
+| `webhook.emit.duration_ms` | P95 latency |
+| `webhook.delivery.duration_ms` | P95 delivery time |
+| Total webhooks in period | Count |
+
+---
+
+#### Panel E: OIDC & OAuth Health
+**Chart Type:** `<BarChart>` (horizontal, grouped by endpoint)  
+**Purpose:** Show OIDC endpoint health at a glance
+
+| Metric | Bar | Notes |
+| :--- | :--- | :--- |
+| `oidc.authorize.request.count` | Authorize | Group by result |
+| `oidc.token.request.count` | Token | Group by grant_type |
+| `oidc.userinfo.request.count` | UserInfo | Group by result |
+| `oidc.jwks.request.count` | JWKS | Typically 100% success |
+
+**Error Breakdown (expandable):**
+| Metric | Display |
+| :--- | :--- |
+| `oidc.authorize.access_denied.count` | By reason |
+| `oauth.redirect_uri.invalid.count` | Count |
+| `oauth.pkce.failure.count` | By reason |
+
+---
+
+#### Panel F: API Key Usage
+**Chart Type:** `<LineChart>` + Stat Cards  
+**Purpose:** Track API key lifecycle and auth patterns
+
+| Metric | Visualization |
+| :--- | :--- |
+| `apikey.issued.count` | Line (keys created over time) |
+| `apikey.revoked.count` | Line (keys revoked over time) |
+| `apikey.auth.invalid.count` | Bar (by reason) |
+| `apikey.auth.missing.count` | Single stat |
+
+**Stat Cards:**
+| Metric | Display |
+| :--- | :--- |
+| `apikey.resolve.duration` | P95 latency |
+| `apikey.groups.count` | Average groups per key |
+
+---
+
+#### Panel G: Email Delivery
+**Chart Type:** `<AreaChart>` (stacked) + Stat Cards  
+**Purpose:** Monitor email sending health
+
+| Metric | Series | Color |
+| :--- | :--- | :--- |
+| `email.send.success` | Sent | Green |
+| `email.send.error` | Failed | Red |
+| `email.send.rate_limited.count` | Rate Limited | Yellow |
+
+**Stat Cards:**
+| Metric | Display |
+| :--- | :--- |
+| `email.send.duration_ms` | P95 latency |
+| Success rate % | Calculated |
+
+---
+
+#### Panel H: JWKS Health
+**Chart Type:** Stat Card with Status Indicator  
+**Purpose:** Key rotation health at a glance
+
+| Metric | Display | Alert Threshold |
+| :--- | :--- | :--- |
+| `jwks.active_key.age_ms` | "Key Age: X days" | Yellow > 25d, Red > 30d |
+| `jwks.rotation.success` | Last rotation time | - |
+| `jwks.rotate.duration_ms` | P95 rotation time | - |
+| `jwks.pruned.count` | Keys pruned in period | - |
+
+---
+
+#### Panel I: Admin Activity
+**Chart Type:** `<Table>` (recent activity log)  
+**Purpose:** Audit trail for admin actions
+
+| Metric | Row Display |
+| :--- | :--- |
+| `admin.session.revoke` | "Admin revoked session" |
+| `admin.permission_request.approve.count` | "Request approved" |
+| `admin.permission_request.reject.count` | "Request rejected" |
+| `admin.policy.change.count` | "Auth model updated" |
+| `admin.pipeline.graph.save.count` | "Pipeline saved" |
+| `admin.pipeline.secret.rotate.count` | "Secret rotated" |
+
+**Alternative View:** `<BarChart>` showing counts by action type
+
+---
+
+#### Panel J: User-Defined Metrics
+**Chart Type:** Dynamic based on metric type  
+**Purpose:** Display custom metrics from Lua scripts (`helpers.metrics.*`)
+
+| Metric Type | Chart |
+| :--- | :--- |
+| `user.*.count` | LineChart (sum over time) |
+| `user.*.gauge` | LineChart (last value over time) |
+
+**Features:**
+- Dropdown to select which user metric to display
+- Auto-discover available user metrics from database
+
+---
+
+### 6.4. API Endpoints
+
+New server actions in `/admin/actions.ts` for dashboard data:
+
+| Action | Returns |
+| :--- | :--- |
+| `getMetricsTimeSeries(name, period, tags?)` | `{ timestamp, value }[]` |
+| `getMetricsAggregate(name, period, aggregation)` | `{ sum, avg, p50, p95, count }` |
+| `getMetricsBreakdown(name, period, groupBy)` | `{ [tagValue]: count }` |
+| `getUserMetricNames()` | `string[]` (available user metrics) |
+
+---
+
+### 6.5. Component Structure
+
+```
+src/components/admin/dashboard/
+├── DashboardHeader.tsx          # Period selector + refresh controls
+├── QuickStats.tsx               # Existing stat cards (enhanced)
+├── charts/
+│   ├── AuthActivityChart.tsx    # Panel A
+│   ├── AuthzHealthChart.tsx     # Panel B  
+│   ├── PipelineChart.tsx        # Panel C
+│   ├── WebhookChart.tsx         # Panel D
+│   ├── OidcHealthChart.tsx      # Panel E
+│   ├── ApiKeyChart.tsx          # Panel F
+│   ├── EmailChart.tsx           # Panel G
+│   ├── JwksHealthCard.tsx       # Panel H
+│   └── UserMetricsChart.tsx     # Panel J
+├── tables/
+│   ├── RecentSignIns.tsx        # Existing (enhanced)
+│   └── AdminActivityLog.tsx     # Panel I
+└── hooks/
+    ├── useMetricsQuery.ts       # Data fetching + caching
+    └── useAutoRefresh.ts        # Auto-refresh logic
+```
+
+---
+
+### 6.6. Recharts Usage Notes
+
+**Already Installed:** `recharts@3.3.0`
+
+**Common Patterns:**
+```tsx
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+<ResponsiveContainer width="100%" height={300}>
+  <LineChart data={data}>
+    <XAxis dataKey="timestamp" tickFormatter={formatTime} />
+    <YAxis />
+    <Tooltip />
+    <Line type="monotone" dataKey="value" stroke="#8884d8" />
+  </LineChart>
+</ResponsiveContainer>
+```
+
+**Color Palette:**
+| Purpose | Color | Hex |
+| :--- | :--- | :--- |
+| Success / Allowed | Green | `#22c55e` |
+| Error / Denied | Red | `#ef4444` |
+| Warning | Yellow | `#eab308` |
+| Primary / Info | Blue | `#3b82f6` |
+| Secondary | Purple | `#a855f7` |
+| Neutral | Gray | `#6b7280` |
+
+---
+
+### 6.7. Data Sources & Fetching Strategy
+
+The dashboard pulls data from **three sources**: the `metrics` table, existing application tables, and derived aggregates.
+
+#### Primary Data Sources
+
+| Source | Table(s) | Data Available |
+| :--- | :--- | :--- |
+| **Metrics Table** | `metrics` | All instrumented metrics (see inventory below) |
+| **Pipeline Traces** | `pipeline_traces`, `pipeline_spans` | Execution history, durations, status, trigger events |
+| **ABAC Audit Logs** | `abac_audit_logs` | Authorization decisions, execution time |
+| **Sessions** | `session` | Active session count, login history |
+| **Users** | `user` | Total users, verified/unverified counts |
+| **OAuth Clients** | `oauth_application` | Client count, trusted vs dynamic |
+| **JWKS** | `jwks` | Key count, key ages, rotation history |
+| **Webhooks** | `webhook_event`, `webhook_delivery` | Delivery history, success/failure |
+| **API Keys** | `apikey` | Key count, lifecycle dates |
+
+#### Available Metrics Inventory (✅ Implemented Only)
+
+> [!IMPORTANT]
+> The dashboard MUST only query metrics from this list. Metrics marked as ❌/⚠️ in Section 5 are not available.
+
+**Authentication & Sessions:**
+- `auth.login.attempt` (tags: `method`, `status`)
+- `auth.register.success` (tags: `method`)
+- `auth.session.created.count`
+- `auth.session.revoked.count` (tags: `reason`)
+- `auth.signup.blocked.count` (tags: `reason`)
+
+**OIDC & OAuth:**
+- `oidc.authorize.request.count` (tags: `result`)
+- `oidc.authorize.latency_ms` (tags: `result`)
+- `oidc.authorize.access_denied.count` (tags: `reason`)
+- `oidc.token.request.count` (tags: `grant_type`, `result`)
+- `oidc.token.latency_ms` (tags: `grant_type`, `result`)
+- `oidc.userinfo.request.count` (tags: `result`)
+- `oidc.jwks.request.count` (tags: `result`)
+- `oauth.redirect_uri.invalid.count`
+- `oauth.pkce.failure.count` (tags: `reason`)
+
+**Authorization:**
+- `authz.check.duration` (tags: `resource`, `action`, `result`)
+- `authz.rebac.traversal_depth` (tags: `entity_type`)
+- `authz.rebac.subjects_expanded` (tags: `entity_type`)
+- `authz.decision.count` (tags: `result`, `source`)
+- `authz.error.count` (tags: `stage`)
+
+**Pipelines & Lua:**
+- `pipeline.exec.duration` (tags: `pipeline_id`, `status`)
+- `lua.pool.active` (gauge)
+- `lua.pool.waiting` (gauge)
+- `lua.pool.exhausted`
+
+**Webhooks:**
+- `webhook.emit.count` (tags: `event_type`)
+- `webhook.emit.duration_ms` (tags: `event_type`)
+- `webhook.delivery.duration_ms` (tags: `status`, `response_code`)
+- `qstash.publish.error.count`
+
+**JWKS:**
+- `jwks.rotation.success`
+- `jwks.rotate.triggered.count` (tags: `reason`)
+- `jwks.rotate.duration_ms` (tags: `result`)
+- `jwks.pruned.count`
+- `jwks.prune.duration_ms` (tags: `result`)
+- `jwks.active_key.age_ms` (gauge)
+
+**API Keys:**
+- `apikey.resolve.duration` (tags: `key_prefix`)
+- `apikey.groups.count`
+- `apikey.abac.required` (tags: `entity_type`)
+- `apikey.auth.missing.count`
+- `apikey.auth.invalid.count` (tags: `reason`)
+- `apikey.issued.count`
+- `apikey.revoked.count` (tags: `reason`)
+
+**Email:**
+- `email.send.success` (tags: `type`)
+- `email.send.error` (tags: `type`)
+- `email.send.duration_ms` (tags: `type`)
+- `email.send.rate_limited.count` (tags: `type`)
+
+**Admin Activity:**
+- `admin.session.revoke`
+- `admin.permission_request.approve.count`
+- `admin.permission_request.reject.count`
+- `admin.policy.change.count` (tags: `action`)
+- `admin.pipeline.graph.save.count`
+- `admin.pipeline.secret.rotate.count`
+
+**User-Defined (via Lua):**
+- `user.*` (prefix applied automatically)
+
+---
+
+#### Data Fetching Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Dashboard Page (RSC)                         │
+│  - Fetches initial data server-side                             │
+│  - Passes to client components                                  │
+└─────────────────────────┬───────────────────────────────────────┘
+                          │
+          ┌───────────────┴───────────────┐
+          ▼                               ▼
+┌─────────────────────┐       ┌─────────────────────────────────┐
+│  Server Actions     │       │  Client Refresh (15s interval)  │
+│  (getDashboardStats,│       │  (useEffect + fetch)             │
+│   getMetrics*, etc) │       │                                  │
+└─────────┬───────────┘       └────────────────┬──────────────────┘
+          │                                    │
+          ▼                                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      MetricsRepository                          │
+│  - findByName(name, from, to)                                   │
+│  - aggregate(name, from, to, groupBy?)                          │
+│  - getLatestGauge(name)                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Server Actions
+
+| Action | Query Source | Returns |
+| :--- | :--- | :--- |
+| `getDashboardStats()` | `user`, `session`, `oauth_application`, `jwks` | Static counts (existing) |
+| `getMetricsTimeSeries(name, period, tags?)` | `metrics` table | `{ timestamp, value }[]` |
+| `getMetricsAggregate(name, period, agg)` | `metrics` table | `{ sum, avg, p50, p95, count }` |
+| `getMetricsBreakdown(name, period, groupBy)` | `metrics` table | `{ [tagValue]: number }` |
+| `getPipelineStats(period)` | `pipeline_traces` | Execution counts, avg duration |
+| `getRecentSignIns(limit)` | `session` | Recent sessions (existing) |
+| `getUserMetricNames()` | `metrics` WHERE type='user' | Distinct user metric names |
+
+#### Aggregation Strategy
+
+| Period | Bucket Size | Max Data Points |
+| :--- | :--- | :--- |
+| 24h | 1 hour | 24 |
+| 7d | 6 hours | 28 |
+| 30d | 1 day | 30 |
+| 12mo | 1 month | 12 |
+
+**SQL Example (time-series aggregation):**
+```sql
+SELECT 
+  (timestamp / 3600000) * 3600000 AS bucket, -- Hourly buckets
+  SUM(value) AS total,
+  AVG(value) AS avg
+FROM metrics
+WHERE name = 'auth.login.attempt'
+  AND timestamp >= :from AND timestamp <= :to
+  AND json_extract(tags, '$.status') = 'success'
+GROUP BY bucket
+ORDER BY bucket;
+```
+
+#### Caching Strategy
+
+| Data Type | Cache TTL | Strategy |
+| :--- | :--- | :--- |
+| Static counts (users, clients) | 60s | Revalidate on demand |
+| Time-series data | 15s | Auto-refresh replaces cache |
+| Gauge values (lua.pool.*) | 0s | Always fresh |
+| Aggregates (p95, avg) | 60s | Longer TTL, less volatile |
+
+---
+
+### 6.8. Panel to Data Source Mapping
+
+| Panel | Primary Data Source | Metrics Used |
+| :--- | :--- | :--- |
+| **Quick Stats** | `user`, `session`, `oauth_application`, `jwks` | None (direct table queries) |
+| **Auth Activity** | `metrics` | `auth.login.attempt`, `auth.register.success`, `auth.session.created.count` |
+| **Authz Health** | `metrics` | `authz.decision.count`, `authz.error.count`, `authz.check.duration` |
+| **Recent Sign-Ins** | `session` | None (direct table query) |
+| **Pipeline Executions** | `metrics` + `pipeline_traces` | `pipeline.exec.duration`, `lua.pool.*` |
+| **Webhook Reliability** | `metrics` | `webhook.emit.count`, `webhook.emit.duration_ms`, `qstash.publish.error.count` |
+| **OIDC Health** | `metrics` | `oidc.*.request.count`, `oidc.*.latency_ms`, `oauth.*` |
+| **API Key Usage** | `metrics` | `apikey.issued.count`, `apikey.revoked.count`, `apikey.auth.*` |
+| **Email Delivery** | `metrics` | `email.send.success`, `email.send.error`, `email.send.duration_ms` |
+| **JWKS Health** | `metrics` + `jwks` | `jwks.active_key.age_ms`, `jwks.rotation.success` |
+| **Admin Activity** | `metrics` | `admin.*` |
+| **User Metrics** | `metrics` WHERE type='user' | Dynamic discovery |
 
 ## 7. Implementation Steps
 
@@ -320,7 +768,7 @@ We will build a dedicated "Observability" page in the Admin UI.
     *   **Phase 1 (Critical):** Pipeline Engine, Lua Pool, PermissionService. ✅
     *   **Phase 2 (Security):** JWKS Rotation, API Key Resolver, Admin Actions. ✅
     *   **Phase 3 (Integrations):** Webhooks, Email (Resend). ✅
-4.  **UI:** Build Admin Dashboard. ❌
+4.  **UI:** Build Admin Dashboard. ✅
 
 ## 8. Design Decisions & Constraints
 1.  **Duplication Risk:** Pipeline timing is already captured in `pipeline_traces`/`pipeline_spans`. Metrics should be derived where possible to avoid double-writing, or stored as aggregates.

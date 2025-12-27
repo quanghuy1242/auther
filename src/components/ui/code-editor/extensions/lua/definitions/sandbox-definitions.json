@@ -188,6 +188,68 @@
                     ],
                     "example": "helpers.trace(\"Validate\", { userId = context.userId }, function()\n  helpers.log(\"Validating...\")\nend)"
                 },
+                "metrics": {
+                    "kind": "table",
+                    "semanticType": "namespace",
+                    "description": "Record custom metrics from your pipeline scripts.",
+                    "fields": {
+                        "count": {
+                            "kind": "function",
+                            "signature": "helpers.metrics.count(name, value?, tags?)",
+                            "description": "Record a counter metric. Increments by value (default 1).",
+                            "params": [
+                                {
+                                    "name": "name",
+                                    "type": "string",
+                                    "description": "Metric name (e.g. 'invoice.processed')"
+                                },
+                                {
+                                    "name": "value",
+                                    "type": "number",
+                                    "optional": true,
+                                    "description": "Value to add (default: 1)"
+                                },
+                                {
+                                    "name": "tags",
+                                    "type": "table",
+                                    "optional": true,
+                                    "description": "Key-value pairs for dimensions"
+                                }
+                            ],
+                            "returns": {
+                                "type": "nil"
+                            },
+                            "example": "helpers.metrics.count(\"invoice.processed\", 1, { status = \"success\" })"
+                        },
+                        "gauge": {
+                            "kind": "function",
+                            "signature": "helpers.metrics.gauge(name, value, tags?)",
+                            "description": "Record a gauge metric. Sets an absolute value.",
+                            "params": [
+                                {
+                                    "name": "name",
+                                    "type": "string",
+                                    "description": "Metric name (e.g. 'queue.length')"
+                                },
+                                {
+                                    "name": "value",
+                                    "type": "number",
+                                    "description": "Current value"
+                                },
+                                {
+                                    "name": "tags",
+                                    "type": "table",
+                                    "optional": true,
+                                    "description": "Key-value pairs for dimensions"
+                                }
+                            ],
+                            "returns": {
+                                "type": "nil"
+                            },
+                            "example": "helpers.metrics.gauge(\"queue.length\", 42, { queue = \"orders\" })"
+                        }
+                    }
+                },
                 "getLastAsync": {
                     "kind": "function",
                     "signature": "helpers.getLastAsync()",

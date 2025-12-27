@@ -236,8 +236,8 @@ export class DefinitionLoader {
     /**
      * Get a specific helper function definition
      */
-    getHelper(name: string): FunctionDefinition | undefined {
-        const helpers = this.sandbox.sandbox.helpers.fields as Record<string, FunctionDefinition>;
+    getHelper(name: string): FieldDefinition | undefined {
+        const helpers = this.sandbox.sandbox.helpers.fields as Record<string, FieldDefinition>;
         return helpers[name];
     }
 

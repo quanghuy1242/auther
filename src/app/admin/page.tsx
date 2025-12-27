@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import * as React from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeading, PageContainer } from "@/components/layout";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, Badge, Icon } from "@/components/ui";
 import { StatCard } from "@/components/admin";
+import { DashboardCharts } from "@/components/admin/dashboard";
 import { getDashboardStats, getRecentSignIns } from "./actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
 
@@ -128,8 +130,8 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <Card>
+      {/* Recent Sign-ins */}
+      <Card className="mb-8">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Recent Sign-ins</h2>
@@ -165,6 +167,16 @@ export default async function AdminDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Metrics Dashboard Charts */}
+      <Suspense fallback={
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-pulse text-gray-400">Loading dashboard charts...</div>
+        </div>
+      }>
+        <DashboardCharts />
+      </Suspense>
     </PageContainer>
   );
 }
+
