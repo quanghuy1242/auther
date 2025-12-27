@@ -67,11 +67,21 @@ export function useMetricsStream({
     const retryCountRef = useRef(0);
     const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const enabledRef = useRef(enabled);
+    const onUpdateRef = useRef(onUpdate);
+    const periodRef = useRef(period);
 
-    // Keep enabledRef in sync
+    // Keep refs in sync
     useEffect(() => {
         enabledRef.current = enabled;
     }, [enabled]);
+
+    useEffect(() => {
+        onUpdateRef.current = onUpdate;
+    }, [onUpdate]);
+
+    useEffect(() => {
+        periodRef.current = period;
+    }, [period]);
 
     const disconnect = useCallback(() => {
         if (eventSourceRef.current) {
@@ -85,13 +95,16 @@ export function useMetricsStream({
         setIsConnected(false);
     }, []);
 
+    // Use ref to avoid circular dependency in onerror handler
+    const connectRef = useRef<() => void>(() => { });
+
     const connect = useCallback(() => {
         if (!enabledRef.current) return;
 
         // Disconnect existing connection
         disconnect();
 
-        const url = `/api/admin/metrics/stream?period=${period}`;
+        const url = `/api/admin/metrics/stream?period=${periodRef.current}`;
         const eventSource = new EventSource(url);
         eventSourceRef.current = eventSource;
 
@@ -105,7 +118,7 @@ export function useMetricsStream({
             try {
                 const parsedData = JSON.parse(event.data) as StreamedMetrics;
                 setData(parsedData);
-                onUpdate?.(parsedData);
+                onUpdateRef.current?.(parsedData);
             } catch (e) {
                 console.error("Failed to parse SSE data:", e);
             }
@@ -124,14 +137,19 @@ export function useMetricsStream({
 
                 retryTimeoutRef.current = setTimeout(() => {
                     if (enabledRef.current) {
-                        connect();
+                        connectRef.current();
                     }
                 }, delay);
             } else if (retryCountRef.current >= MAX_RETRIES) {
                 setError("Connection failed after maximum retries. Click to reconnect.");
             }
         };
-    }, [period, disconnect, onUpdate]);
+    }, [disconnect]);
+
+    // Keep connectRef in sync
+    useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
 
     const reconnect = useCallback(() => {
         retryCountRef.current = 0;
@@ -144,8 +162,8 @@ export function useMetricsStream({
         const handleVisibilityChange = () => {
             if (document.visibilityState === "hidden") {
                 disconnect();
-            } else if (document.visibilityState === "visible" && enabled) {
-                connect();
+            } else if (document.visibilityState === "visible" && enabledRef.current) {
+                connectRef.current();
             }
         };
 
@@ -153,7 +171,7 @@ export function useMetricsStream({
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
-    }, [enabled, connect, disconnect]);
+    }, [disconnect]);
 
     // Connect/disconnect based on enabled state
     useEffect(() => {
@@ -173,7 +191,8 @@ export function useMetricsStream({
         if (enabled && isConnected) {
             connect();
         }
-    }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [period]);
 
     return {
         isConnected,
