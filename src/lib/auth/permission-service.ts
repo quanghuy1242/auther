@@ -4,7 +4,41 @@ import { UserGroupRepository } from "@/lib/repositories/user-group-repository";
 import { UserRepository } from "@/lib/repositories/user-repository";
 import { LuaPolicyEngine } from "@/lib/auth/policy-engine";
 import { abacRepository } from "@/lib/repositories/abac-repository";
-import { metricsService } from "@/lib/services";
+import { metricsService } from "@/lib/services/metrics-service";
+
+export interface ListObjectsParams {
+  userId: string;
+  entityType: string;
+  permission: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListObjectsItem {
+  entityId: string;
+  abac_required: boolean;
+  tupleIds: string[];
+}
+
+export interface ListObjectsResult {
+  items: ListObjectsItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  total: number;
+  limit: number;
+  hasWildcardGrant: boolean;
+}
+
+export class ListObjectsRequestError extends Error {
+  status: number;
+  code: string;
+
+  constructor(code: string, message: string, status: number) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
 
 export class PermissionService {
   private tupleRepo: TupleRepository;
@@ -78,6 +112,7 @@ export class PermissionService {
 
       // 4. Expand Relations (Transitivity)
       const validRelations = this.getImpliedRelations(model.relations, requiredRelation);
+      let deniedByPolicy = false;
 
       // 5. Check Tuples (Graph Traversal)
       for (const subject of subjects) {
@@ -100,11 +135,15 @@ export class PermissionService {
               subjectType,
               subjectId,
             });
-            const duration = performance.now() - checkStart;
-            const result = allowed ? "allowed" : "denied";
-            void metricsService.histogram("authz.check.duration_ms", duration, { result, entity_type: entityType });
-            void metricsService.count("authz.decision.count", 1, { result, source: "tuple" });
-            return allowed;
+
+            if (allowed) {
+              const duration = performance.now() - checkStart;
+              void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
+              void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "tuple" });
+              return true;
+            }
+
+            deniedByPolicy = true;
           }
 
           // B. Wildcard Match
@@ -125,18 +164,23 @@ export class PermissionService {
               subjectType,
               subjectId,
             });
-            const duration = performance.now() - checkStart;
-            const result = allowed ? "allowed" : "denied";
-            void metricsService.histogram("authz.check.duration_ms", duration, { result, entity_type: entityType });
-            void metricsService.count("authz.decision.count", 1, { result, source: "wildcard_tuple" });
-            return allowed;
+
+            if (allowed) {
+              const duration = performance.now() - checkStart;
+              void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
+              void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "wildcard_tuple" });
+              return true;
+            }
+
+            deniedByPolicy = true;
           }
         }
       }
 
       const duration = performance.now() - checkStart;
-      void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: "no_tuple", entity_type: entityType });
-      void metricsService.count("authz.decision.count", 1, { result: "denied", source: "no_tuple" });
+      const denialReason = deniedByPolicy ? "policy_denied" : "no_tuple";
+      void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: denialReason, entity_type: entityType });
+      void metricsService.count("authz.decision.count", 1, { result: "denied", source: denialReason });
       return false;
     } catch (error) {
       console.error("PermissionService.checkPermission error:", error);
@@ -216,6 +260,66 @@ export class PermissionService {
     }
 
     // Metric: ReBAC traversal depth and fan-out
+    void metricsService.histogram("authz.rebac.traversal_depth", traversalDepth, { entity_type: type });
+    void metricsService.histogram("authz.rebac.subjects_expanded", subjects.size, { entity_type: type });
+
+    return Array.from(subjects.values());
+  }
+
+  /**
+  * Strict variant of subject expansion for fail-closed paths.
+  * Throws on data access errors instead of silently returning partial expansion.
+  */
+  private async expandSubjectsStrict(type: string, id: string): Promise<Array<{ type: string, id: string }>> {
+    const subjects = new Map<string, { type: string, id: string }>();
+    const queue = [{ type, id }];
+    const key = (t: string, i: string) => `${t}:${i}`;
+    let traversalDepth = 0;
+
+    subjects.set(key(type, id), { type, id });
+
+    if (type === "user") {
+      const legacyGroups = await this.groupRepo.getUserGroupsStrict(id);
+      for (const g of legacyGroups) {
+        const k = key("group", g.id);
+        if (!subjects.has(k)) {
+          subjects.set(k, { type: "group", id: g.id });
+          queue.push({ type: "group", id: g.id });
+        }
+      }
+    }
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const memberships = await this.tupleRepo.findBySubjectStrict(current.type, current.id);
+
+      for (const tuple of memberships) {
+        const model = await this.modelService.getModelStrict(tuple.entityType);
+
+        if (!model) continue;
+
+        const relDef = model.relations[tuple.relation];
+        let isHierarchy = false;
+
+        if (relDef && !Array.isArray(relDef) && typeof relDef === "object") {
+          if (relDef.subjectParams?.hierarchy) {
+            isHierarchy = true;
+          }
+        } else if (tuple.entityType === "group" && tuple.relation === "member") {
+          isHierarchy = true;
+        }
+
+        if (isHierarchy) {
+          const k = key(tuple.entityType, tuple.entityId);
+          if (!subjects.has(k)) {
+            subjects.set(k, { type: tuple.entityType, id: tuple.entityId });
+            queue.push({ type: tuple.entityType, id: tuple.entityId });
+          }
+        }
+      }
+      traversalDepth++;
+    }
+
     void metricsService.histogram("authz.rebac.traversal_depth", traversalDepth, { entity_type: type });
     void metricsService.histogram("authz.rebac.subjects_expanded", subjects.size, { entity_type: type });
 
@@ -391,6 +495,194 @@ export class PermissionService {
   }
 
   /**
+   * List entity IDs a user can access for a specific permission and entity type.
+   * This is the list-objects primitive used by downstream read-model sync and reconciliation.
+   */
+  async listObjectsWithABACInfo(params: ListObjectsParams): Promise<ListObjectsResult> {
+    const limit = Math.min(200, Math.max(1, params.limit ?? 100));
+    const model = await this.modelService.getModel(params.entityType);
+
+    if (!model) {
+      throw new ListObjectsRequestError(
+        "unknown_entity_type",
+        `No authorization model found for entity type '${params.entityType}'`,
+        404
+      );
+    }
+
+    const permissionDefinition = model.permissions[params.permission];
+    if (!permissionDefinition) {
+      throw new ListObjectsRequestError(
+        "unknown_permission",
+        `Permission '${params.permission}' is not defined for entity type '${params.entityType}'`,
+        400
+      );
+    }
+
+    const permissionHasPolicy =
+      !!permissionDefinition.policy && permissionDefinition.policyEngine === "lua";
+
+    const subjects = await this.expandSubjectsStrict("user", params.userId);
+    const tuples = await this.tupleRepo.findBySubjectsAndEntityTypeStrict(
+      subjects,
+      params.entityType
+    );
+
+    const pagedItems: ListObjectsItem[] = [];
+    let total = 0;
+    let currentEntity: {
+      entityId: string;
+      abac_required: boolean;
+      tupleIds: Set<string>;
+    } | null = null;
+    let hasWildcardGrant = false;
+
+    const flushCurrentEntity = () => {
+      if (!currentEntity) {
+        return;
+      }
+
+      total += 1;
+
+      if (!params.cursor || currentEntity.entityId > params.cursor) {
+        if (pagedItems.length < limit + 1) {
+          pagedItems.push({
+            entityId: currentEntity.entityId,
+            abac_required: currentEntity.abac_required,
+            tupleIds: Array.from(currentEntity.tupleIds),
+          });
+        }
+      }
+
+      currentEntity = null;
+    };
+
+    for (const tuple of tuples) {
+      if (
+        !this.relationGrantsPermission(
+          tuple.relation,
+          permissionDefinition.relation,
+          model.relations
+        )
+      ) {
+        continue;
+      }
+
+      const tupleRequiresABAC = permissionHasPolicy || !!tuple.condition;
+
+      if (tuple.entityId === "*") {
+        hasWildcardGrant = true;
+        continue;
+      }
+
+      if (!currentEntity || currentEntity.entityId !== tuple.entityId) {
+        flushCurrentEntity();
+        currentEntity = {
+          entityId: tuple.entityId,
+          abac_required: tupleRequiresABAC,
+          tupleIds: new Set([tuple.id]),
+        };
+        continue;
+      }
+
+      currentEntity.abac_required = currentEntity.abac_required || tupleRequiresABAC;
+      currentEntity.tupleIds.add(tuple.id);
+    }
+
+    flushCurrentEntity();
+
+    const hasMore = pagedItems.length > limit;
+    const items = hasMore ? pagedItems.slice(0, limit) : pagedItems;
+    const nextCursor = hasMore ? items[items.length - 1]?.entityId ?? null : null;
+
+    return {
+      items,
+      nextCursor,
+      hasMore,
+      total,
+      limit,
+      hasWildcardGrant,
+    };
+  }
+
+  /**
+   * Resolve all user members of a group, including nested groups (BFS).
+   */
+  async getExpandedGroupMembers(groupId: string): Promise<string[]> {
+    try {
+      return await this.getExpandedGroupMembersStrict(groupId);
+    } catch (error) {
+      console.error("PermissionService.getExpandedGroupMembers error:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Strict expanded member resolution for internal APIs: throws on DB/query failures.
+   */
+  async getExpandedGroupMembersStrict(groupId: string): Promise<string[]> {
+    try {
+      const groupModel = await this.modelService.getModel("group");
+      const hierarchyRelations = new Set<string>();
+
+      if (groupModel?.relations) {
+        for (const [relationName, relationDefinition] of Object.entries(groupModel.relations)) {
+          if (
+            !Array.isArray(relationDefinition) &&
+            typeof relationDefinition === "object" &&
+            relationDefinition.subjectParams?.hierarchy
+          ) {
+            hierarchyRelations.add(relationName);
+          }
+        }
+      }
+
+      // Legacy fallback only when hierarchy metadata is absent.
+      if (hierarchyRelations.size === 0) {
+        hierarchyRelations.add("member");
+      }
+
+      const visitedGroups = new Set<string>([groupId]);
+      const queue = [groupId];
+      const members = new Set<string>();
+
+      while (queue.length > 0) {
+        const currentGroupId = queue.shift();
+        if (!currentGroupId) {
+          continue;
+        }
+
+        const directMembers = await this.groupRepo.getMembersStrict(currentGroupId);
+        for (const memberId of directMembers) {
+          members.add(memberId);
+        }
+
+        const tuples = await this.tupleRepo.findByEntityStrict("group", currentGroupId);
+        for (const tuple of tuples) {
+          if (!hierarchyRelations.has(tuple.relation)) {
+            continue;
+          }
+
+          if (tuple.subjectType === "user") {
+            members.add(tuple.subjectId);
+            continue;
+          }
+
+          if (tuple.subjectType === "group" && !visitedGroups.has(tuple.subjectId)) {
+            visitedGroups.add(tuple.subjectId);
+            queue.push(tuple.subjectId);
+          }
+        }
+      }
+
+      return Array.from(members);
+    } catch (error) {
+      console.error("PermissionService.getExpandedGroupMembersStrict error:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Get the highest platform access level for a user on a client.
    * Returns: 'owner' | 'admin' | 'use' | null
    * Supports group inheritance.
@@ -459,10 +751,16 @@ export class PermissionService {
   private relationGrantsPermission(
     grantedRelation: string,
     requiredRelation: string,
-    relations: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>
+    relations: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>,
+    visited: Set<string> = new Set()
   ): boolean {
     // Direct match
     if (grantedRelation === requiredRelation) return true;
+
+    if (visited.has(requiredRelation)) {
+      return false;
+    }
+    visited.add(requiredRelation);
 
     // Check if grantedRelation implies requiredRelation
     const def = relations[requiredRelation];
@@ -478,7 +776,7 @@ export class PermissionService {
 
     // Transitivity
     for (const implier of impliedBy) {
-      if (this.relationGrantsPermission(grantedRelation, implier, relations)) {
+      if (this.relationGrantsPermission(grantedRelation, implier, relations, visited)) {
         return true;
       }
     }

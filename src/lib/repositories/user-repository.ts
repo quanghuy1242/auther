@@ -76,6 +76,29 @@ export class UserRepository
   }
 
   /**
+   * Find user by email address (case-insensitive)
+   */
+  async findByEmail(email: string): Promise<UserEntity | null> {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail) {
+        return null;
+      }
+
+      const [result] = await db
+        .select()
+        .from(user)
+        .where(sql`lower(${user.email}) = ${normalizedEmail}`)
+        .limit(1);
+
+      return result || null;
+    } catch (error) {
+      console.error("UserRepository.findByEmail error:", error);
+      return null;
+    }
+  }
+
+  /**
    * Find multiple users by IDs
    */
   async findByIds(userIds: string[]): Promise<UserEntity[]> {

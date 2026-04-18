@@ -18,6 +18,7 @@ export const PROCESSED_WEBHOOK_SET_KEY = "webhooks:processed";
 
 export const WEBHOOK_ORIGIN_BETTER_AUTH = "better-auth" as const;
 export const WEBHOOK_ORIGIN_PAYLOAD = "payload" as const;
+export const WEBHOOK_ORIGIN_AUTHER = "auther" as const;
 
 // ============================================================================
 // WEBHOOK EVENT TYPES
@@ -50,6 +51,15 @@ export const WEBHOOK_EVENT_TYPES = [
   // User-Client Access events
   { value: "access.granted", label: "Access Granted", description: "Triggered when user grants access to an OAuth client" },
   { value: "access.revoked", label: "Access Revoked", description: "Triggered when user revokes client access" },
+
+  // Authorization grant events
+  { value: "grant.created", label: "Grant Created", description: "Triggered when a permission tuple is created" },
+  { value: "grant.revoked", label: "Grant Revoked", description: "Triggered when a permission tuple is revoked" },
+  { value: "grant.condition.updated", label: "Grant Condition Updated", description: "Triggered when a grant condition is added, changed, or removed" },
+
+  // Group membership events
+  { value: "group.member.added", label: "Group Member Added", description: "Triggered when a user is added to a group" },
+  { value: "group.member.removed", label: "Group Member Removed", description: "Triggered when a user is removed from a group" },
 ] as const;
 
 export type WebhookEventType = typeof WEBHOOK_EVENT_TYPES[number]["value"];

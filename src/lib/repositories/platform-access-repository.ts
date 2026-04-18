@@ -106,23 +106,34 @@ export class RegistrationContextRepository {
         relation: string
     ): Promise<number> {
         try {
-            // Need to query all contexts and check their grants JSON
-            const allContexts = await db.select().from(registrationContexts);
-
-            let count = 0;
-            for (const ctx of allContexts) {
-                const grants = ctx.grants as Array<{ entityTypeId: string; relation: string }>;
-                for (const grant of grants) {
-                    if (grant.entityTypeId === entityTypeId && grant.relation === relation) {
-                        count++;
-                    }
-                }
-            }
-            return count;
+            return await this.countGrantsByEntityTypeIdAndRelationStrict(entityTypeId, relation);
         } catch (error) {
             console.error("RegistrationContextRepository.countGrantsByEntityTypeIdAndRelation error:", error);
             return 0;
         }
+    }
+
+    /**
+     * Strict grant counting for dependency safety checks.
+     * Throws on DB errors so callers can fail closed.
+     */
+    async countGrantsByEntityTypeIdAndRelationStrict(
+        entityTypeId: string,
+        relation: string
+    ): Promise<number> {
+        const allContexts = await db.select().from(registrationContexts);
+
+        let count = 0;
+        for (const ctx of allContexts) {
+            const grants = ctx.grants as Array<{ entityTypeId: string; relation: string }>;
+            for (const grant of grants) {
+                if (grant.entityTypeId === entityTypeId && grant.relation === relation) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
     }
 }
 

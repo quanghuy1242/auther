@@ -16,27 +16,32 @@ export class AuthorizationModelService {
 
   async getModel(entityType: string): Promise<AuthorizationModelDefinition | null> {
     try {
-      const [record] = await db
-        .select()
-        .from(authorizationModels)
-        .where(eq(authorizationModels.entityType, entityType));
-
-      if (record) {
-        // The definition is stored as JSON in the DB
-        return record.definition as AuthorizationModelDefinition;
-      }
-
-      // Fallback: Check System Key Models
-      const systemModel = SYSTEM_MODELS.find(m => m.entityType === entityType);
-      if (systemModel) {
-        return systemModel;
-      }
-
-      return null;
+      return await this.getModelStrict(entityType);
     } catch (error) {
       console.error("AuthorizationModelService.getModel error:", error);
       return null;
     }
+  }
+
+  /**
+   * Strict model lookup that throws on DB/query failures.
+   */
+  async getModelStrict(entityType: string): Promise<AuthorizationModelDefinition | null> {
+    const [record] = await db
+      .select()
+      .from(authorizationModels)
+      .where(eq(authorizationModels.entityType, entityType));
+
+    if (record) {
+      return record.definition as AuthorizationModelDefinition;
+    }
+
+    const systemModel = SYSTEM_MODELS.find(m => m.entityType === entityType);
+    if (systemModel) {
+      return systemModel;
+    }
+
+    return null;
   }
 
   async upsertModel(entityType: string, definition: unknown): Promise<void> {
@@ -44,15 +49,27 @@ export class AuthorizationModelService {
       // 1. Validate definition against Zod schema
       const parsedDefinition = authorizationModelSchema.parse(definition);
 
-      // 2. Check for dependency safety
-      const existingModel = await this.getModel(entityType);
+      const [persistedModelRecord] = await db
+        .select({
+          id: authorizationModels.id,
+          definition: authorizationModels.definition,
+        })
+        .from(authorizationModels)
+        .where(eq(authorizationModels.entityType, entityType));
 
+      const existingPersistedModel = persistedModelRecord
+        ? (persistedModelRecord.definition as AuthorizationModelDefinition)
+        : null;
+      const fallbackSystemModel = SYSTEM_MODELS.find(m => m.entityType === entityType) ?? null;
+      const existingModel = existingPersistedModel ?? fallbackSystemModel;
+
+      // 2. Check for dependency safety
       if (existingModel) {
         await this.checkDependencySafety(entityType, existingModel, parsedDefinition);
       }
 
       // 3. Upsert
-      if (existingModel) {
+      if (persistedModelRecord) {
         await db
           .update(authorizationModels)
           .set({
@@ -96,7 +113,7 @@ export class AuthorizationModelService {
     for (const relation of oldRelations) {
       if (!newRelations.has(relation)) {
         // Relation was removed. Check if any tuples use it.
-        const tupleCount = await this.tupleRepo.countByRelation(entityType, relation);
+        const tupleCount = await this.tupleRepo.countByRelationStrict(entityType, relation);
         if (tupleCount > 0) {
           throw new Error(
             `Cannot remove relation '${relation}' from entity '${entityType}' because there are ${tupleCount} active permission tuples relying on it.`
@@ -105,7 +122,7 @@ export class AuthorizationModelService {
 
         // Check if any registration context grants use it
         if (modelId) {
-          const grantCount = await registrationContextRepo.countGrantsByEntityTypeIdAndRelation(modelId, relation);
+          const grantCount = await registrationContextRepo.countGrantsByEntityTypeIdAndRelationStrict(modelId, relation);
           if (grantCount > 0) {
             throw new Error(
               `Cannot remove relation '${relation}' from entity '${entityType}' because there are ${grantCount} registration context grants using it.`

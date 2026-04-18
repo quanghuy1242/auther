@@ -2,6 +2,10 @@ import { db } from "@/lib/db";
 import { userGroup, groupMembership } from "@/db/schema";
 import { eq, desc, inArray, and, like, or, count } from "drizzle-orm";
 import { generateApiKeyId } from "@/lib/utils/api-key";
+import {
+  emitGroupMemberAddedEvent,
+  emitGroupMemberRemovedEvent,
+} from "@/lib/webhooks/grant-events";
 
 export interface UserGroupEntity {
   id: string;
@@ -214,8 +218,12 @@ export class UserGroupRepository {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      await db.delete(userGroup).where(eq(userGroup.id, id));
-      return true;
+      const removed = await db
+        .delete(userGroup)
+        .where(eq(userGroup.id, id))
+        .returning({ id: userGroup.id });
+
+      return removed.length > 0;
     } catch (error) {
       console.error("UserGroupRepository.delete error:", error);
       return false;
@@ -225,30 +233,61 @@ export class UserGroupRepository {
   /**
    * Add a user to a group
    */
-  async addMember(groupId: string, userId: string): Promise<void> {
-    const id = `ugm_${generateApiKeyId()}`;
+  async addMember(groupId: string, userId: string): Promise<boolean> {
+    const existing = await db
+      .select({ id: groupMembership.id })
+      .from(groupMembership)
+      .where(
+        and(
+          eq(groupMembership.groupId, groupId),
+          eq(groupMembership.userId, userId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      return false;
+    }
+
+    const id = `ugm_${groupId}_${userId}`;
     const now = new Date();
 
-    await db.insert(groupMembership).values({
-      id,
-      groupId,
-      userId,
-      createdAt: now,
-    });
+    const inserted = await db
+      .insert(groupMembership)
+      .values({
+        id,
+        groupId,
+        userId,
+        createdAt: now,
+      })
+      .onConflictDoNothing({ target: groupMembership.id })
+      .returning({ id: groupMembership.id });
+
+    if (inserted.length === 0) {
+      return false;
+    }
+
+    void emitGroupMemberAddedEvent({ groupId, userId });
+    return true;
   }
 
   /**
    * Remove a user from a group
    */
   async removeMember(groupId: string, userId: string): Promise<void> {
-    await db
+    const removed = await db
       .delete(groupMembership)
       .where(
         and(
           eq(groupMembership.groupId, groupId),
           eq(groupMembership.userId, userId)
         )
-      );
+      )
+      .returning({ id: groupMembership.id });
+
+    if (removed.length > 0) {
+      void emitGroupMemberRemovedEvent({ groupId, userId });
+    }
   }
 
   /**
@@ -256,12 +295,7 @@ export class UserGroupRepository {
    */
   async getMembers(groupId: string): Promise<string[]> {
     try {
-      const members = await db
-        .select({ userId: groupMembership.userId })
-        .from(groupMembership)
-        .where(eq(groupMembership.groupId, groupId));
-
-      return members.map(m => m.userId);
+      return await this.getMembersStrict(groupId);
     } catch (error) {
       console.error("UserGroupRepository.getMembers error:", error);
       return [];
@@ -269,29 +303,48 @@ export class UserGroupRepository {
   }
 
   /**
+   * Get all member user IDs for a group and throw on DB errors.
+   */
+  async getMembersStrict(groupId: string): Promise<string[]> {
+    const members = await db
+      .select({ userId: groupMembership.userId })
+      .from(groupMembership)
+      .where(eq(groupMembership.groupId, groupId));
+
+    return Array.from(new Set(members.map(m => m.userId)));
+  }
+
+  /**
    * Get all groups a user belongs to
    */
   async getUserGroups(userId: string): Promise<UserGroupEntity[]> {
     try {
-      const memberships = await db
-        .select({ groupId: groupMembership.groupId })
-        .from(groupMembership)
-        .where(eq(groupMembership.userId, userId));
-
-      if (memberships.length === 0) {
-        return [];
-      }
-
-      const groupIds = memberships.map(m => m.groupId);
-      const groups = await db
-        .select()
-        .from(userGroup)
-        .where(inArray(userGroup.id, groupIds));
-
-      return groups.map(group => this.toEntity(group));
+      return await this.getUserGroupsStrict(userId);
     } catch (error) {
       console.error("UserGroupRepository.getUserGroups error:", error);
       return [];
     }
+  }
+
+  /**
+   * Get all groups a user belongs to and throw on DB errors.
+   */
+  async getUserGroupsStrict(userId: string): Promise<UserGroupEntity[]> {
+    const memberships = await db
+      .select({ groupId: groupMembership.groupId })
+      .from(groupMembership)
+      .where(eq(groupMembership.userId, userId));
+
+    if (memberships.length === 0) {
+      return [];
+    }
+
+    const groupIds = memberships.map(m => m.groupId);
+    const groups = await db
+      .select()
+      .from(userGroup)
+      .where(inArray(userGroup.id, groupIds));
+
+    return groups.map(group => this.toEntity(group));
   }
 }

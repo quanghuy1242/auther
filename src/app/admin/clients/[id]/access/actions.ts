@@ -40,6 +40,14 @@ export async function updateClientAccessPolicy(
     await guards.clients.view();
 
     const validated = updateClientPolicySchema.parse(data);
+    const { canManageAccess } = await getCurrentUserAccessLevel(validated.clientId);
+
+    if (!canManageAccess) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to update client access policy",
+      };
+    }
 
     // Find or create metadata
     let metadata = await oauthClientMetadataRepository.findByClientId(
@@ -234,7 +242,7 @@ export async function checkResourceDependencies(
   } catch (error) {
     console.error("checkResourceDependencies error:", error);
     return {
-      hasConflicts: false,
+      hasConflicts: true,
       affectedKeys: [],
       defaultPermissionConflicts: [],
     };
@@ -349,6 +357,40 @@ export async function createClientApiKey(
       };
     }
 
+    const preparedGrants: Array<{
+      entityType: string;
+      entityTypeId: string;
+      relation: string;
+    }> = [];
+
+    for (const [resource, actions] of Object.entries(validated.permissions)) {
+      const entityType = `client_${validated.clientId}:${resource}`;
+      const model = await authorizationModelRepository.findByEntityType(entityType);
+
+      if (!model) {
+        return {
+          success: false,
+          error: `Entity type '${resource}' not found in authorization model.`,
+        };
+      }
+
+      const validRelations = new Set(Object.keys(model.definition.relations));
+      for (const action of actions) {
+        if (!validRelations.has(action)) {
+          return {
+            success: false,
+            error: `Relation '${action}' is not defined in the authorization model for '${resource}'.`,
+          };
+        }
+
+        preparedGrants.push({
+          entityType,
+          entityTypeId: model.id,
+          relation: action,
+        });
+      }
+    }
+
     // 2. Create API key using Better Auth
     // IMPORTANT: Pass empty permissions to Better Auth so it doesn't do its own internal checks.
     // We rely on Tuples for permission storage.
@@ -379,25 +421,58 @@ export async function createClientApiKey(
     // 3. Create Tuples for requested permissions
     // permissions format: { "invoice": ["read", "write"] }
     // Tuple: (Entity="client_{id}:invoice", Relation="read", Subject="apikey:{keyId}")
-    const promises: Promise<unknown>[] = [];
-
-    for (const [resource, actions] of Object.entries(validated.permissions)) {
-      const entityType = `client_${validated.clientId}:${resource}`;
-
-      for (const action of actions) {
-        promises.push(
-          tupleRepository.create({
-            entityType,
-            entityId: "*", // Or specific ID if we supported specific resource grants here (usually wildcard for keys)
-            relation: action,
-            subjectType: "apikey",
-            subjectId: result.id,
-          })
-        );
+    try {
+      for (const grant of preparedGrants) {
+        await tupleRepository.createIfNotExists({
+          entityType: grant.entityType,
+          entityTypeId: grant.entityTypeId,
+          entityId: "*",
+          relation: grant.relation,
+          subjectType: "apikey",
+          subjectId: result.id,
+        });
       }
-    }
+    } catch (tupleError) {
+      console.error("createClientApiKey tuple assignment error:", tupleError);
 
-    await Promise.all(promises);
+      let rollbackComplete = true;
+
+      try {
+        await tupleRepository.deleteBySubject("apikey", result.id);
+      } catch (rollbackError) {
+        rollbackComplete = false;
+        console.error("createClientApiKey tuple rollback error:", rollbackError);
+      }
+
+      try {
+        const requestHeaders = await headers();
+        const revoked = await auth.api.deleteApiKey({
+          body: { keyId: result.id },
+          headers: requestHeaders,
+        });
+
+        const revokeSucceeded =
+          revoked &&
+          typeof revoked === "object" &&
+          "success" in revoked
+            ? Boolean((revoked as { success?: boolean }).success)
+            : Boolean(revoked);
+
+        if (!revokeSucceeded) {
+          rollbackComplete = false;
+        }
+      } catch (rollbackError) {
+        rollbackComplete = false;
+        console.error("createClientApiKey API key rollback error:", rollbackError);
+      }
+
+      return {
+        success: false,
+        error: rollbackComplete
+          ? "Failed to assign API key permissions. API key creation was rolled back."
+          : "Failed to assign API key permissions and rollback was incomplete. Manual cleanup may be required.",
+      };
+    }
 
     return {
       success: true,
@@ -423,10 +498,33 @@ export async function createClientApiKey(
 export async function revokeClientApiKey(keyId: string): Promise<AssignUserResult> {
   try {
     await guards.clients.view();
-
-    // 1. Revoke in Better Auth (sets status to disabled/revoked?)
-    // Better Auth's revokeApiKey usually deletes or disables.
     const _headers = await headers();
+
+    const allKeys = await auth.api.listApiKeys({ headers: _headers });
+    const key = Array.isArray(allKeys) ? allKeys.find((item) => item.id === keyId) : null;
+
+    if (!key) {
+      return {
+        success: false,
+        error: "API key not found",
+      };
+    }
+
+    const clientId = key.metadata?.oauth_client_id;
+    if (!clientId || typeof clientId !== "string") {
+      return {
+        success: false,
+        error: "API key is missing client ownership metadata",
+      };
+    }
+
+    const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
+    if (!canManageAccess) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to revoke API keys",
+      };
+    }
 
     // 1. Revoke in Better Auth (sets status to disabled/revoked?)
     // Better Auth's revokeApiKey usually deletes or disables.
@@ -470,7 +568,7 @@ export async function createUserGroup(
   data: z.infer<typeof createGroupSchema>
 ): Promise<AssignUserResult & { groupId?: string }> {
   try {
-    await guards.clients.view();
+    await guards.clients.manageAccess();
 
     const validated = createGroupSchema.parse(data);
 
@@ -506,18 +604,15 @@ export async function addUserToGroup(
   groupId: string
 ): Promise<AssignUserResult> {
   try {
-    await guards.clients.view();
+    await guards.clients.manageAccess();
 
-    // Check if user is already in group
-    const groups = await userGroupRepository.getUserGroups(userId);
-    if (groups.some((g) => g.id === groupId)) {
+    const added = await userGroupRepository.addMember(groupId, userId);
+    if (!added) {
       return {
         success: false,
         error: "User is already in this group",
       };
     }
-
-    await userGroupRepository.addMember(groupId, userId);
 
     return { success: true };
   } catch (error) {
@@ -537,7 +632,7 @@ export async function removeUserFromGroup(
   groupId: string
 ): Promise<AssignUserResult> {
   try {
-    await guards.clients.view();
+    await guards.clients.manageAccess();
 
     await userGroupRepository.removeMember(groupId, userId);
 
@@ -556,7 +651,7 @@ export async function removeUserFromGroup(
  */
 export async function getAllGroups() {
   try {
-    await guards.clients.view();
+    await guards.clients.manageAccess();
 
     const groups = await userGroupRepository.findAll();
 
@@ -583,7 +678,7 @@ export async function getAllGroups() {
  */
 export async function getUserGroups(userId: string) {
   try {
-    await guards.clients.view();
+    await guards.clients.manageAccess();
     return await userGroupRepository.getUserGroups(userId);
   } catch (error) {
     console.error("getUserGroups error:", error);
@@ -723,20 +818,7 @@ export async function grantPlatformAccess(
       };
     }
 
-    // Ensure a single platform relation per subject: remove other relations before creating
-    const platformRelations: PlatformRelation[] = ["owner", "admin", "use"];
-    for (const rel of platformRelations) {
-      if (rel === relation) continue;
-      await tupleRepository.delete({
-        entityType: "oauth_client",
-        entityId: clientId,
-        relation: rel,
-        subjectType,
-        subjectId,
-      });
-    }
-
-    const { created } = await tupleRepository.createIfNotExists({
+    const { created, removedCount } = await tupleRepository.replaceSubjectRelationAtomic({
       entityType: "oauth_client",
       entityId: clientId,
       relation,
@@ -744,7 +826,7 @@ export async function grantPlatformAccess(
       subjectId,
     });
 
-    if (!created) {
+    if (!created && removedCount === 0) {
       return {
         success: true,
         error: "Access already exists"
@@ -770,17 +852,33 @@ async function getScopedPermissionCount(
   subjectType: "user" | "group",
   subjectId: string
 ): Promise<number> {
-  // Search for all entity types belonging to this client
-  // Pattern: client_{clientId}*
-  // This matches both "client_{clientId}" (legacy) and "client_{clientId}:{typeName}"
-  const scopedEntityTypePrefix = `client_${clientId}`;
+  const legacyEntityType = `client_${clientId}`;
+  const scopedEntityTypePrefix = `${legacyEntityType}:`;
 
-  // Note: tupleRepository.findByEntityType performs an exact match.
-  // We need a new method or logic to find by prefix, or we iterate all models.
-  // For now, let's assume we can fetch all tuples for the subject and filter by entity type prefix.
   const tuples = await tupleRepository.findBySubject(subjectType, subjectId);
 
-  return tuples.filter(t => t.entityType.startsWith(scopedEntityTypePrefix)).length;
+  return tuples.filter(
+    (t) =>
+      t.entityType === legacyEntityType ||
+      t.entityType.startsWith(scopedEntityTypePrefix)
+  ).length;
+}
+
+async function getScopedTuplesForClient(clientId: string): Promise<Tuple[]> {
+  const legacyEntityType = `client_${clientId}`;
+  const namespacedPrefix = `${legacyEntityType}:`;
+
+  const [legacyTuples, namespacedTuples] = await Promise.all([
+    tupleRepository.findByEntityType(legacyEntityType),
+    tupleRepository.findByEntityTypePrefix(namespacedPrefix),
+  ]);
+
+  const deduped = new Map<string, Tuple>();
+  for (const tuple of [...legacyTuples, ...namespacedTuples]) {
+    deduped.set(tuple.id, tuple);
+  }
+
+  return Array.from(deduped.values());
 }
 
 /**
@@ -796,6 +894,14 @@ export async function revokePlatformAccess(
 ): Promise<AssignUserResult & { scopedPermissionsRevoked?: number }> {
   try {
     await guards.clients.view();
+
+    const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
+    if (!canManageAccess) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to revoke access",
+      };
+    }
 
     // Check for scoped permissions before revoking
     const scopedCount = await getScopedPermissionCount(clientId, subjectType, subjectId);
@@ -826,11 +932,11 @@ export async function revokePlatformAccess(
     // C6: Cascade - revoke scoped permissions if requested
     let scopedPermissionsRevoked = 0;
     if (cascade && scopedCount > 0) {
-      const scopedEntityType = `client_${clientId}`;
-      scopedPermissionsRevoked = await tupleRepository.deleteBySubjectAndEntityType(
+      const scopedEntityTypePrefix = `client_${clientId}:`;
+      scopedPermissionsRevoked = await tupleRepository.deleteBySubjectAndEntityTypePrefix(
         subjectType,
         subjectId,
-        scopedEntityType
+        scopedEntityTypePrefix
       );
     }
 
@@ -1058,6 +1164,14 @@ export async function deleteEntityTypeModel(
   try {
     await guards.clients.view();
 
+    const { canEditModel } = await getCurrentUserAccessLevel(clientId);
+    if (!canEditModel) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to delete entity types",
+      };
+    }
+
     const result = await authorizationModelRepository.deleteEntityTypeForClient(
       clientId,
       entityTypeName
@@ -1090,6 +1204,14 @@ export async function renameEntityType(
 ): Promise<AssignUserResult> {
   try {
     await guards.clients.view();
+
+    const { canEditModel } = await getCurrentUserAccessLevel(clientId);
+    if (!canEditModel) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to rename entity types",
+      };
+    }
 
     const oldFullType = `client_${clientId}:${oldName}`;
     const newFullType = `client_${clientId}:${newName}`;
@@ -1161,6 +1283,15 @@ export async function updateAuthorizationModel(
 ): Promise<AssignUserResult & { warnings?: string[] }> {
   try {
     await guards.clients.view();
+
+    const { canEditModel } = await getCurrentUserAccessLevel(clientId);
+    if (!canEditModel) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to update the authorization model",
+      };
+    }
+
     const entityType = `client_${clientId}`;
     const validation = await authorizationModelRepository.preValidateUpdate(
       entityType,
@@ -1212,12 +1343,13 @@ export async function getScopedPermissions(clientId: string): Promise<ScopedPerm
     // Use prefix match to find all entity types for this client (e.g., client_abc123:invoice, client_abc123:report)
     const scopedEntityTypePrefix = `client_${clientId}:`;
 
-    // Single query: JOIN tuples with authorization_models to get entity type names
-    // This avoids N+1 and gets real-time names even after rename
+    // Single query: LEFT JOIN tuples with authorization_models to include both
+    // model-linked tuples and legacy tuples that do not have entityTypeId.
     const tuplesWithModels = await db
       .select({
         id: accessTuples.id,
-        entityType: authorizationModels.entityType, // Get fresh name from auth model
+        resolvedEntityType: authorizationModels.entityType,
+        tupleEntityType: accessTuples.entityType,
         entityId: accessTuples.entityId,
         relation: accessTuples.relation,
         subjectType: accessTuples.subjectType,
@@ -1226,11 +1358,16 @@ export async function getScopedPermissions(clientId: string): Promise<ScopedPerm
         createdAt: accessTuples.createdAt,
       })
       .from(accessTuples)
-      .innerJoin(
+      .leftJoin(
         authorizationModels,
         eq(accessTuples.entityTypeId, authorizationModels.id)
       )
-      .where(sql`${authorizationModels.entityType} LIKE ${scopedEntityTypePrefix + '%'}`);
+      .where(
+        sql`(
+          ${authorizationModels.entityType} LIKE ${scopedEntityTypePrefix + '%'}
+          OR ${accessTuples.entityType} LIKE ${scopedEntityTypePrefix + '%'}
+        )`
+      );
 
     // Collect user and group IDs for lookup
     const userIds = tuplesWithModels
@@ -1270,8 +1407,10 @@ export async function getScopedPermissions(clientId: string): Promise<ScopedPerm
     }
 
     return tuplesWithModels.map(t => {
+      const effectiveEntityType = t.resolvedEntityType ?? t.tupleEntityType;
+
       // Extract entity type name from full entity_type (e.g., "client_xxx:entity_1" -> "entity_1")
-      const entityTypeParts = t.entityType.split(":");
+      const entityTypeParts = effectiveEntityType.split(":");
       const entityTypeName = entityTypeParts.length > 1 ? entityTypeParts[1] : entityTypeParts[0];
 
       return {
@@ -1370,6 +1509,63 @@ export async function grantScopedPermission(
     });
 
     if (!created) {
+      if (!tuple.entityTypeId) {
+        const [backfilled] = await db
+          .update(accessTuples)
+          .set({
+            entityTypeId: model.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(accessTuples.id, tuple.id))
+          .returning({ id: accessTuples.id });
+
+        if (!backfilled) {
+          return {
+            success: false,
+            error: "Failed to synchronize scoped permission metadata",
+          };
+        }
+      }
+
+      const normalizedRequestedCondition =
+        condition === undefined
+          ? undefined
+          : condition.trim().length > 0
+            ? condition
+            : null;
+      const existingCondition = tuple.condition ?? null;
+
+      if (
+        normalizedRequestedCondition !== undefined &&
+        normalizedRequestedCondition !== existingCondition
+      ) {
+        const updated = await tupleRepository.updateConditionById(
+          tuple.id,
+          normalizedRequestedCondition
+        );
+
+        if (!updated) {
+          return {
+            success: false,
+            error: "Failed to update existing permission condition",
+          };
+        }
+
+        if (normalizedRequestedCondition) {
+          const { abacRepository } = await import("@/lib/repositories/abac-repository");
+          abacRepository.savePolicyVersion({
+            entityType: fullEntityType,
+            permissionName: relation,
+            policyLevel: "tuple",
+            tupleId: tuple.id,
+            policyScript: normalizedRequestedCondition,
+            changedByType: "user",
+          }).catch(err => console.error("Failed to save policy version:", err));
+        }
+
+        return { success: true };
+      }
+
       return {
         success: true,
         error: "Permission already exists",
@@ -1526,18 +1722,23 @@ export async function checkRelationUsage(
  */
 export async function checkApiKeyDependencies(
   clientId: string,
+  entityTypeName: string,
   entityId: string,
   relation: string
 ): Promise<{ hasApiKeyDependencies: boolean; apiKeyCount: number }> {
   try {
     await guards.clients.view();
 
-    const scopedEntityType = `client_${clientId}`;
-    const tuples = await tupleRepository.findByEntityType(scopedEntityType);
+    const tuples = await getScopedTuplesForClient(clientId);
+    const scopedEntityTypePrefix = `client_${clientId}:`;
+    const fullEntityType = entityTypeName.startsWith(scopedEntityTypePrefix)
+      ? entityTypeName
+      : `${scopedEntityTypePrefix}${entityTypeName}`;
 
     // Find API key subjects with this specific permission
     const apiKeyTuples = tuples.filter(t =>
       t.subjectType === "apikey" &&
+      t.entityType === fullEntityType &&
       t.entityId === entityId &&
       t.relation === relation
     );
@@ -1564,8 +1765,7 @@ export async function checkScopedPermissionsForUser(
   try {
     await guards.clients.view();
 
-    const scopedEntityType = `client_${clientId}`;
-    const tuples = await tupleRepository.findByEntityType(scopedEntityType);
+    const tuples = await getScopedTuplesForClient(clientId);
 
     const userPermissions = tuples.filter(t =>
       t.subjectType === subjectType && t.subjectId === subjectId

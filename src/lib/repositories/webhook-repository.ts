@@ -201,21 +201,21 @@ export class WebhookRepository {
             })
             .from(webhookDelivery)
             .where(
-              and(
-                inArray(webhookDelivery.endpointId, endpointIds),
-                sql`${webhookDelivery.id} IN (
-                    SELECT id FROM ${webhookDelivery}
-                    WHERE ${webhookDelivery.endpointId} = ${webhookDelivery.endpointId}
-                    ORDER BY ${webhookDelivery.createdAt} DESC
-                    LIMIT 1
-                  )`
-              )
+              inArray(webhookDelivery.endpointId, endpointIds)
             )
+            .orderBy(desc(webhookDelivery.createdAt))
           : [];
+
+      const lastDeliveryByEndpoint = new Map<string, (typeof lastDeliveries)[number]>();
+      for (const delivery of lastDeliveries) {
+        if (!lastDeliveryByEndpoint.has(delivery.endpointId)) {
+          lastDeliveryByEndpoint.set(delivery.endpointId, delivery);
+        }
+      }
 
       // Combine data
       const items = endpoints.map((endpoint) => {
-        const lastDel = lastDeliveries.find((d) => d.endpointId === endpoint.id);
+        const lastDel = lastDeliveryByEndpoint.get(endpoint.id);
         return {
           ...endpoint as WebhookEndpointEntity,
           subscriptions: subscriptions.filter((s) => s.endpointId === endpoint.id),
@@ -281,6 +281,41 @@ export class WebhookRepository {
       return endpoints as WebhookEndpointEntity[];
     } catch (error) {
       console.error("WebhookRepository.findActiveEndpointsByEvent error:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Find user IDs that own active endpoints subscribed to a specific event type.
+   * Used for emitting system-level events that are not scoped to one actor.
+   */
+  async findSubscribedUserIdsByEvent(eventType: string): Promise<string[]> {
+    try {
+      const endpointIds = await db
+        .select({ id: webhookSubscription.endpointId })
+        .from(webhookSubscription)
+        .where(eq(webhookSubscription.eventType, eventType));
+
+      if (endpointIds.length === 0) {
+        return [];
+      }
+
+      const endpoints = await db
+        .select({ userId: webhookEndpoint.userId })
+        .from(webhookEndpoint)
+        .where(
+          and(
+            eq(webhookEndpoint.isActive, true),
+            inArray(
+              webhookEndpoint.id,
+              endpointIds.map((endpoint) => endpoint.id)
+            )
+          )
+        );
+
+      return Array.from(new Set(endpoints.map((endpoint) => endpoint.userId)));
+    } catch (error) {
+      console.error("WebhookRepository.findSubscribedUserIdsByEvent error:", error);
       return [];
     }
   }

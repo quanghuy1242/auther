@@ -1,6 +1,6 @@
 import { Client } from "@upstash/qstash";
 import { env } from "@/env";
-import { webhookRepository } from "@/lib/repositories";
+import { WebhookRepository } from "@/lib/repositories/webhook-repository";
 import {
   generateWebhookEventId,
   generateWebhookDeliveryId,
@@ -13,11 +13,12 @@ import {
   WEBHOOK_TIMESTAMP_HEADER,
   WEBHOOK_ID_HEADER,
   WEBHOOK_ORIGIN_HEADER,
+  WEBHOOK_ORIGIN_AUTHER,
   WEBHOOK_ORIGIN_BETTER_AUTH,
   type WebhookEventType,
 } from "@/lib/constants";
 import type { WebhookDeliveryStatus } from "@/lib/types";
-import { metricsService } from "@/lib/services";
+import { metricsService } from "@/lib/services/metrics-service";
 
 const qstash = new Client({
   token: env.QSTASH_TOKEN,
@@ -25,13 +26,19 @@ const qstash = new Client({
   baseUrl: env.QSTASH_URL ?? "http://qstash:8080",
 });
 
+const webhookRepository = new WebhookRepository();
+
 // ============================================================================
 // Types
 // ============================================================================
 
+export type WebhookOrigin =
+  | typeof WEBHOOK_ORIGIN_BETTER_AUTH
+  | typeof WEBHOOK_ORIGIN_AUTHER;
+
 export interface WebhookEventPayload {
   id: string;
-  origin: typeof WEBHOOK_ORIGIN_BETTER_AUTH;
+  origin: WebhookOrigin;
   type: WebhookEventType;
   timestamp: number;
   data: Record<string, unknown>;
@@ -62,6 +69,14 @@ function resolveQueueBaseUrl(): string {
  */
 function resolveWebhookDeliveryQueueUrl(): string {
   return `${resolveQueueBaseUrl()}/api/internal/queues/webhook-delivery`;
+}
+
+function resolveOriginForEventType(eventType: WebhookEventType): WebhookOrigin {
+  if (eventType.startsWith("grant.") || eventType.startsWith("group.")) {
+    return WEBHOOK_ORIGIN_AUTHER;
+  }
+
+  return WEBHOOK_ORIGIN_BETTER_AUTH;
 }
 
 // ============================================================================
@@ -120,13 +135,17 @@ export async function emitWebhookEvent(
       const deliveryId = generateWebhookDeliveryId();
 
       // Create initial delivery record
-      await webhookRepository.createDelivery({
+      const delivery = await webhookRepository.createDelivery({
         id: deliveryId,
         eventId,
         endpointId: endpoint.id,
         status: "pending",
         attemptCount: 0,
       });
+
+      if (!delivery) {
+        throw new Error(`Failed to create webhook delivery record for endpoint ${endpoint.id}`);
+      }
 
       // Enqueue job via QStash
       const job: WebhookDeliveryJob = {
@@ -144,13 +163,32 @@ export async function emitWebhookEvent(
         });
         return result;
       } catch (err) {
+        await webhookRepository.updateDelivery(deliveryId, {
+          status: "failed",
+          attemptCount: 1,
+          responseBody: err instanceof Error ? err.message.slice(0, 1000) : "QStash publish failed",
+        });
+
         // Metric: QStash publish error
         void metricsService.count("qstash.publish.error.count", 1);
         throw err;
       }
     });
 
-    await Promise.allSettled(queuePromises);
+    const queueResults = await Promise.allSettled(queuePromises);
+    const failedQueueCount = queueResults.filter((result) => result.status === "rejected").length;
+
+    if (failedQueueCount > 0) {
+      void metricsService.count("webhook.emit.queue_failed.count", failedQueueCount, {
+        event_type: eventType,
+      });
+      console.error("Failed to enqueue webhook deliveries:", {
+        eventId,
+        eventType,
+        failedQueueCount,
+        totalEndpoints: endpoints.length,
+      });
+    }
 
     // Metric: emit duration
     const emitDuration = performance.now() - emitStart;
@@ -210,36 +248,48 @@ export async function deliverWebhook(
 
     // Decrypt secret
     const secret = decryptSecret(endpoint.encryptedSecret);
+    const eventType = event.type as WebhookEventType;
+    const origin = resolveOriginForEventType(eventType);
 
     // Build payload
     const payload: WebhookEventPayload = {
       id: event.id,
-      origin: WEBHOOK_ORIGIN_BETTER_AUTH,
-      type: event.type as WebhookEventType,
+      origin,
+      type: eventType,
       timestamp: event.createdAt.getTime(),
       data: event.payload,
     };
 
-    const body = JSON.stringify(payload);
+    const isJsonDelivery = endpoint.deliveryFormat === "json";
+    const body = isJsonDelivery
+      ? JSON.stringify(payload)
+      : new URLSearchParams({
+        id: payload.id,
+        origin: payload.origin,
+        type: payload.type,
+        timestamp: payload.timestamp.toString(),
+        data: JSON.stringify(payload.data),
+      }).toString();
     const signature = createWebhookSignature(body, secret);
 
     // Build headers
     const headers: Record<string, string> = {
       "Content-Type":
-        endpoint.deliveryFormat === "json"
+        isJsonDelivery
           ? "application/json"
           : "application/x-www-form-urlencoded",
       [WEBHOOK_SIGNATURE_HEADER]: signature,
       [WEBHOOK_ID_HEADER]: event.id,
       [WEBHOOK_TIMESTAMP_HEADER]: payload.timestamp.toString(),
-      [WEBHOOK_ORIGIN_HEADER]: WEBHOOK_ORIGIN_BETTER_AUTH,
+      [WEBHOOK_ORIGIN_HEADER]: origin,
     };
 
     // Make request
     const response = await fetch(endpoint.url, {
       method: endpoint.requestMethod,
       headers,
-      body: endpoint.deliveryFormat === "json" ? body : new URLSearchParams(event.payload as Record<string, string>).toString(),
+      body,
+      signal: AbortSignal.timeout(10_000),
     });
 
     const durationMs = Date.now() - startTime;

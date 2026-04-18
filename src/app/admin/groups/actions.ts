@@ -87,7 +87,10 @@ export async function updateGroup(
     await guards.groups.update();
 
     const validated = updateGroupSchema.parse(data);
-    await userGroupRepository.update(id, validated);
+    const updated = await userGroupRepository.update(id, validated);
+    if (!updated) {
+        return { success: false, error: "Failed to update group" };
+    }
 
     revalidatePath(`/admin/groups/${id}`);
     revalidatePath("/admin/groups");
@@ -101,12 +104,18 @@ export async function deleteGroup(id: string) {
     await guards.groups.delete();
 
     // 1. Delete group (cascade handles membership in DB usually, but repo handles it)
-    await userGroupRepository.delete(id);
+    const deleted = await userGroupRepository.delete(id);
+    if (!deleted) {
+        return { success: false, error: "Failed to delete group" };
+    }
 
     // 2. Delete all permissions (tuples) where this group is the subject
-    const tuples = await tupleRepository.findBySubject("group", id);
+    const tuples = await tupleRepository.findBySubjectStrict("group", id);
     for (const t of tuples) {
-        await tupleRepository.deleteById(t.id);
+        const tupleDeleted = await tupleRepository.deleteById(t.id);
+        if (!tupleDeleted) {
+            return { success: false, error: "Failed to clean up group permissions" };
+        }
     }
 
     revalidatePath("/admin/groups");
@@ -141,13 +150,10 @@ export async function getGroupMembers(groupId: string) {
 export async function addGroupMember(groupId: string, userId: string) {
     await guards.groups.manageMembers();
 
-    // Check if already a member
-    const members = await userGroupRepository.getMembers(groupId);
-    if (members.includes(userId)) {
+    const added = await userGroupRepository.addMember(groupId, userId);
+    if (!added) {
         return { success: false, error: "User is already a member" };
     }
-
-    await userGroupRepository.addMember(groupId, userId);
 
     revalidatePath(`/admin/groups/${groupId}`);
     return { success: true };

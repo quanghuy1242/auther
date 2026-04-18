@@ -1,5 +1,7 @@
-import { metricsRepository } from "@/lib/repositories";
+import { MetricsRepository } from "@/lib/repositories/metrics-repository";
 import type { CreateMetricData } from "@/db/schema";
+
+const metricsRepository = new MetricsRepository();
 
 // Constants for user metric enforcement
 const MAX_TAG_KEYS = 10;

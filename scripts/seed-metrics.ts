@@ -22,8 +22,6 @@ import { randomUUID } from "crypto";
 
 // Metric periods for realistic data distribution
 const HOURS_24 = 24;
-const DAYS_7 = 7 * 24;
-const DAYS_30 = 30 * 24;
 
 interface MetricData {
     id: string;

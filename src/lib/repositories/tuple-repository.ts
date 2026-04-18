@@ -1,6 +1,12 @@
 import { db } from "@/lib/db";
 import { accessTuples } from "@/db/rebac-schema";
 import { and, eq, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import {
+  emitGrantConditionUpdatedEvent,
+  emitGrantCreatedEvent,
+  emitGrantRevokedEvent,
+} from "@/lib/webhooks/grant-events";
 
 export interface Tuple {
   id: string;
@@ -18,22 +24,112 @@ export interface Tuple {
 
 export type CreateTupleParams = Omit<Tuple, "id" | "createdAt" | "updatedAt">;
 
+function isSupportedGrantSubjectType(subjectType: string): subjectType is "user" | "group" {
+  return subjectType === "user" || subjectType === "group";
+}
+
 export class TupleRepository {
+  private buildTupleId(params: CreateTupleParams): string {
+    const hashInput = [
+      params.entityType,
+      params.entityId,
+      params.relation,
+      params.subjectType,
+      params.subjectId,
+      params.subjectRelation ?? "",
+    ].join("|");
+
+    const digest = createHash("sha256").update(hashInput).digest("hex").slice(0, 40);
+    return `tpl_${digest}`;
+  }
+
+  private shouldEmitGrantWebhook(tuple: Tuple): tuple is Tuple & { subjectType: "user" | "group" } {
+    if (!isSupportedGrantSubjectType(tuple.subjectType)) {
+      return false;
+    }
+
+    // Group membership changes have dedicated group.member.* events.
+    if (tuple.entityType === "group" && tuple.relation === "member") {
+      return false;
+    }
+
+    return true;
+  }
+
+  private emitGrantCreated(tuple: Tuple): void {
+    if (!this.shouldEmitGrantWebhook(tuple)) {
+      return;
+    }
+
+    void emitGrantCreatedEvent({
+      tupleId: tuple.id,
+      subjectType: tuple.subjectType,
+      subjectId: tuple.subjectId,
+      entityType: tuple.entityType,
+      entityId: tuple.entityId,
+      relation: tuple.relation,
+      hasCondition: !!tuple.condition,
+    });
+  }
+
+  private emitGrantRevoked(tuple: Tuple): void {
+    if (!this.shouldEmitGrantWebhook(tuple)) {
+      return;
+    }
+
+    void emitGrantRevokedEvent({
+      tupleId: tuple.id,
+      subjectType: tuple.subjectType,
+      subjectId: tuple.subjectId,
+      entityType: tuple.entityType,
+      entityId: tuple.entityId,
+      relation: tuple.relation,
+      hasCondition: !!tuple.condition,
+    });
+  }
+
+  private emitGrantConditionUpdated(
+    tuple: Tuple,
+    previousHasCondition: boolean,
+    hasCondition: boolean
+  ): void {
+    if (!this.shouldEmitGrantWebhook(tuple)) {
+      return;
+    }
+
+    void emitGrantConditionUpdatedEvent({
+      tupleId: tuple.id,
+      subjectType: tuple.subjectType,
+      subjectId: tuple.subjectId,
+      entityType: tuple.entityType,
+      entityId: tuple.entityId,
+      relation: tuple.relation,
+      previousHasCondition,
+      hasCondition,
+    });
+  }
+
   /**
    * Create a new access tuple (grant permission)
    */
   async create(params: CreateTupleParams): Promise<Tuple | null> {
     try {
-      const id = crypto.randomUUID();
+      const id = this.buildTupleId(params);
       const [tuple] = await db
         .insert(accessTuples)
         .values({
           id,
           ...params,
         })
+        .onConflictDoNothing({ target: accessTuples.id })
         .returning();
 
-      return tuple;
+      if (tuple) {
+        this.emitGrantCreated(tuple);
+        return tuple;
+      }
+
+      return await this.findById(id);
     } catch (error) {
       console.error("TupleRepository.create error:", error);
       return null;
@@ -62,7 +158,11 @@ export class TupleRepository {
       const result = await db
         .delete(accessTuples)
         .where(and(...conditions))
-        .returning({ id: accessTuples.id });
+        .returning();
+
+      for (const tuple of result) {
+        this.emitGrantRevoked(tuple);
+      }
 
       return result.length > 0;
     } catch (error) {
@@ -124,28 +224,27 @@ export class TupleRepository {
   }
 
   /**
+   * Find all tuples for a given subject and throw on data access errors.
+   * Use this in fail-closed paths where returning [] would hide a DB failure.
+   */
+  async findBySubjectStrict(subjectType: string, subjectId: string): Promise<Tuple[]> {
+    return await db
+      .select()
+      .from(accessTuples)
+      .where(
+        and(
+          eq(accessTuples.subjectType, subjectType),
+          eq(accessTuples.subjectId, subjectId)
+        )
+      );
+  }
+
+  /**
    * Find all tuples for multiple subjects (e.g. User + their Groups)
    */
   async findBySubjects(subjects: { type: string; id: string }[]): Promise<Tuple[]> {
     try {
-      if (subjects.length === 0) return [];
-
-      // Construct OR conditions for each subject
-      // WHERE (subjectType = 'user' AND subjectId = '123') OR (subjectType = 'group' AND subjectId = '456') ...
-      const conditions = subjects.map(s =>
-        and(
-          eq(accessTuples.subjectType, s.type),
-          eq(accessTuples.subjectId, s.id)
-        )
-      );
-
-      // Use Drizzle's `or` helper
-      const { or } = await import("drizzle-orm");
-
-      return await db
-        .select()
-        .from(accessTuples)
-        .where(or(...conditions));
+      return await this.findBySubjectsStrict(subjects);
     } catch (error) {
       console.error("TupleRepository.findBySubjects error:", error);
       return [];
@@ -153,23 +252,86 @@ export class TupleRepository {
   }
 
   /**
+   * Find all tuples for multiple subjects and throw on data access errors.
+   * Use this in fail-closed API paths where empty results must not mask DB failures.
+   */
+  async findBySubjectsStrict(subjects: { type: string; id: string }[]): Promise<Tuple[]> {
+    if (subjects.length === 0) return [];
+
+    // Construct OR conditions for each subject
+    // WHERE (subjectType = 'user' AND subjectId = '123') OR (subjectType = 'group' AND subjectId = '456') ...
+    const conditions = subjects.map(s =>
+      and(
+        eq(accessTuples.subjectType, s.type),
+        eq(accessTuples.subjectId, s.id)
+      )
+    );
+
+    // Use Drizzle's `or` helper
+    const { or } = await import("drizzle-orm");
+
+    return await db
+      .select()
+      .from(accessTuples)
+      .where(or(...conditions));
+  }
+
+  /**
+   * Find tuples for the provided subjects within a single entity type.
+   * Ordered by entityId to support streaming pagination at the caller.
+   */
+  async findBySubjectsAndEntityTypeStrict(
+    subjects: { type: string; id: string }[],
+    entityType: string
+  ): Promise<Tuple[]> {
+    if (subjects.length === 0) return [];
+
+    const conditions = subjects.map(s =>
+      and(
+        eq(accessTuples.subjectType, s.type),
+        eq(accessTuples.subjectId, s.id)
+      )
+    );
+
+    const { or } = await import("drizzle-orm");
+
+    return await db
+      .select()
+      .from(accessTuples)
+      .where(
+        and(
+          eq(accessTuples.entityType, entityType),
+          or(...conditions)
+        )
+      )
+      .orderBy(accessTuples.entityId, accessTuples.id);
+  }
+
+  /**
    * Find all tuples for a given entity (Who has access to this?)
    */
   async findByEntity(entityType: string, entityId: string): Promise<Tuple[]> {
     try {
-      return await db
-        .select()
-        .from(accessTuples)
-        .where(
-          and(
-            eq(accessTuples.entityType, entityType),
-            eq(accessTuples.entityId, entityId)
-          )
-        );
+      return await this.findByEntityStrict(entityType, entityId);
     } catch (error) {
       console.error("TupleRepository.findByEntity error:", error);
       return [];
     }
+  }
+
+  /**
+   * Find all tuples for a given entity and throw on data access errors.
+   */
+  async findByEntityStrict(entityType: string, entityId: string): Promise<Tuple[]> {
+    return await db
+      .select()
+      .from(accessTuples)
+      .where(
+        and(
+          eq(accessTuples.entityType, entityType),
+          eq(accessTuples.entityId, entityId)
+        )
+      );
   }
 
   /**
@@ -198,14 +360,19 @@ export class TupleRepository {
    */
   async deleteByEntity(entityType: string, entityId: string): Promise<void> {
     try {
-      await db
+      const removed = await db
         .delete(accessTuples)
         .where(
           and(
             eq(accessTuples.entityType, entityType),
             eq(accessTuples.entityId, entityId)
           )
-        );
+        )
+        .returning();
+
+      for (const tuple of removed) {
+        this.emitGrantRevoked(tuple);
+      }
     } catch (error) {
       console.error("TupleRepository.deleteByEntity error:", error);
     }
@@ -217,21 +384,29 @@ export class TupleRepository {
    */
   async countByRelation(entityType: string, relation: string): Promise<number> {
     try {
-      const [result] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(accessTuples)
-        .where(
-          and(
-            eq(accessTuples.entityType, entityType),
-            eq(accessTuples.relation, relation)
-          )
-        );
-
-      return result?.count || 0;
+      return await this.countByRelationStrict(entityType, relation);
     } catch (error) {
       console.error("TupleRepository.countByRelation error:", error);
       return 0;
     }
+  }
+
+  /**
+   * Strict count for tuples by entity type and relation.
+   * Throws on data access errors for fail-closed call sites.
+   */
+  async countByRelationStrict(entityType: string, relation: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(accessTuples)
+      .where(
+        and(
+          eq(accessTuples.entityType, entityType),
+          eq(accessTuples.relation, relation)
+        )
+      );
+
+    return result?.count || 0;
   }
 
   /**
@@ -290,6 +465,102 @@ export class TupleRepository {
   }
 
   /**
+   * Ensure a subject has exactly one relation on a specific entity.
+   * Deletes other relations and guarantees the target relation exists atomically.
+   */
+  async replaceSubjectRelationAtomic(params: {
+    entityType: string;
+    entityId: string;
+    relation: string;
+    subjectType: string;
+    subjectId: string;
+    subjectRelation?: string | null;
+    entityTypeId?: string | null;
+    condition?: string | null;
+  }): Promise<{ created: boolean; removedCount: number }> {
+    const relationCondition = params.subjectRelation
+      ? eq(accessTuples.subjectRelation, params.subjectRelation)
+      : sql`${accessTuples.subjectRelation} IS NULL`;
+
+    const transactionResult = await db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(accessTuples)
+        .where(
+          and(
+            eq(accessTuples.entityType, params.entityType),
+            eq(accessTuples.entityId, params.entityId),
+            eq(accessTuples.subjectType, params.subjectType),
+            eq(accessTuples.subjectId, params.subjectId),
+            relationCondition,
+            sql`${accessTuples.relation} <> ${params.relation}`
+          )
+        )
+        .returning();
+
+      const [existingTarget] = await tx
+        .select()
+        .from(accessTuples)
+        .where(
+          and(
+            eq(accessTuples.entityType, params.entityType),
+            eq(accessTuples.entityId, params.entityId),
+            eq(accessTuples.relation, params.relation),
+            eq(accessTuples.subjectType, params.subjectType),
+            eq(accessTuples.subjectId, params.subjectId),
+            relationCondition
+          )
+        )
+        .limit(1);
+
+      if (existingTarget) {
+        return {
+          removed,
+          createdTuple: null as Tuple | null,
+          created: false,
+        };
+      }
+
+      const [createdTuple] = await tx
+        .insert(accessTuples)
+        .values({
+          id: crypto.randomUUID(),
+          entityType: params.entityType,
+          entityTypeId: params.entityTypeId ?? null,
+          entityId: params.entityId,
+          relation: params.relation,
+          subjectType: params.subjectType,
+          subjectId: params.subjectId,
+          subjectRelation: params.subjectRelation ?? null,
+          condition: params.condition ?? null,
+        })
+        .returning();
+
+      if (!createdTuple) {
+        throw new Error("Failed to create replacement tuple");
+      }
+
+      return {
+        removed,
+        createdTuple,
+        created: true,
+      };
+    });
+
+    for (const tuple of transactionResult.removed) {
+      this.emitGrantRevoked(tuple);
+    }
+
+    if (transactionResult.createdTuple) {
+      this.emitGrantCreated(transactionResult.createdTuple);
+    }
+
+    return {
+      created: transactionResult.created,
+      removedCount: transactionResult.removed.length,
+    };
+  }
+
+  /**
    * Delete a tuple by its ID
    */
   async deleteById(id: string): Promise<boolean> {
@@ -297,7 +568,11 @@ export class TupleRepository {
       const result = await db
         .delete(accessTuples)
         .where(eq(accessTuples.id, id))
-        .returning({ id: accessTuples.id });
+        .returning();
+
+      for (const tuple of result) {
+        this.emitGrantRevoked(tuple);
+      }
 
       return result.length > 0;
     } catch (error) {
@@ -366,11 +641,55 @@ export class TupleRepository {
             eq(accessTuples.entityType, entityType)
           )
         )
-        .returning({ id: accessTuples.id });
+        .returning();
+
+      for (const tuple of result) {
+        this.emitGrantRevoked(tuple);
+      }
 
       return result.length;
     } catch (error) {
       console.error("TupleRepository.deleteBySubjectAndEntityType error:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Delete all tuples for a subject where entity type matches a prefix.
+   * Includes the legacy exact entity type without the trailing ':' when present.
+   */
+  async deleteBySubjectAndEntityTypePrefix(
+    subjectType: string,
+    subjectId: string,
+    entityTypePrefix: string
+  ): Promise<number> {
+    try {
+      const normalizedPrefix = entityTypePrefix.endsWith(":")
+        ? entityTypePrefix
+        : `${entityTypePrefix}:`;
+      const legacyEntityType = normalizedPrefix.slice(0, -1);
+
+      const result = await db
+        .delete(accessTuples)
+        .where(
+          and(
+            eq(accessTuples.subjectType, subjectType),
+            eq(accessTuples.subjectId, subjectId),
+            sql`(
+              ${accessTuples.entityType} = ${legacyEntityType}
+              OR ${accessTuples.entityType} LIKE ${normalizedPrefix + "%"}
+            )`
+          )
+        )
+        .returning();
+
+      for (const tuple of result) {
+        this.emitGrantRevoked(tuple);
+      }
+
+      return result.length;
+    } catch (error) {
+      console.error("TupleRepository.deleteBySubjectAndEntityTypePrefix error:", error);
       return 0;
     }
   }
@@ -388,7 +707,11 @@ export class TupleRepository {
             eq(accessTuples.subjectId, subjectId)
           )
         )
-        .returning({ id: accessTuples.id });
+        .returning();
+
+      for (const tuple of result) {
+        this.emitGrantRevoked(tuple);
+      }
 
       return result.length;
     } catch (error) {
@@ -416,6 +739,46 @@ export class TupleRepository {
     } catch (error) {
       console.error("TupleRepository.updateEntityTypeString error:", error);
       return 0;
+    }
+  }
+
+  /**
+   * Update a tuple-level condition and emit a condition-updated webhook event.
+   */
+  async updateConditionById(id: string, condition: string | null): Promise<Tuple | null> {
+    try {
+      const previous = await this.findById(id);
+      if (!previous) {
+        return null;
+      }
+
+      const normalizedCondition = condition && condition.trim().length > 0 ? condition : null;
+      const previousHasCondition = !!previous.condition;
+      const nextHasCondition = !!normalizedCondition;
+
+      if ((previous.condition ?? null) === normalizedCondition) {
+        return previous;
+      }
+
+      const [updated] = await db
+        .update(accessTuples)
+        .set({
+          condition: normalizedCondition,
+          updatedAt: new Date(),
+        })
+        .where(eq(accessTuples.id, id))
+        .returning();
+
+      if (!updated) {
+        return null;
+      }
+
+      this.emitGrantConditionUpdated(updated, previousHasCondition, nextHasCondition);
+
+      return updated;
+    } catch (error) {
+      console.error("TupleRepository.updateConditionById error:", error);
+      return null;
     }
   }
 }
