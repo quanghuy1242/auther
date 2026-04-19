@@ -18,6 +18,10 @@ export interface ListObjectsItem {
   entityId: string;
   abac_required: boolean;
   tupleIds: string[];
+  tuples: Array<{
+    tupleId: string;
+    relation: string;
+  }>;
 }
 
 export interface ListObjectsResult {
@@ -534,6 +538,7 @@ export class PermissionService {
       entityId: string;
       abac_required: boolean;
       tupleIds: Set<string>;
+      tuples: Array<{ tupleId: string; relation: string }>;
     } | null = null;
     let hasWildcardGrant = false;
 
@@ -550,6 +555,7 @@ export class PermissionService {
             entityId: currentEntity.entityId,
             abac_required: currentEntity.abac_required,
             tupleIds: Array.from(currentEntity.tupleIds),
+            tuples: currentEntity.tuples,
           });
         }
       }
@@ -581,12 +587,24 @@ export class PermissionService {
           entityId: tuple.entityId,
           abac_required: tupleRequiresABAC,
           tupleIds: new Set([tuple.id]),
+          tuples: [
+            {
+              tupleId: tuple.id,
+              relation: tuple.relation,
+            },
+          ],
         };
         continue;
       }
 
       currentEntity.abac_required = currentEntity.abac_required || tupleRequiresABAC;
-      currentEntity.tupleIds.add(tuple.id);
+      if (!currentEntity.tupleIds.has(tuple.id)) {
+        currentEntity.tupleIds.add(tuple.id);
+        currentEntity.tuples.push({
+          tupleId: tuple.id,
+          relation: tuple.relation,
+        });
+      }
     }
 
     flushCurrentEntity();

@@ -144,6 +144,110 @@ Expected response:
 
 ---
 
+### A9 — Optional entity filter on client grants list (`GET /api/internal/clients/:clientId/grants`)
+
+**What**: Make `entityTypeName` and `entityId` optional query parameters on `GET /api/internal/clients/:clientId/grants`. When both are omitted, return all grant tuples for the client (paginated). When provided, filter as today.
+
+Expected response shape (same as the filtered case, paginated):
+```json
+{ "grants": [...], "nextCursor": "...", "hasMore": true }
+```
+
+**Why**: the reconciliation job (`P7`) and a future cold-start bootstrap job (`P11`) need to enumerate all subjects that hold any grant for this client without knowing the entity IDs in advance. The current endpoint requires both `entityTypeName` and `entityId`, which forces the caller to iterate all known book IDs first — an O(books) fan-out with no way to discover grants for entity IDs not yet known to Payload. Making the filter optional allows a single paginated sweep to seed the mirror from scratch.
+
+**Auth**: same `x-api-key` validation as today.
+
+**Internal work**: remove the `required` guard on `entityTypeName`/`entityId`; when absent, call `tupleRepository.findAllByClientId(clientId)` (or equivalent) with cursor-based pagination.
+
+**Depends on**: nothing (additive change to existing endpoint).
+
+**Blocks**: Payload item P11.
+
+---
+
+### A10 — Optional: inline relation metadata on ListObjects tuples (`GET/POST /api/auth/list-objects`)
+
+**What**: extend the `ListObjectsItem` response shape from Auther so each entity item includes a `tuples` array with relation metadata for every contributing tuple, not just `tupleIds`.
+
+Expected response item shape:
+```json
+{
+  "entityId": "book_123",
+  "abac_required": true,
+  "abacRequired": true,
+  "tupleIds": ["tpl_1", "tpl_2"],
+  "tupleId": "tpl_1",
+  "tuples": [
+    { "tupleId": "tpl_1", "relation": "viewer" },
+    { "tupleId": "tpl_2", "relation": "editor" }
+  ]
+}
+```
+
+**Why**: Payload now recovers exact `relation` values during bootstrap/reconciliation by combining A9's client grants sweep with ListObjects. Inline relation metadata on ListObjects would still be useful because it removes that extra enrichment dependency and lets event-driven consumers rely on a single API response.
+
+**Auther code impact**:
+- `src/lib/auth/permission-service.ts`: `ListObjectsItem` currently exposes only `entityId`, `abac_required`, and `tupleIds`. The folding logic in `listObjectsWithABACInfo()` already iterates full `Tuple` rows from `TupleRepository.findBySubjectsAndEntityTypeStrict()`, so `tuple.relation` is already in memory. The accumulator should preserve it instead of discarding it.
+- `src/app/api/auth/list-objects/route.ts`: `mapListObjectItem()` must pass through the new `tuples` array while keeping the existing compatibility fields `tupleIds` and `tupleId`.
+
+**Backward compatibility**: keep `tupleIds` and `tupleId` in the response. Add `tuples`; do not replace the existing fields yet.
+
+**Depends on**: A1.
+
+**Blocks**: nothing critical after A9-based enrichment is in place; optimization for simpler consumers and lower coupling.
+
+---
+
+### A11 — Optional: inline subject provenance on ListObjects tuples (`GET/POST /api/auth/list-objects`)
+
+**What**: extend the same `tuples` array from A10 so each tuple entry includes the original tuple subject fields from Auther storage:
+
+- `subjectType`: `user` or `group`
+- `subjectId`: the original Auther user ID or group ID
+- `subjectRelation`: optional, if present on the tuple and useful to downstream consumers
+
+Expected response item shape:
+```json
+{
+  "entityId": "book_123",
+  "abac_required": false,
+  "abacRequired": false,
+  "tupleIds": ["tpl_group_1", "tpl_user_1"],
+  "tupleId": "tpl_group_1",
+  "tuples": [
+    {
+      "tupleId": "tpl_group_1",
+      "relation": "viewer",
+      "subjectType": "group",
+      "subjectId": "grp_premium"
+    },
+    {
+      "tupleId": "tpl_user_1",
+      "relation": "editor",
+      "subjectType": "user",
+      "subjectId": "usr_123"
+    }
+  ]
+}
+```
+
+**Semantics requirement**: these fields must describe the **original tuple row**, not the user that ListObjects is currently evaluating for. If a user reaches an entity through a group grant, the tuple entry must remain `subjectType = 'group'` with that group's ID. The response must not collapse provenance to the requesting user.
+
+**Why**: Payload now recovers exact `sourceSubjectType` during bootstrap/reconciliation by combining A9's client grants sweep with ListObjects. Inline provenance on ListObjects would still be useful because it would let event-driven consumers avoid additional tuple metadata lookups and keep all effective-grant information in one response.
+
+**Auther code impact**:
+- `src/lib/repositories/tuple-repository.ts`: the `Tuple` type already has `subjectType`, `subjectId`, and optional `subjectRelation`.
+- `src/lib/auth/permission-service.ts`: `listObjectsWithABACInfo()` already has those tuple rows in hand, so this is a response-shape extension, not a new data fetch.
+- `src/app/api/auth/list-objects/route.ts`: expose the new per-tuple provenance fields in both GET and POST responses.
+
+**Backward compatibility**: same as A10. Add `tuples`; keep `tupleIds` and `tupleId` unchanged.
+
+**Depends on**: A10 can ship in the same PR, but if split, A11 depends on A10's `tuples` array existing.
+
+**Blocks**: nothing critical after A9-based enrichment is in place; optimization for simpler consumers and lower coupling.
+
+---
+
 ## PayloadCMS Backlog
 
 ### P1 — Grant mirror collection schema
@@ -299,6 +403,73 @@ UX decision needed (not architectural): toggle between user and group subject ty
 
 ---
 
+### P11 — Cold-start bootstrap: seed mirror from pre-existing Auther grants
+
+**What**: add a bootstrap step (can be a one-off admin action or an extension of the reconciliation job) that seeds the grant mirror from Auther's full grant set for users Payload does not yet know about.
+
+Flow:
+1. Call `GET /api/internal/clients/:clientId/grants` with no entity filter (A9) to page all grant tuples.
+2. For each tuple, resolve the `subjectId` to a Payload user via `betterAuthUserId`.
+3. If the user exists: call `upsertGrantMirrorRow` as normal.
+4. If the user does **not** exist: call `enqueueDeferredGrantJob` (same as P2/P8) so the grant is applied when the user first logs in.
+
+**Why**: grants created in Auther's admin UI before Payload's webhook subscription was active — or before any user had logged into Payload — are invisible to the event-driven path and invisible to the current reconciliation job (which only iterates users already in Payload). This bootstrap step is the one-time seed that makes the mirror authoritative from day one of deployment, not just from the moment the first user logs in.
+
+**Note**: this job is idempotent — re-running it produces the same mirror state. It is safe to run alongside live traffic. For large grant sets it should be paginated and resumable using the same checkpoint pattern as P7.
+
+**Depends on**: A9 (unfiltered grants endpoint), P1 (mirror schema), P8 (deferred grant queue).
+
+**Blocks**: nothing (correctness improvement for the cold-start window).
+
+---
+
+### P12 — Reconciliation must enqueue deferred grants for unresolvable users
+
+**What**: update `src/app/api/internal/reconcile/route.ts` so that when a grant tuple from Auther cannot be matched to a Payload user (i.e., `resolvePayloadUserId` returns null), the reconciliation job calls `enqueueDeferredGrantJob` instead of silently skipping.
+
+**Why**: the current reconciliation job only iterates users already in `payload.users`. A user pre-provisioned access in Auther who has never logged into Payload has no local record, so reconciliation walks straight past them. The webhook handler (P2) correctly enqueues deferred grants for unknown users — reconciliation must do the same to close the gap. Recovery path is identical: user logs in → `upsertBetterAuthUser` creates the record → P6 drain hook processes queued deferred grants → mirror rows written.
+
+**Scope**: single change in `reconcile/route.ts` — add a `resolvePayloadUserId` call inside the per-tuple loop and branch to `enqueueDeferredGrantJob` on null. Reuses existing infrastructure; no new collections or queue workers needed.
+
+**Depends on**: P7 (reconciliation job exists), P8 (deferred queue exists).
+
+**Blocks**: Gap 2 (pre-provisioned users invisible to reconciliation).
+
+---
+
+### P13 — ABAC context assembly before `checkPermissionBatch`
+
+**What**: define and populate a context object before calling `checkPermissionBatch` in `src/utils/access.ts`. Currently the call is `checkPermissionBatch({ ..., context: {} })` with a `TODO` comment. The context must include any fields that Auther's Lua conditions inspect at evaluation time.
+
+Minimum required:
+1. Document which context fields each active Lua condition in Auther expects (owner responsibility; checked at grant-authoring time).
+2. In `getGrantedPrivateBookIds`, assemble a context map before the batch call. At minimum this will include any purchase/entitlement data when that collection is available.
+3. Until a purchase collection exists, the context can remain `{}` — but the `TODO` must be turned into a tracked task so it is not forgotten when entitlements are added.
+
+**Why**: any Lua condition that inspects `context` fields currently always sees an empty object and therefore always evaluates to the deny branch. This is a silent false denial — no error is thrown, the user simply does not see the book. For unconditional grants this is harmless. For any grant where the admin explicitly attached a Lua condition expecting context, the condition is permanently failing.
+
+**Depends on**: P4 (mirror read path must be in place), a future entitlements/purchase collection.
+
+**Blocks**: correctness of all conditioned grants that require runtime context.
+
+---
+
+### P14 — Revocation tombstone TTL / cleanup
+
+**What**: add a TTL or scheduled cleanup for `type: 'revocation_tombstone'` entries in the `deferred-grants` collection. Tombstones are written when `grant.revoked` arrives before the corresponding `grant.created` has been processed (out-of-order protection). They are never deleted today and accumulate indefinitely.
+
+Proposed cleanup: during the reconciliation job (P7), or in a separate periodic task, delete tombstone entries older than a configurable window (e.g. 48 hours — matching the webhook idempotency TTL on the Auther side). Any out-of-order `grant.created` that arrives later than 48 hours after its `grant.revoked` is already outside Auther's retry window and will never be re-delivered, so the tombstone serves no further purpose.
+
+**Why**: storage leak — every out-of-order event pair leaves a permanent row. At current scale this is negligible, but it makes the `deferred-grants` collection misleading for debugging and wastes index space over time.
+
+**Scope**: add a cleanup pass at the end of the reconciliation job, or add a Payload scheduled task. No schema changes needed.
+
+**Depends on**: P7 (reconciliation job as the natural home for the cleanup).
+
+**Blocks**: nothing critical; operational hygiene.
+
+---
+
 ## Cross-Service Dependency Summary
 
 ```
@@ -308,9 +479,15 @@ A2 ──────► P2 ──────► P4
 A3 ──────► P3
 A4 ──────► P2
            └──────► P3
+A9 ──────► P11
+A10 + A11 ─► optional optimization: inline tuple metadata in ListObjects so consumers need less A9 enrichment
 P1 ◄──── all Payload items
 P5 is standalone (Payload-only hook)
 P8 ──────► P6 (P6 drains what P8 parks)
+        ◄── P11 (bootstrap enqueues via P8)
+        ◄── P12 (reconciliation enqueues via P8)
+P7 ──────► P14 (tombstone cleanup lives in reconciliation)
+P13 depends on P4 + future entitlements collection
 ```
 
 ## Implementation Order Recommendation
@@ -325,4 +502,10 @@ P8 ──────► P6 (P6 drains what P8 parks)
 8. **A1**: ListObjects endpoint in Auther
 9. **P7**: reconciliation job
 10. **P3**: group membership event handler (most complex, can run in parallel with P7)
-11. **P9 + P10**: admin UI improvements (last, lower priority)
+11. **P9 + P10**: admin UI improvements
+12. **A9**: optional entity filter on grants list (Auther — unblocks P11)
+13. **P11**: cold-start bootstrap (run once after A9 is deployed)
+14. **P12**: reconciliation deferred-grant enqueue (small patch to existing reconcile route)
+15. **A10 + A11**: optional optimization to inline per-tuple relation and provenance metadata directly in ListObjects
+16. **P14**: tombstone cleanup (add to P7 reconciliation job)
+17. **P13**: ABAC context assembly (blocked on entitlements collection — tackle when that lands)

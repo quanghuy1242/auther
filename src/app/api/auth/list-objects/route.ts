@@ -51,12 +51,20 @@ function mapListObjectItem(item: {
   entityId: string;
   abac_required: boolean;
   tupleIds: string[];
+  tuples: Array<{
+    tupleId: string;
+    relation: string;
+  }>;
 }): {
   entityId: string;
   abac_required: boolean;
   abacRequired: boolean;
   tupleIds: string[];
   tupleId: string;
+  tuples: Array<{
+    tupleId: string;
+    relation: string;
+  }>;
 } {
   return {
     entityId: item.entityId,
@@ -64,6 +72,7 @@ function mapListObjectItem(item: {
     abacRequired: item.abac_required,
     tupleIds: item.tupleIds,
     tupleId: item.tupleIds[0] ?? "",
+    tuples: item.tuples,
   };
 }
 

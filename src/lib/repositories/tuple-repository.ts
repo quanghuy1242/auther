@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { accessTuples } from "@/db/rebac-schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import {
   emitGrantConditionUpdatedEvent,
@@ -332,6 +332,55 @@ export class TupleRepository {
           eq(accessTuples.entityId, entityId)
         )
       );
+  }
+
+  /**
+   * Find tuples in a client's scope with cursor pagination.
+   * When entityType/entityId are provided, returns tuples only for that entity.
+   */
+  async findByClientScopePaginated(params: {
+    clientId: string;
+    cursor?: string;
+    limit: number;
+    entityType?: string;
+    entityId?: string;
+  }): Promise<{ tuples: Tuple[]; nextCursor: string | null; hasMore: boolean }> {
+    try {
+      const pageSize = Math.max(1, params.limit);
+      const exactClientEntityType = `client_${params.clientId}`;
+      const namespacedClientPrefix = `${exactClientEntityType}:`;
+
+      const scopeCondition =
+        params.entityType && params.entityId
+          ? and(
+              eq(accessTuples.entityType, params.entityType),
+              eq(accessTuples.entityId, params.entityId)
+            )
+          : sql`(
+              ${accessTuples.entityType} = ${exactClientEntityType}
+              OR ${accessTuples.entityType} LIKE ${namespacedClientPrefix + "%"}
+            )`;
+
+      const whereCondition = params.cursor
+        ? and(scopeCondition, gt(accessTuples.id, params.cursor))
+        : scopeCondition;
+
+      const pagedTuples = await db
+        .select()
+        .from(accessTuples)
+        .where(whereCondition)
+        .orderBy(accessTuples.id)
+        .limit(pageSize + 1);
+
+      const hasMore = pagedTuples.length > pageSize;
+      const tuples = hasMore ? pagedTuples.slice(0, pageSize) : pagedTuples;
+      const nextCursor = hasMore ? tuples[tuples.length - 1]?.id ?? null : null;
+
+      return { tuples, nextCursor, hasMore };
+    } catch (error) {
+      console.error("TupleRepository.findByClientScopePaginated error:", error);
+      return { tuples: [], nextCursor: null, hasMore: false };
+    }
   }
 
   /**

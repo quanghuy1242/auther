@@ -27,6 +27,9 @@ type CreateGrantRequest = {
   subjectId?: string;
 };
 
+const DEFAULT_GRANTS_PAGE_LIMIT = 100;
+const MAX_GRANTS_PAGE_LIMIT = 500;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -38,6 +41,22 @@ function getNonEmptyString(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseLimit(rawLimit: string | null): number | null {
+  if (rawLimit === null) {
+    return null;
+  }
+
+  const parsedLimit = /^\d+$/.test(rawLimit)
+    ? Number.parseInt(rawLimit, 10)
+    : Number.NaN;
+
+  if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+    return Number.NaN;
+  }
+
+  return parsedLimit;
 }
 
 export async function GET(
@@ -62,19 +81,48 @@ export async function GET(
 
     const entityTypeName = getNonEmptyString(request.nextUrl.searchParams.get("entityTypeName"));
     const entityId = getNonEmptyString(request.nextUrl.searchParams.get("entityId"));
+    const cursor = getNonEmptyString(request.nextUrl.searchParams.get("cursor")) ?? undefined;
+    const parsedLimit = parseLimit(request.nextUrl.searchParams.get("limit"));
 
-    if (!entityTypeName || !entityId) {
+    if (parsedLimit !== null && Number.isNaN(parsedLimit)) {
       return NextResponse.json(
         {
-          error: "missing_fields",
-          message: "entityTypeName and entityId are required",
+          error: "invalid_limit",
+          message: "limit must be a positive integer",
         },
         { status: 400 }
       );
     }
 
-    const fullEntityType = `client_${clientId}:${entityTypeName}`;
-    const tuples = await tupleRepository.findByEntity(fullEntityType, entityId);
+    if ((entityTypeName && !entityId) || (!entityTypeName && entityId)) {
+      return NextResponse.json(
+        {
+          error: "missing_fields",
+          message: "entityTypeName and entityId must both be provided when filtering",
+        },
+        { status: 400 }
+      );
+    }
+
+    const limit = Math.min(parsedLimit ?? DEFAULT_GRANTS_PAGE_LIMIT, MAX_GRANTS_PAGE_LIMIT);
+
+    const tuplePage = await tupleRepository.findByClientScopePaginated(
+      entityTypeName && entityId
+        ? {
+            clientId,
+            entityType: `client_${clientId}:${entityTypeName}`,
+            entityId,
+            cursor,
+            limit,
+          }
+        : {
+            clientId,
+            cursor,
+            limit,
+          }
+    );
+
+    const tuples = tuplePage.tuples;
 
     const userIds = Array.from(
       new Set(
@@ -99,7 +147,11 @@ export async function GET(
           : null,
     }));
 
-    return NextResponse.json({ grants });
+    return NextResponse.json({
+      grants,
+      nextCursor: tuplePage.nextCursor,
+      hasMore: tuplePage.hasMore,
+    });
   } catch (error) {
     console.error("[internal-client-grants:get] Error:", error);
     return NextResponse.json(
