@@ -820,6 +820,71 @@ The webhook events `grant.created` and `grant.revoked` with `relation: "full_acc
 
 Each item below is a discrete, independently verifiable unit of work.
 
+### Dependency Graph
+
+```mermaid
+graph TD
+  BL01["BL-01\nfindBySubjectAndEntityTypeAndRelation"]
+  BL02["BL-02\nextractClientIdFromEntityType + fast path"]
+  BL03["BL-03\ngroup-inherited tests"]
+  BL04["BL-04\ncross-client scope guard"]
+  BL05["BL-05\nresolveClientFullAccess"]
+  BL06["BL-06\nclient_full_access JWT claim"]
+  BL07["BL-07\nwebhook parity"]
+  BL08["BL-08\ngrantClientWideAccess"]
+  BL09["BL-09\nrevokeClientWideAccess"]
+  BL10["BL-10\nlistClientWideAccess / checkClientWideAccess"]
+  BL11["BL-11\ncreateClientApiKey accessMode"]
+  BL12["BL-12\ngetClientApiKeys accessMode"]
+  BL13["BL-13\nUI create-api-key-modal"]
+  BL14["BL-14\nUI api-key-management badge"]
+  BL15["BL-15\nUI scoped-permissions controls"]
+  BL16["BL-16\nmetrics verification"]
+  BL17["BL-17\nintegration tests"]
+
+  BL01 --> BL05
+  BL02 --> BL03
+  BL02 --> BL04
+  BL02 --> BL16
+  BL05 --> BL06
+  BL02 --> BL17
+  BL04 --> BL17
+  BL06 --> BL17
+  BL11 --> BL13
+  BL11 --> BL17
+  BL12 --> BL14
+  BL08 --> BL15
+  BL09 --> BL15
+  BL10 --> BL15
+```
+
+### Parallel Execution Waves
+
+Items within each wave have no dependencies on each other and can be worked in parallel. A wave can only start once all items blocking it are complete.
+
+| Wave | Items | Blocks |
+|---|---|---|
+| **Wave 1** | BL-01, BL-02, BL-07, BL-08, BL-09, BL-10, BL-11, BL-12 | Start immediately, no dependencies |
+| **Wave 2** | BL-03, BL-04, BL-05, BL-13, BL-14, BL-15, BL-16 | After their respective Wave 1 prerequisites (see graph) |
+| **Wave 3** | BL-06 | After BL-05 |
+| **Wave 4** | BL-17 | After BL-02, BL-04, BL-06, BL-11 |
+
+**Critical path** (longest sequential chain): `BL-01 → BL-05 → BL-06 → BL-17` — 4 hops.
+
+**Most parallel** wave is Wave 1 with 8 independent items. At full parallelism, the feature can land in 4 sequential steps.
+
+**Wave 2 prerequisites per item:**
+
+| Item | Must complete first |
+|---|---|
+| BL-03 | BL-02 |
+| BL-04 | BL-02 |
+| BL-05 | BL-01 |
+| BL-13 | BL-11 |
+| BL-14 | BL-12 |
+| BL-15 | BL-08, BL-09, BL-10 |
+| BL-16 | BL-02 |
+
 ---
 
 ### BL-01: `TupleRepository` - Add `findBySubjectAndEntityTypeAndRelation`
