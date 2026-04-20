@@ -6,6 +6,11 @@ import { LuaPolicyEngine } from "@/lib/auth/policy-engine";
 import { abacRepository } from "@/lib/repositories/abac-repository";
 import { metricsService } from "@/lib/services/metrics-service";
 
+export function extractClientIdFromEntityType(entityType: string): string | null {
+  const match = entityType.match(/^client_([^:]+):.+$/);
+  return match ? match[1] : null;
+}
+
 export interface ListObjectsParams {
   userId: string;
   entityType: string;
@@ -87,6 +92,29 @@ export class PermissionService {
           void metricsService.histogram("authz.check.duration_ms", duration, { result: "admin_bypass", entity_type: entityType });
           void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "admin_bypass" });
           return true;
+        }
+      }
+
+      // 0.5 Client-wide full_access bypass
+      const clientIdForCheck = extractClientIdFromEntityType(entityType);
+      if (clientIdForCheck) {
+        const subjects = await this.expandSubjects(subjectType, subjectId);
+
+        for (const subject of subjects) {
+          const fullAccessTuple = await this.tupleRepo.findExact({
+            entityType: "oauth_client",
+            entityId: clientIdForCheck,
+            relation: "full_access",
+            subjectType: subject.type,
+            subjectId: subject.id,
+          });
+
+          if (fullAccessTuple) {
+            const duration = performance.now() - checkStart;
+            void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
+            void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "client_full_access" });
+            return true;
+          }
         }
       }
 

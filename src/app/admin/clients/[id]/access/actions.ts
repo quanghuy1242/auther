@@ -285,6 +285,21 @@ export async function getClientApiKeys(clientId: string) {
         // We look for Tuples (Entity, Relation, Subject) -> (client_clientId:resource, action, apikey:keyId)
         const tuples = await tupleRepository.findBySubject("apikey", key.id);
 
+        const fullAccessTuple = tuples.find(
+          (tuple) =>
+            tuple.entityType === "oauth_client" &&
+            tuple.entityId === clientId &&
+            tuple.relation === "full_access"
+        );
+
+        if (fullAccessTuple) {
+          return {
+            ...key,
+            accessMode: "full_access" as const,
+            permissions: {} as Record<string, string[]>,
+          };
+        }
+
         // Map tuples back to "permissions" object format: { "resource": ["action1", "action2"] }
         // Tuple Entity format: "client_{clientId}:{resource}"
         // We need to parse the resource name from the entity type.
@@ -306,6 +321,7 @@ export async function getClientApiKeys(clientId: string) {
 
         return {
           ...key,
+          accessMode: "scoped" as const,
           permissions: permissions, // Override permissions with ReBAC source of truth
         };
       })
@@ -324,9 +340,19 @@ export async function getClientApiKeys(clientId: string) {
 const createApiKeySchema = z.object({
   clientId: z.string().min(1, "Client ID is required"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  permissions: z.record(z.string(), z.array(z.string())),
+  accessMode: z.enum(["scoped", "full_access"]).optional(),
+  permissions: z.record(z.string(), z.array(z.string())).optional(),
   expiresInDays: z.number().min(1).max(3650).optional(),
-});
+}).refine(
+  (data) =>
+    data.accessMode !== "scoped" ||
+    (data.permissions && Object.keys(data.permissions).length > 0) ||
+    data.accessMode === undefined,
+  {
+    message: "permissions required when accessMode is scoped",
+    path: ["permissions"],
+  }
+);
 
 export interface ApiKeyResult {
   success: boolean;
@@ -340,13 +366,14 @@ export interface ApiKeyResult {
 }
 
 export async function createClientApiKey(
-  data: z.infer<typeof createApiKeySchema>
+  data: z.input<typeof createApiKeySchema>
 ): Promise<ApiKeyResult> {
   try {
     await guards.clients.view();
     const session = await getSession();
     if (!session) throw new Error("Unauthorized");
     const validated = createApiKeySchema.parse(data);
+    const accessMode = validated.accessMode ?? "scoped";
 
     // 1. Verify caller is admin/owner (C2)
     const { level, canManageAccess } = await getCurrentUserAccessLevel(validated.clientId);
@@ -363,31 +390,33 @@ export async function createClientApiKey(
       relation: string;
     }> = [];
 
-    for (const [resource, actions] of Object.entries(validated.permissions)) {
-      const entityType = `client_${validated.clientId}:${resource}`;
-      const model = await authorizationModelRepository.findByEntityType(entityType);
+    if (accessMode === "scoped") {
+      for (const [resource, actions] of Object.entries(validated.permissions ?? {})) {
+        const entityType = `client_${validated.clientId}:${resource}`;
+        const model = await authorizationModelRepository.findByEntityType(entityType);
 
-      if (!model) {
-        return {
-          success: false,
-          error: `Entity type '${resource}' not found in authorization model.`,
-        };
-      }
-
-      const validRelations = new Set(Object.keys(model.definition.relations));
-      for (const action of actions) {
-        if (!validRelations.has(action)) {
+        if (!model) {
           return {
             success: false,
-            error: `Relation '${action}' is not defined in the authorization model for '${resource}'.`,
+            error: `Entity type '${resource}' not found in authorization model.`,
           };
         }
 
-        preparedGrants.push({
-          entityType,
-          entityTypeId: model.id,
-          relation: action,
-        });
+        const validRelations = new Set(Object.keys(model.definition.relations));
+        for (const action of actions) {
+          if (!validRelations.has(action)) {
+            return {
+              success: false,
+              error: `Relation '${action}' is not defined in the authorization model for '${resource}'.`,
+            };
+          }
+
+          preparedGrants.push({
+            entityType,
+            entityTypeId: model.id,
+            relation: action,
+          });
+        }
       }
     }
 
@@ -418,19 +447,29 @@ export async function createClientApiKey(
       };
     }
 
-    // 3. Create Tuples for requested permissions
-    // permissions format: { "invoice": ["read", "write"] }
-    // Tuple: (Entity="client_{id}:invoice", Relation="read", Subject="apikey:{keyId}")
+    // 3. Create tuples for requested access mode
     try {
-      for (const grant of preparedGrants) {
+      if (accessMode === "full_access") {
         await tupleRepository.createIfNotExists({
-          entityType: grant.entityType,
-          entityTypeId: grant.entityTypeId,
-          entityId: "*",
-          relation: grant.relation,
+          entityType: "oauth_client",
+          entityTypeId: null,
+          entityId: validated.clientId,
+          relation: "full_access",
           subjectType: "apikey",
           subjectId: result.id,
+          condition: null,
         });
+      } else {
+        for (const grant of preparedGrants) {
+          await tupleRepository.createIfNotExists({
+            entityType: grant.entityType,
+            entityTypeId: grant.entityTypeId,
+            entityId: "*",
+            relation: grant.relation,
+            subjectType: "apikey",
+            subjectId: result.id,
+          });
+        }
       }
     } catch (tupleError) {
       console.error("createClientApiKey tuple assignment error:", tupleError);
@@ -698,6 +737,7 @@ import {
  * Platform access relations for OAuth clients
  */
 export type PlatformRelation = "owner" | "admin" | "use";
+export type ClientWideAccessSubjectType = "user" | "group" | "apikey";
 
 interface PlatformAccessEntry {
   id: string;
@@ -947,6 +987,172 @@ export async function revokePlatformAccess(
       success: false,
       error: error instanceof Error ? error.message : "Failed to revoke access",
     };
+  }
+}
+
+async function validateApiKeyBelongsToClient(
+  clientId: string,
+  apiKeyId: string
+): Promise<string | null> {
+  const requestHeaders = await headers();
+  const allKeys = await auth.api.listApiKeys({ headers: requestHeaders });
+
+  if (!Array.isArray(allKeys)) {
+    return "Failed to validate API key ownership";
+  }
+
+  const keyRecord = allKeys.find((item) => item.id === apiKeyId);
+  if (!keyRecord) {
+    return "API key not found";
+  }
+
+  const keyClientId =
+    typeof keyRecord.metadata?.oauth_client_id === "string"
+      ? keyRecord.metadata.oauth_client_id
+      : null;
+
+  if (!keyClientId) {
+    return "API key is missing client ownership metadata";
+  }
+
+  if (keyClientId !== clientId) {
+    return "API key does not belong to this client";
+  }
+
+  return null;
+}
+
+/**
+ * Grant client-wide full access to a subject.
+ */
+export async function grantClientWideAccess(
+  clientId: string,
+  subjectType: ClientWideAccessSubjectType,
+  subjectId: string
+): Promise<AssignUserResult> {
+  try {
+    await guards.clients.view();
+
+    const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
+    if (!canManageAccess) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to grant full access",
+      };
+    }
+
+    if (subjectType === "apikey") {
+      const validationError = await validateApiKeyBelongsToClient(clientId, subjectId);
+      if (validationError) {
+        return {
+          success: false,
+          error: validationError,
+        };
+      }
+    }
+
+    await tupleRepository.createIfNotExists({
+      entityType: "oauth_client",
+      entityTypeId: null,
+      entityId: clientId,
+      relation: "full_access",
+      subjectType,
+      subjectId,
+      condition: null,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("grantClientWideAccess error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to grant full access",
+    };
+  }
+}
+
+/**
+ * Revoke client-wide full access from a subject.
+ */
+export async function revokeClientWideAccess(
+  clientId: string,
+  subjectType: ClientWideAccessSubjectType,
+  subjectId: string
+): Promise<AssignUserResult> {
+  try {
+    await guards.clients.view();
+
+    const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
+    if (!canManageAccess) {
+      return {
+        success: false,
+        error: "Permission denied: You must be an admin or owner to revoke full access",
+      };
+    }
+
+    const deleted = await tupleRepository.delete({
+      entityType: "oauth_client",
+      entityId: clientId,
+      relation: "full_access",
+      subjectType,
+      subjectId,
+    });
+
+    if (!deleted) {
+      return {
+        success: false,
+        error: "Full access grant not found",
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("revokeClientWideAccess error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to revoke full access",
+    };
+  }
+}
+
+/**
+ * List all client-wide full access grants for a client.
+ */
+export async function listClientWideAccess(clientId: string): Promise<Tuple[]> {
+  try {
+    await guards.clients.view();
+
+    const tuples = await tupleRepository.findByEntity("oauth_client", clientId);
+    return tuples.filter((tuple) => tuple.relation === "full_access");
+  } catch (error) {
+    console.error("listClientWideAccess error:", error);
+    return [];
+  }
+}
+
+/**
+ * Check if a subject has client-wide full access.
+ */
+export async function checkClientWideAccess(
+  clientId: string,
+  subjectType: ClientWideAccessSubjectType,
+  subjectId: string
+): Promise<boolean> {
+  try {
+    await guards.clients.view();
+
+    const tuple = await tupleRepository.findExact({
+      entityType: "oauth_client",
+      entityId: clientId,
+      relation: "full_access",
+      subjectType,
+      subjectId,
+    });
+
+    return tuple !== null;
+  } catch (error) {
+    console.error("checkClientWideAccess error:", error);
+    return false;
   }
 }
 

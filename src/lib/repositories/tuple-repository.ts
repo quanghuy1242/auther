@@ -24,8 +24,10 @@ export interface Tuple {
 
 export type CreateTupleParams = Omit<Tuple, "id" | "createdAt" | "updatedAt">;
 
-function isSupportedGrantSubjectType(subjectType: string): subjectType is "user" | "group" {
-  return subjectType === "user" || subjectType === "group";
+type GrantWebhookSubjectType = "user" | "group" | "apikey";
+
+function isGrantWebhookSubjectType(subjectType: string): subjectType is GrantWebhookSubjectType {
+  return subjectType === "user" || subjectType === "group" || subjectType === "apikey";
 }
 
 export class TupleRepository {
@@ -43,14 +45,19 @@ export class TupleRepository {
     return `tpl_${digest}`;
   }
 
-  private shouldEmitGrantWebhook(tuple: Tuple): tuple is Tuple & { subjectType: "user" | "group" } {
-    if (!isSupportedGrantSubjectType(tuple.subjectType)) {
+  private shouldEmitGrantWebhook(tuple: Tuple): tuple is Tuple & { subjectType: GrantWebhookSubjectType } {
+    if (!isGrantWebhookSubjectType(tuple.subjectType)) {
       return false;
     }
 
     // Group membership changes have dedicated group.member.* events.
     if (tuple.entityType === "group" && tuple.relation === "member") {
       return false;
+    }
+
+    // Preserve existing behavior for apikey scoped tuples.
+    if (tuple.subjectType === "apikey") {
+      return tuple.entityType === "oauth_client" && tuple.relation === "full_access";
     }
 
     return true;
@@ -235,6 +242,29 @@ export class TupleRepository {
         and(
           eq(accessTuples.subjectType, subjectType),
           eq(accessTuples.subjectId, subjectId)
+        )
+      );
+  }
+
+  /**
+   * Find tuples for a subject filtered by entity type and relation.
+   * Strict variant: throws on data access errors.
+   */
+  async findBySubjectAndEntityTypeAndRelation(
+    subjectType: string,
+    subjectId: string,
+    entityType: string,
+    relation: string
+  ): Promise<Tuple[]> {
+    return await db
+      .select()
+      .from(accessTuples)
+      .where(
+        and(
+          eq(accessTuples.subjectType, subjectType),
+          eq(accessTuples.subjectId, subjectId),
+          eq(accessTuples.entityType, entityType),
+          eq(accessTuples.relation, relation)
         )
       );
   }

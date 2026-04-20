@@ -92,6 +92,7 @@ function transformApiKeys(keys: Awaited<ReturnType<typeof getClientApiKeys>>): A
     created: k.createdAt.toISOString().split("T")[0],
     expires: k.expiresAt ? k.expiresAt.toISOString().split("T")[0] : "Never",
     permissions: "Managed via Scoped Permissions",
+    accessMode: k.accessMode,
     status: "Active"
   }));
 }

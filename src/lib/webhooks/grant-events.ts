@@ -2,7 +2,7 @@ import { WebhookRepository } from "@/lib/repositories/webhook-repository";
 import { emitWebhookEvent } from "@/lib/webhooks/delivery-service";
 import type { WebhookEventType } from "@/lib/constants";
 
-type GrantSubjectType = "user" | "group";
+type GrantSubjectType = "user" | "group" | "apikey";
 
 type GrantCreatedEventType = Extract<WebhookEventType, "grant.created">;
 type GrantRevokedEventType = Extract<WebhookEventType, "grant.revoked">;

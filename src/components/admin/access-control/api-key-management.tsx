@@ -66,6 +66,7 @@ export function ApiKeyManagement({
         created: k.createdAt.toISOString().split("T")[0],
         expires: k.expiresAt ? k.expiresAt.toISOString().split("T")[0] : "Never",
         permissions: "Managed via Scoped Permissions",
+        accessMode: k.accessMode,
         status: "Active"
       }));
       onChange(transformedKeys);
@@ -74,12 +75,13 @@ export function ApiKeyManagement({
     }
   };
 
-  const handleCreateKey = async (newKey: { name: string; expiresInDays?: number; permissions?: Record<string, string[]> }): Promise<ApiKeyResult> => {
+  const handleCreateKey = async (newKey: { name: string; expiresInDays?: number; permissions?: Record<string, string[]>; accessMode?: "scoped" | "full_access" }): Promise<ApiKeyResult> => {
     // Call server action
     const result = await createClientApiKey({
       clientId,
       name: newKey.name,
       expiresInDays: newKey.expiresInDays,
+      accessMode: newKey.accessMode,
       permissions: newKey.permissions || {},
     });
 
@@ -187,14 +189,22 @@ export function ApiKeyManagement({
                         <TableCell>{key.created}</TableCell>
                         <TableCell>{key.expires}</TableCell>
                         <TableCell>
-                          <button
-                            onClick={() => setManagingKey(key)}
-                            disabled={disabled}
-                            className="flex items-center gap-2 px-2 py-1 rounded bg-[#243647] hover:bg-slate-700 transition-colors text-xs text-blue-300 border border-transparent hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Icon name="lock_person" size="sm" className="text-blue-400" />
-                            {permCount === 0 ? "No Access" : `${permCount} Permission${permCount > 1 ? "s" : ""}`}
-                          </button>
+                          {key.accessMode === "full_access" ? (
+                            <div className="inline-flex items-center gap-2" title="This API key can perform any operation on any resource in this client.">
+                              <Badge variant="info" className="bg-emerald-900/30 border-emerald-500/30 text-emerald-300">
+                                Full Access
+                              </Badge>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setManagingKey(key)}
+                              disabled={disabled}
+                              className="flex items-center gap-2 px-2 py-1 rounded bg-[#243647] hover:bg-slate-700 transition-colors text-xs text-blue-300 border border-transparent hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Icon name="lock_person" size="sm" className="text-blue-400" />
+                              {permCount === 0 ? "No Access" : `${permCount} Permission${permCount > 1 ? "s" : ""}`}
+                            </button>
+                          )}
                         </TableCell>
                         <TableCell>
                           {key.status === "Active" ? (

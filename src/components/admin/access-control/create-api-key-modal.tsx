@@ -11,6 +11,7 @@ export interface ApiKey {
   created: string;
   expires: string;
   permissions: string;
+  accessMode?: "scoped" | "full_access";
   status: "Active" | "Revoked";
 }
 
@@ -18,7 +19,7 @@ export interface ApiKey {
 interface CreateApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (key: { name: string; expiresInDays?: number; permissions?: Record<string, string[]> }) => Promise<ApiKeyResult>;
+  onSave: (key: { name: string; expiresInDays?: number; permissions?: Record<string, string[]>; accessMode?: "scoped" | "full_access" }) => Promise<ApiKeyResult>;
   onAssignPermissions: (key: ApiKey) => void;
   clientId: string;
 }
@@ -86,6 +87,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
         created: new Date().toISOString().split("T")[0],
         expires: newKey.expiresAt ? newKey.expiresAt.toISOString().split("T")[0] : "Never",
         permissions: "", // Initial perms are empty
+        accessMode: "scoped",
         status: "Active"
       });
 

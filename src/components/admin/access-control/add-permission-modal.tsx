@@ -42,6 +42,7 @@ export interface ApiKey {
   created: string;
   expires: string;
   permissions: string;
+  accessMode?: "scoped" | "full_access";
   status: "Active" | "Revoked";
 }
 
