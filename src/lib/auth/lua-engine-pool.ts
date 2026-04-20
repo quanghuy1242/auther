@@ -1,6 +1,6 @@
 import { LuaFactory, LuaEngine } from "wasmoon";
 import { getWasmPath } from "../utils/wasm-path";
-import { metricsService } from "@/lib/services";
+import { metricsService } from "@/lib/services/metrics-service";
 
 export interface PooledEngine {
     engine: LuaEngine;

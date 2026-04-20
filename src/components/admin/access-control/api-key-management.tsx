@@ -47,7 +47,8 @@ export function ApiKeyManagement({
   onToggle,
   disabled = false,
   clientId,
-}: ApiKeyManagementProps & { clientId: string }) {
+  clientName,
+}: ApiKeyManagementProps & { clientId: string; clientName?: string }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
   const [managingKey, setManagingKey] = React.useState<ApiKey | null>(null);
 
@@ -242,6 +243,7 @@ export function ApiKeyManagement({
         onSave={handleCreateKey}
         onAssignPermissions={(key) => setManagingKey(key)}
         clientId={clientId}
+        resourceConfig={resourceConfig}
       />
 
       {/* Confirmation Modal for Revoke */}
@@ -273,22 +275,32 @@ export function ApiKeyManagement({
             </div>
 
             <div>
-              <p className="text-sm text-gray-400 mb-4">
-                Configure fine-grained permissions for this API key. These permissions are also visible in the main Access Control tab.
-              </p>
+              {managingKey.accessMode === "full_access" ? (
+                <Alert variant="info" title="Full Access Active">
+                  This API key has full client access. Scoped permission editing is disabled for full-access keys.
+                </Alert>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Configure fine-grained permissions for this API key. These permissions are also visible in the main Access Control tab.
+                  </p>
 
-              <ScopedPermissions
-                permissions={permissions}
-                onSave={onSavePermission}
-                onRemove={onRemovePermission}
-                resourceConfig={resourceConfig}
-                apiKeys={apiKeys}
-                subjectFilter={{
-                  id: managingKey.id,
-                  name: managingKey.owner,
-                  type: "ApiKey"
-                }}
-              />
+                  <ScopedPermissions
+                    permissions={permissions}
+                    onSave={onSavePermission}
+                    onRemove={onRemovePermission}
+                    resourceConfig={resourceConfig}
+                    apiKeys={apiKeys}
+                    clientId={clientId}
+                    clientName={clientName}
+                    subjectFilter={{
+                      id: managingKey.id,
+                      name: managingKey.owner,
+                      type: "ApiKey"
+                    }}
+                  />
+                </>
+              )}
             </div>
 
             <div className="flex justify-end">

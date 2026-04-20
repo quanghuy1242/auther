@@ -18,6 +18,11 @@ import { AddPermissionModal, type ScopedPermission, type ApiKey } from "./add-pe
 import { SectionHeader } from "@/components/ui/section-header";
 import { SubjectAvatar } from "@/components/ui/subject-avatar";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import {
+  grantClientWideAccess,
+  listClientWideAccess,
+  revokeClientWideAccess,
+} from "@/app/admin/clients/[id]/access/actions";
 
 interface ScopedPermissionsProps {
   permissions: ScopedPermission[];
@@ -25,6 +30,8 @@ interface ScopedPermissionsProps {
   onRemove: (id: string) => void;
   resourceConfig: Record<string, string[]>;
   apiKeys: ApiKey[];
+  clientId: string;
+  clientName?: string;
   subjectFilter?: {
     id: string;
     name: string;
@@ -64,6 +71,8 @@ export function ScopedPermissions({
   onRemove,
   resourceConfig,
   apiKeys,
+  clientId,
+  clientName,
   subjectFilter,
   disabled,
 }: ScopedPermissionsProps) {
@@ -72,6 +81,38 @@ export function ScopedPermissions({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [removingGroup, setRemovingGroup] = React.useState<SubjectGroup | null>(null);
   const [expandedSubjects, setExpandedSubjects] = React.useState<Set<string>>(new Set());
+  const [fullAccessSubjects, setFullAccessSubjects] = React.useState<Set<string>>(new Set());
+  const [updatingSubjectKey, setUpdatingSubjectKey] = React.useState<string | null>(null);
+  const [grantingSubject, setGrantingSubject] = React.useState<SubjectGroup["subject"] | null>(null);
+  const [fullAccessError, setFullAccessError] = React.useState<string | null>(null);
+
+  const getSubjectTypeForTuple = (type: ScopedPermission["subject"]["type"]) => {
+    return type.toLowerCase() as "user" | "group" | "apikey";
+  };
+
+  const buildSubjectKey = (subjectType: string, subjectId: string) => `${subjectType}:${subjectId}`;
+
+  const refreshClientWideAccess = React.useCallback(async () => {
+    try {
+      const tuples = await listClientWideAccess(clientId);
+      const next = new Set<string>();
+
+      for (const tuple of tuples) {
+        if (tuple.subjectType === "user" || tuple.subjectType === "group") {
+          next.add(buildSubjectKey(tuple.subjectType, tuple.subjectId));
+        }
+      }
+
+      setFullAccessSubjects(next);
+    } catch (error) {
+      console.error("Failed to load client-wide access:", error);
+      setFullAccessError("Failed to load full access grants.");
+    }
+  }, [clientId]);
+
+  React.useEffect(() => {
+    void refreshClientWideAccess();
+  }, [refreshClientWideAccess]);
 
   const filteredPermissions = subjectFilter
     ? permissions.filter(
@@ -85,8 +126,61 @@ export function ScopedPermissions({
     [filteredPermissions]
   );
 
-  const totalPages = Math.ceil(subjectGroups.length / ITEMS_PER_PAGE);
-  const displayedGroups = subjectGroups.slice(
+  const fullAccessOnlyGroups = React.useMemo(() => {
+    const existingKeys = new Set(
+      subjectGroups.map((group) =>
+        buildSubjectKey(getSubjectTypeForTuple(group.subject.type), group.subject.id)
+      )
+    );
+
+    const rows: SubjectGroup[] = [];
+
+    for (const key of fullAccessSubjects) {
+      if (existingKeys.has(key)) {
+        continue;
+      }
+
+      const [subjectType, ...idParts] = key.split(":");
+      const subjectId = idParts.join(":");
+      if (!subjectId) {
+        continue;
+      }
+
+      if (subjectType !== "user" && subjectType !== "group") {
+        continue;
+      }
+
+      const subjectTypeLabel = subjectType === "user" ? "User" : "Group";
+
+      if (
+        subjectFilter &&
+        (subjectFilter.type !== subjectTypeLabel ||
+          (subjectFilter.id !== subjectId && subjectFilter.name !== subjectId))
+      ) {
+        continue;
+      }
+
+      rows.push({
+        subject: {
+          id: subjectId,
+          name: subjectId,
+          type: subjectTypeLabel,
+          description: "Full access grant",
+        },
+        permissions: [],
+      });
+    }
+
+    return rows;
+  }, [fullAccessSubjects, subjectFilter, subjectGroups]);
+
+  const combinedSubjectGroups = React.useMemo(
+    () => [...subjectGroups, ...fullAccessOnlyGroups],
+    [fullAccessOnlyGroups, subjectGroups]
+  );
+
+  const totalPages = Math.ceil(combinedSubjectGroups.length / ITEMS_PER_PAGE);
+  const displayedGroups = combinedSubjectGroups.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
@@ -129,6 +223,48 @@ export function ScopedPermissions({
     onRemove(id);
   };
 
+  const handleGrantClientWideAccess = async (subject: SubjectGroup["subject"]) => {
+    if (disabled) return;
+
+    const subjectType = getSubjectTypeForTuple(subject.type);
+    const subjectKey = buildSubjectKey(subjectType, subject.id);
+    setUpdatingSubjectKey(subjectKey);
+    setFullAccessError(null);
+
+    try {
+      const result = await grantClientWideAccess(clientId, subjectType, subject.id);
+      if (!result.success) {
+        setFullAccessError(result.error || "Failed to grant full access.");
+        return;
+      }
+
+      await refreshClientWideAccess();
+    } finally {
+      setUpdatingSubjectKey(null);
+    }
+  };
+
+  const handleRevokeClientWideAccess = async (subject: SubjectGroup["subject"]) => {
+    if (disabled) return;
+
+    const subjectType = getSubjectTypeForTuple(subject.type);
+    const subjectKey = buildSubjectKey(subjectType, subject.id);
+    setUpdatingSubjectKey(subjectKey);
+    setFullAccessError(null);
+
+    try {
+      const result = await revokeClientWideAccess(clientId, subjectType, subject.id);
+      if (!result.success) {
+        setFullAccessError(result.error || "Failed to revoke full access.");
+        return;
+      }
+
+      await refreshClientWideAccess();
+    } finally {
+      setUpdatingSubjectKey(null);
+    }
+  };
+
   // Render a single permission row (for expanded view)
   const renderPermissionBadge = (perm: ScopedPermission) => (
     <div key={perm.id} className="flex items-center gap-2 py-1">
@@ -166,7 +302,7 @@ export function ScopedPermissions({
     </div>
   );
 
-  if (subjectGroups.length === 0 && !subjectFilter) {
+  if (combinedSubjectGroups.length === 0 && !subjectFilter) {
     return (
       <div className="space-y-4">
         {disabled && <Alert variant="info" title="View Only">You need Admin or Owner role to manage permissions.</Alert>}
@@ -199,6 +335,7 @@ export function ScopedPermissions({
   return (
     <div className="space-y-4">
       {disabled && <Alert variant="info" title="View Only">You need Admin or Owner role to manage permissions.</Alert>}
+      {fullAccessError && <Alert variant="error" title="Full Access Update Failed">{fullAccessError}</Alert>}
       <SectionHeader
         title="Scoped Permissions"
         description="Define fine-grained access rules for specific resources."
@@ -222,6 +359,11 @@ export function ScopedPermissions({
             {displayedGroups.map((group) => {
               const subjectKey = `${group.subject.type}:${group.subject.id}`;
               const isExpanded = expandedSubjects.has(subjectKey);
+              const tupleSubjectType = getSubjectTypeForTuple(group.subject.type);
+              const tupleSubjectKey = buildSubjectKey(tupleSubjectType, group.subject.id);
+              const isFullAccessSubject = group.subject.type === "User" || group.subject.type === "Group";
+              const hasFullAccess = fullAccessSubjects.has(tupleSubjectKey);
+              const isUpdatingFullAccess = updatingSubjectKey === tupleSubjectKey;
 
               return (
                 <TableRow key={subjectKey} className="align-top">
@@ -230,9 +372,20 @@ export function ScopedPermissions({
                       <div className="flex items-center gap-3">
                         <SubjectAvatar type={group.subject.type} avatarUrl={group.subject.avatarUrl} />
                         <div className="flex flex-col">
-                          <span className="font-medium text-sm text-white">
-                            {group.subject.name}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-white">
+                              {group.subject.name}
+                            </span>
+                            {hasFullAccess && isFullAccessSubject && (
+                              <Badge
+                                variant="info"
+                                className="bg-emerald-900/30 border-emerald-500/30 text-emerald-300"
+                                title="This actor has full access to all resources in this client. Scoped rules still apply for actors without full access."
+                              >
+                                Full Access Active
+                              </Badge>
+                            )}
+                          </div>
                           {group.subject.description && (
                             <span className="text-xs text-gray-400">
                               {group.subject.description}
@@ -244,8 +397,23 @@ export function ScopedPermissions({
                   )}
                   <TableCell>
                     <div className="flex flex-col gap-1">
+                      {hasFullAccess && isFullAccessSubject && (
+                        <div>
+                          <Badge
+                            variant="info"
+                            className="bg-emerald-900/30 border-emerald-500/30 text-emerald-300"
+                            title="This actor has full access to all resources in this client. Scoped rules still apply for actors without full access."
+                          >
+                            Full Access Active
+                          </Badge>
+                        </div>
+                      )}
+
                       {/* Summary view - show first 2 permissions as badges */}
                       <div className="flex flex-wrap gap-2">
+                        {group.permissions.length === 0 && (
+                          <span className="text-xs text-gray-500">No scoped permissions</span>
+                        )}
                         {group.permissions.slice(0, isExpanded ? 0 : 2).map(perm => (
                           <div key={perm.id} className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800/50 border border-slate-700">
                             <span className="text-xs font-mono text-blue-300">{perm.resourceType}</span>
@@ -285,21 +453,51 @@ export function ScopedPermissions({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => handleEditGroup(group)}
-                        className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-[#243647] transition-colors"
-                        title="Edit all permissions"
-                      >
-                        <Icon name="edit" size="sm" />
-                      </button>
-                      <button
-                        onClick={() => setRemovingGroup(group)}
-                        className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-[#243647] transition-colors"
-                        title="Remove all permissions"
-                      >
-                        <Icon name="delete" size="sm" />
-                      </button>
+                    <div className="flex flex-col items-end gap-2">
+                      {isFullAccessSubject && (
+                        hasFullAccess ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={disabled || isUpdatingFullAccess}
+                            onClick={() => void handleRevokeClientWideAccess(group.subject)}
+                          >
+                            Revoke Full Access
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={disabled || isUpdatingFullAccess}
+                            onClick={() => setGrantingSubject(group.subject)}
+                          >
+                            Grant Full Client Access
+                          </Button>
+                        )
+                      )}
+
+                      {group.permissions.length > 0 ? (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => handleEditGroup(group)}
+                            className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-[#243647] transition-colors"
+                            title="Edit all permissions"
+                            disabled={disabled}
+                          >
+                            <Icon name="edit" size="sm" />
+                          </button>
+                          <button
+                            onClick={() => setRemovingGroup(group)}
+                            className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-[#243647] transition-colors"
+                            title="Remove all permissions"
+                            disabled={disabled}
+                          >
+                            <Icon name="delete" size="sm" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">No scoped actions</span>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -360,6 +558,21 @@ export function ScopedPermissions({
         title="Remove All Permissions"
         description={`Are you sure you want to remove all ${removingGroup?.permissions.length || 0} permissions for ${removingGroup?.subject.name}? This may affect access immediately.`}
         confirmText="Remove All"
+      />
+
+      <ConfirmationModal
+        isOpen={!!grantingSubject}
+        onClose={() => setGrantingSubject(null)}
+        onConfirm={async () => {
+          if (!grantingSubject) return;
+          await handleGrantClientWideAccess(grantingSubject);
+          setGrantingSubject(null);
+        }}
+        title="Grant Full Client Access"
+        description={`Grant full client access for ${grantingSubject?.name} in ${clientName ? `${clientName} (${clientId})` : clientId}?`}
+        confirmText="Grant Full Access"
+        variant="warning"
+        loading={!!grantingSubject && updatingSubjectKey === buildSubjectKey(getSubjectTypeForTuple(grantingSubject.type), grantingSubject.id)}
       />
     </div>
   );

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { PermissionService } from "@/lib/auth/permission-service";
+import {
+    PermissionService,
+    extractClientIdFromEntityType,
+} from "@/lib/auth/permission-service";
 import { buildABACContext, buildUserContext, buildResourceContext } from "@/lib/auth/abac-context";
 
 /**
@@ -58,6 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         let subjectType: "user" | "apikey";
         let subjectId: string;
         let apiKeyRecordId: string | undefined;
+        let apiKeyClientId: string | null = null;
 
         // 2. Authenticate
         const headerApiKey = _headers.get("x-api-key");
@@ -82,6 +86,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             subjectType = "apikey";
             subjectId = verificationResult.key.id; // API Key ID is the subject for ReBAC
             apiKeyRecordId = verificationResult.key.id;
+            apiKeyClientId =
+                typeof verificationResult.key.metadata?.oauth_client_id === "string"
+                    ? verificationResult.key.metadata.oauth_client_id
+                    : null;
         }
         // B. Try User Session (Bearer Token)
         else if (authHeader?.startsWith("Bearer ")) {
@@ -104,6 +112,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 { error: "unauthorized", message: "Missing authentication requirements" },
                 { status: 401 }
             );
+        }
+
+        if (subjectType === "apikey") {
+            const entityClientId = extractClientIdFromEntityType(entityType);
+
+            if (entityClientId) {
+                if (!apiKeyClientId) {
+                    return NextResponse.json(
+                        {
+                            error: "forbidden",
+                            message: "API key is missing client scope metadata",
+                        },
+                        { status: 403 }
+                    );
+                }
+
+                if (entityClientId !== apiKeyClientId) {
+                    return NextResponse.json(
+                        {
+                            error: "forbidden",
+                            message: "API key cannot access permissions outside its client scope",
+                        },
+                        { status: 403 }
+                    );
+                }
+            }
         }
 
         // 3. Check Permission

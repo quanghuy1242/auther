@@ -8,6 +8,33 @@ import {
 import { metricsService } from "@/lib/services/metrics-service";
 import type { Tuple } from "@/lib/repositories/tuple-repository";
 
+const originalMetricsCount = metricsService.count;
+const originalMetricsHistogram = metricsService.histogram;
+
+test.beforeEach(() => {
+  (metricsService as unknown as {
+    count: typeof metricsService.count;
+    histogram: typeof metricsService.histogram;
+  }).count = async () => {};
+
+  (metricsService as unknown as {
+    count: typeof metricsService.count;
+    histogram: typeof metricsService.histogram;
+  }).histogram = async () => {};
+});
+
+test.after(() => {
+  (metricsService as unknown as {
+    count: typeof metricsService.count;
+    histogram: typeof metricsService.histogram;
+  }).count = originalMetricsCount;
+
+  (metricsService as unknown as {
+    count: typeof metricsService.count;
+    histogram: typeof metricsService.histogram;
+  }).histogram = originalMetricsHistogram;
+});
+
 function makeTuple(overrides: Partial<Tuple>): Tuple {
   const now = new Date("2026-01-01T00:00:00.000Z");
 
@@ -134,6 +161,12 @@ test("checkPermission allows direct apikey full_access and emits client_full_acc
           call.tags?.source === "client_full_access"
       )
     );
+
+    const decisionCalls = metrics.countCalls.filter(
+      (call) => call.name === "authz.decision.count"
+    );
+    assert.equal(decisionCalls.length, 1);
+    assert.equal(decisionCalls[0]?.tags?.source, "client_full_access");
   } finally {
     metrics.restore();
   }
@@ -146,14 +179,17 @@ test("checkPermission allows group-inherited full_access", async () => {
     findById: async () => null,
   };
 
-  (service as unknown as { expandSubjects: (type: string, id: string) => Promise<Array<{ type: string; id: string }>> }).expandSubjects =
-    async () => [
-      { type: "user", id: "user_1" },
-      { type: "group", id: "group_a" },
-    ];
+  (service as unknown as {
+    groupRepo: {
+      getUserGroups: (id: string) => Promise<Array<{ id: string }>>;
+    };
+  }).groupRepo = {
+    getUserGroups: async () => [{ id: "group_a" }],
+  };
 
   (service as unknown as {
     tupleRepo: {
+      findBySubject: (subjectType: string, subjectId: string) => Promise<Tuple[]>;
       findExact: (params: {
         entityType: string;
         entityId: string;
@@ -163,6 +199,7 @@ test("checkPermission allows group-inherited full_access", async () => {
       }) => Promise<Tuple | null>;
     };
   }).tupleRepo = {
+    findBySubject: async () => [],
     findExact: async (params) => {
       if (
         params.entityType === "oauth_client" &&
@@ -194,6 +231,210 @@ test("checkPermission allows group-inherited full_access", async () => {
   );
 
   assert.equal(allowed, true);
+});
+
+test("checkPermission allows apikey group-inherited full_access", async () => {
+  const service = new PermissionService();
+
+  (service as unknown as { userRepo: { findById: (id: string) => Promise<{ role: string } | null> } }).userRepo = {
+    findById: async () => null,
+  };
+
+  (service as unknown as {
+    groupRepo: {
+      getUserGroups: (id: string) => Promise<Array<{ id: string }>>;
+    };
+  }).groupRepo = {
+    getUserGroups: async () => [],
+  };
+
+  (service as unknown as {
+    tupleRepo: {
+      findBySubject: (subjectType: string, subjectId: string) => Promise<Tuple[]>;
+      findExact: (params: {
+        entityType: string;
+        entityId: string;
+        relation: string;
+        subjectType: string;
+        subjectId: string;
+      }) => Promise<Tuple | null>;
+    };
+  }).tupleRepo = {
+    findBySubject: async (subjectType, subjectId) => {
+      if (subjectType === "apikey" && subjectId === "key_1") {
+        return [
+          makeTuple({
+            id: "tpl_group_member",
+            entityType: "group",
+            entityId: "group_a",
+            relation: "member",
+            subjectType: "apikey",
+            subjectId: "key_1",
+          }),
+        ];
+      }
+
+      return [];
+    },
+    findExact: async (params) => {
+      if (
+        params.entityType === "oauth_client" &&
+        params.entityId === "abc" &&
+        params.relation === "full_access" &&
+        params.subjectType === "group" &&
+        params.subjectId === "group_a"
+      ) {
+        return makeTuple({
+          subjectType: "group",
+          subjectId: "group_a",
+        });
+      }
+
+      return null;
+    },
+  };
+
+  (service as unknown as { modelService: { getModel: (entityType: string) => Promise<object | null> } }).modelService = {
+    getModel: async (entityType) => {
+      if (entityType === "group") {
+        return {
+          relations: {
+            member: [],
+          },
+          permissions: {},
+        };
+      }
+
+      return null;
+    },
+  };
+
+  const allowed = await service.checkPermission(
+    "apikey",
+    "key_1",
+    "client_abc:invoice",
+    "inv_1",
+    "read"
+  );
+
+  assert.equal(allowed, true);
+});
+
+test("checkPermission denies user and apikey after group full_access is removed", async () => {
+  const service = new PermissionService();
+  let groupGrantActive = true;
+
+  (service as unknown as { userRepo: { findById: (id: string) => Promise<{ role: string } | null> } }).userRepo = {
+    findById: async () => null,
+  };
+
+  (service as unknown as {
+    groupRepo: {
+      getUserGroups: (id: string) => Promise<Array<{ id: string }>>;
+    };
+  }).groupRepo = {
+    getUserGroups: async () => [{ id: "group_a" }],
+  };
+
+  (service as unknown as {
+    tupleRepo: {
+      findBySubject: (subjectType: string, subjectId: string) => Promise<Tuple[]>;
+      findExact: (params: {
+        entityType: string;
+        entityId: string;
+        relation: string;
+        subjectType: string;
+        subjectId: string;
+      }) => Promise<Tuple | null>;
+    };
+  }).tupleRepo = {
+    findBySubject: async (subjectType, subjectId) => {
+      if (subjectType === "apikey" && subjectId === "key_1") {
+        return [
+          makeTuple({
+            id: "tpl_group_member",
+            entityType: "group",
+            entityId: "group_a",
+            relation: "member",
+            subjectType: "apikey",
+            subjectId: "key_1",
+          }),
+        ];
+      }
+
+      return [];
+    },
+    findExact: async (params) => {
+      if (
+        groupGrantActive &&
+        params.entityType === "oauth_client" &&
+        params.entityId === "abc" &&
+        params.relation === "full_access" &&
+        params.subjectType === "group" &&
+        params.subjectId === "group_a"
+      ) {
+        return makeTuple({
+          subjectType: "group",
+          subjectId: "group_a",
+        });
+      }
+
+      return null;
+    },
+  };
+
+  (service as unknown as { modelService: { getModel: (entityType: string) => Promise<object | null> } }).modelService = {
+    getModel: async (entityType) => {
+      if (entityType === "group") {
+        return {
+          relations: {
+            member: [],
+          },
+          permissions: {},
+        };
+      }
+
+      return null;
+    },
+  };
+
+  const userAllowedBefore = await service.checkPermission(
+    "user",
+    "user_1",
+    "client_abc:invoice",
+    "inv_1",
+    "read"
+  );
+  const apiKeyAllowedBefore = await service.checkPermission(
+    "apikey",
+    "key_1",
+    "client_abc:invoice",
+    "inv_1",
+    "read"
+  );
+
+  assert.equal(userAllowedBefore, true);
+  assert.equal(apiKeyAllowedBefore, true);
+
+  groupGrantActive = false;
+
+  const userAllowedAfter = await service.checkPermission(
+    "user",
+    "user_1",
+    "client_abc:invoice",
+    "inv_1",
+    "read"
+  );
+  const apiKeyAllowedAfter = await service.checkPermission(
+    "apikey",
+    "key_1",
+    "client_abc:invoice",
+    "inv_1",
+    "read"
+  );
+
+  assert.equal(userAllowedAfter, false);
+  assert.equal(apiKeyAllowedAfter, false);
 });
 
 test("checkPermission does not bypass with full_access from another client", async () => {
@@ -330,39 +571,44 @@ test("checkPermission falls through to scoped tuple checks when no full_access e
 
 test("checkPermission does not trigger full_access path for oauth_client entity type", async () => {
   const service = new PermissionService();
+  const metrics = createMetricsRecorder();
 
   let expandSubjectsCalls = 0;
 
-  (service as unknown as { userRepo: { findById: (id: string) => Promise<{ role: string } | null> } }).userRepo = {
-    findById: async () => null,
-  };
-
-  (service as unknown as { expandSubjects: (type: string, id: string) => Promise<Array<{ type: string; id: string }>> }).expandSubjects =
-    async () => {
-      expandSubjectsCalls += 1;
-      return [{ type: "apikey", id: "key_1" }];
+  try {
+    (service as unknown as { userRepo: { findById: (id: string) => Promise<{ role: string } | null> } }).userRepo = {
+      findById: async () => null,
     };
 
-  (service as unknown as { modelService: { getModel: (entityType: string) => Promise<object | null> } }).modelService = {
-    getModel: async () => null,
-  };
+    (service as unknown as { expandSubjects: (type: string, id: string) => Promise<Array<{ type: string; id: string }>> }).expandSubjects =
+      async () => {
+        expandSubjectsCalls += 1;
+        return [{ type: "apikey", id: "key_1" }];
+      };
 
-  (service as unknown as {
-    tupleRepo: {
-      findExact: () => Promise<Tuple | null>;
+    (service as unknown as { modelService: { getModel: (entityType: string) => Promise<object | null> } }).modelService = {
+      getModel: async () => null,
     };
-  }).tupleRepo = {
-    findExact: async () => makeTuple({}),
-  };
 
-  const allowed = await service.checkPermission(
-    "apikey",
-    "key_1",
-    "oauth_client",
-    "abc",
-    "read"
-  );
+    (service as unknown as {
+      tupleRepo: {
+        findExact: () => Promise<Tuple | null>;
+      };
+    }).tupleRepo = {
+      findExact: async () => makeTuple({}),
+    };
 
-  assert.equal(allowed, false);
-  assert.equal(expandSubjectsCalls, 0);
+    const allowed = await service.checkPermission(
+      "apikey",
+      "key_1",
+      "oauth_client",
+      "abc",
+      "read"
+    );
+
+    assert.equal(allowed, false);
+    assert.equal(expandSubjectsCalls, 0);
+  } finally {
+    metrics.restore();
+  }
 });

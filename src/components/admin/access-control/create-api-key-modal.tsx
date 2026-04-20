@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Modal, ModalFooter, Button, Input, Select, Alert, Icon } from "@/components/ui";
+import {
+  Modal,
+  ModalFooter,
+  Button,
+  Input,
+  Select,
+  Alert,
+  Icon,
+  SegmentedControl,
+  Checkbox,
+} from "@/components/ui";
 import { type ApiKeyResult } from "@/app/admin/clients/[id]/access/actions";
 
 export interface ApiKey {
@@ -22,12 +32,16 @@ interface CreateApiKeyModalProps {
   onSave: (key: { name: string; expiresInDays?: number; permissions?: Record<string, string[]>; accessMode?: "scoped" | "full_access" }) => Promise<ApiKeyResult>;
   onAssignPermissions: (key: ApiKey) => void;
   clientId: string;
+  resourceConfig: Record<string, string[]>;
 }
 
-export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions }: CreateApiKeyModalProps) {
+export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions, resourceConfig }: CreateApiKeyModalProps) {
   const [step, setStep] = React.useState<"form" | "result">("form");
   const [name, setName] = React.useState("");
   const [expiry, setExpiry] = React.useState("Never");
+  const [accessMode, setAccessMode] = React.useState<"scoped" | "full_access">("scoped");
+  const [fullAccessConfirmed, setFullAccessConfirmed] = React.useState(false);
+  const [selectedPermissions, setSelectedPermissions] = React.useState<Record<string, string[]>>({});
   const [generatedKey, setGeneratedKey] = React.useState("");
   const [createdKeyObject, setCreatedKeyObject] = React.useState<ApiKey | null>(null);
   const [copied, setCopied] = React.useState(false);
@@ -43,6 +57,9 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
         setStep("form");
         setName("");
         setExpiry("Never");
+        setAccessMode("scoped");
+        setFullAccessConfirmed(false);
+        setSelectedPermissions({});
         setGeneratedKey("");
         setCreatedKeyObject(null);
         setCopied(false);
@@ -51,6 +68,31 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
       }, 300);
     }
   }, [isOpen, step]);
+
+  const hasScopedPermissions = React.useMemo(
+    () => Object.values(selectedPermissions).some((relations) => relations.length > 0),
+    [selectedPermissions]
+  );
+
+  const togglePermission = (resource: string, relation: string, checked: boolean) => {
+    setSelectedPermissions((prev) => {
+      const existing = prev[resource] ?? [];
+      const nextRelations = checked
+        ? Array.from(new Set([...existing, relation]))
+        : existing.filter((item) => item !== relation);
+
+      const next = {
+        ...prev,
+        [resource]: nextRelations,
+      };
+
+      if (nextRelations.length === 0) {
+        delete next[resource];
+      }
+
+      return next;
+    });
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,10 +106,23 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
       if (expiry === "90 Days") days = 90;
       if (expiry === "1 Year") days = 365;
 
+      if (accessMode === "scoped" && !hasScopedPermissions) {
+        setError("Select at least one scoped permission.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (accessMode === "full_access" && !fullAccessConfirmed) {
+        setError("Confirm full client access before creating the key.");
+        setIsLoading(false);
+        return;
+      }
+
       const result = await onSave({
         name,
         expiresInDays: days,
-        permissions: {}, // Permissions handled via separate flow/update
+        accessMode,
+        permissions: accessMode === "scoped" ? selectedPermissions : undefined,
       });
 
       if (!result.success || !result.apiKey) {
@@ -87,7 +142,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
         created: new Date().toISOString().split("T")[0],
         expires: newKey.expiresAt ? newKey.expiresAt.toISOString().split("T")[0] : "Never",
         permissions: "", // Initial perms are empty
-        accessMode: "scoped",
+        accessMode,
         status: "Active"
       });
 
@@ -108,10 +163,18 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
 
   const handleAssignAndClose = () => {
     if (createdKeyObject) {
-      onAssignPermissions(createdKeyObject);
+      if (createdKeyObject.accessMode === "scoped") {
+        onAssignPermissions(createdKeyObject);
+      }
     }
     onClose();
   };
+
+  const scopedResources = Object.entries(resourceConfig);
+  const canGenerate =
+    !!name &&
+    !isLoading &&
+    (accessMode === "full_access" ? fullAccessConfirmed : hasScopedPermissions);
 
   return (
     <Modal
@@ -145,15 +208,79 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
             disabled={isLoading}
           />
 
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-white">Access Mode</p>
+            <SegmentedControl
+              value={accessMode}
+              onChange={(value) => {
+                setAccessMode(value);
+                setError("");
+                if (value !== "full_access") {
+                  setFullAccessConfirmed(false);
+                }
+              }}
+              options={[
+                { label: "Fine-grained access", value: "scoped" },
+                { label: "Full client access", value: "full_access" },
+              ]}
+              disabled={isLoading}
+              size="md"
+            />
+          </div>
+
+          {accessMode === "full_access" ? (
+            <div className="space-y-3">
+              <Alert variant="warning" title="High-Privilege Access">
+                Full client access grants this API key permission to perform any operation on any resource type within this client. This is intended for service accounts and automation. Use scoped permissions for least-privilege access.
+              </Alert>
+              <Checkbox
+                checked={fullAccessConfirmed}
+                onChange={setFullAccessConfirmed}
+                disabled={isLoading}
+                label="I understand this key will have full access to all resources in this client"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-white">Scoped Permissions</p>
+              {scopedResources.length === 0 ? (
+                <Alert variant="warning" title="No Resources Available">
+                  No scoped resources are configured for this client yet.
+                </Alert>
+              ) : (
+                <div className="max-h-60 overflow-auto rounded-lg border border-slate-700 bg-[#111921] p-3 space-y-3">
+                  {scopedResources.map(([resource, relations]) => (
+                    <div key={resource} className="space-y-2">
+                      <p className="text-sm font-medium text-white">{resource}</p>
+                      <div className="flex flex-wrap gap-3">
+                        {relations.map((relation) => (
+                          <Checkbox
+                            key={`${resource}:${relation}`}
+                            checked={(selectedPermissions[resource] ?? []).includes(relation)}
+                            onChange={(checked) => togglePermission(resource, relation, checked)}
+                            disabled={isLoading}
+                            label={relation}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <Alert variant="info">
-            Permissions for this key are managed in the Access Control tab. By default, new keys have no access.
+            {accessMode === "scoped"
+              ? "Select at least one scoped permission for this key."
+              : "This key will bypass scoped checks for all resources in this client."}
           </Alert>
 
           {error && <Alert variant="error">{error}</Alert>}
 
           <ModalFooter>
             <Button variant="ghost" type="button" onClick={onClose} disabled={isLoading}>Cancel</Button>
-            <Button variant="primary" type="submit" disabled={!name || isLoading}>
+            <Button variant="primary" type="submit" disabled={!canGenerate}>
               {isLoading ? "Generating..." : "Generate Key"}
             </Button>
           </ModalFooter>
@@ -183,7 +310,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
 
           <div className="flex flex-col gap-3">
             <Button variant="primary" onClick={handleAssignAndClose} className="w-full">
-              Save & Assign Permissions
+              {createdKeyObject?.accessMode === "full_access" ? "Save & Close" : "Save & Assign Permissions"}
             </Button>
             <Button variant="secondary" onClick={onClose} className="w-full">
               Close

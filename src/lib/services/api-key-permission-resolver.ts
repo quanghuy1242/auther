@@ -325,6 +325,40 @@ export class ApiKeyPermissionResolver {
     }
 
     /**
+     * Returns client IDs for which this API key (or any group it belongs to)
+     * has a client-wide full_access grant.
+     */
+    async resolveClientFullAccess(apiKeyId: string): Promise<string[]> {
+        const subjects: Array<{ type: "apikey" | "group"; id: string }> = [
+            { type: "apikey", id: apiKeyId },
+        ];
+
+        const groupTuples = await tupleRepository.findBySubject("apikey", apiKeyId);
+        for (const tuple of groupTuples) {
+            if (tuple.entityType === "group" && tuple.relation === "member") {
+                subjects.push({ type: "group", id: tuple.entityId });
+            }
+        }
+
+        const clientIds = new Set<string>();
+
+        for (const subject of subjects) {
+            const tuples = await tupleRepository.findBySubjectAndEntityTypeAndRelation(
+                subject.type,
+                subject.id,
+                "oauth_client",
+                "full_access"
+            );
+
+            for (const tuple of tuples) {
+                clientIds.add(tuple.entityId);
+            }
+        }
+
+        return Array.from(clientIds);
+    }
+
+    /**
      * Resolve detailed permission info for an API key.
      * Returns full tuple context for debugging/admin views.
      * Includes ABAC condition info.

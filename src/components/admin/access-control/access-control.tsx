@@ -601,6 +601,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
                     onRemove={handleRemovePermission}
                     resourceConfig={resourceConfig}
                     apiKeys={apiKeys}
+                    clientId={clientId}
+                    clientName={client.name || undefined}
                     disabled={!canManageAccess}
                   />
                 )
@@ -620,6 +622,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
                     onToggle={handleToggleApiKeys}
                     disabled={!canManageAccess}
                     clientId={clientId}
+                    clientName={client.name || undefined}
                   />
                 )
               },
