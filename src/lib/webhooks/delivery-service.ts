@@ -163,10 +163,12 @@ export async function emitWebhookEvent(
         });
         return result;
       } catch (err) {
+        const errMessage = err instanceof Error ? err.message : "QStash publish failed";
+        const errCause = err instanceof Error && err.cause instanceof Error ? err.cause.message : undefined;
         await webhookRepository.updateDelivery(deliveryId, {
           status: "failed",
           attemptCount: 1,
-          responseBody: err instanceof Error ? err.message.slice(0, 1000) : "QStash publish failed",
+          responseBody: (errCause ? `${errMessage}: ${errCause}` : errMessage).slice(0, 1000),
         });
 
         // Metric: QStash publish error
@@ -188,7 +190,11 @@ export async function emitWebhookEvent(
         eventType,
         failedQueueCount,
         totalEndpoints: endpoints.length,
-        errors: failedResults.map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason))),
+        errors: failedResults.map((r) => {
+          if (!(r.reason instanceof Error)) return String(r.reason);
+          const cause = r.reason.cause instanceof Error ? ` (cause: ${r.reason.cause.message})` : "";
+          return `${r.reason.message}${cause}`;
+        }),
       });
     }
 
@@ -314,16 +320,20 @@ export async function deliverWebhook(
     };
   } catch (error) {
     const durationMs = Date.now() - startTime;
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause : undefined;
     console.error("Webhook delivery error:", {
       eventId,
       endpointId,
       error,
+      cause,
     });
 
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const causeMessage = cause?.message;
     return {
       success: false,
       status: "failed",
-      responseBody: error instanceof Error ? error.message : "Unknown error",
+      responseBody: causeMessage ? `${message}: ${causeMessage}` : message,
       durationMs,
     };
   }
