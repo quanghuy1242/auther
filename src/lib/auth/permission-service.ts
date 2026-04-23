@@ -764,6 +764,17 @@ export class PermissionService {
     }
   }
 
+  /**
+   * Public wrapper for subject expansion used by services that must mirror
+   * runtime authorization subject traversal semantics.
+   */
+  async expandSubjectsForResolution(
+    type: string,
+    id: string
+  ): Promise<Array<{ type: string; id: string }>> {
+    return await this.expandSubjects(type, id);
+  }
+
   private getImpliedRelations(
     relationMap: Record<string, string[] | { union?: string[]; subjectParams?: { hierarchy?: boolean } }>,
     target: string

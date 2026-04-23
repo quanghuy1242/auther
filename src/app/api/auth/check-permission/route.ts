@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
     PermissionService,
@@ -35,7 +34,7 @@ interface CheckPermissionRequest {
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
     try {
-        const _headers = await headers();
+        const requestHeaders = request.headers;
 
         // 1. Parse Body
         let body: CheckPermissionRequest;
@@ -64,8 +63,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         let apiKeyClientId: string | null = null;
 
         // 2. Authenticate
-        const headerApiKey = _headers.get("x-api-key");
-        const authHeader = _headers.get("authorization");
+        const headerApiKey = requestHeaders.get("x-api-key");
+        const authHeader = requestHeaders.get("authorization");
         const bodyApiKey = body.apiKey; // Legacy support
 
         // A. Try API Key (Header prioritised, then Body)
@@ -74,7 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         if (apiKeyToVerify) {
             const verificationResult = await auth.api.verifyApiKey({
                 body: { key: apiKeyToVerify },
-                headers: _headers,
+                headers: requestHeaders,
             });
 
             if (!verificationResult || !verificationResult.valid || !verificationResult.key) {
@@ -94,7 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // B. Try User Session (Bearer Token)
         else if (authHeader?.startsWith("Bearer ")) {
             const session = await auth.api.getSession({
-                headers: _headers,
+                headers: requestHeaders,
             });
 
             if (!session || !session.user) {

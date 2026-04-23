@@ -329,16 +329,10 @@ export class ApiKeyPermissionResolver {
      * has a client-wide full_access grant.
      */
     async resolveClientFullAccess(apiKeyId: string): Promise<string[]> {
-        const subjects: Array<{ type: "apikey" | "group"; id: string }> = [
-            { type: "apikey", id: apiKeyId },
-        ];
-
-        const groupTuples = await tupleRepository.findBySubject("apikey", apiKeyId);
-        for (const tuple of groupTuples) {
-            if (tuple.entityType === "group" && tuple.relation === "member") {
-                subjects.push({ type: "group", id: tuple.entityId });
-            }
-        }
+        const subjects = await this.permissionService.expandSubjectsForResolution(
+            "apikey",
+            apiKeyId
+        );
 
         const clientIds = new Set<string>();
 

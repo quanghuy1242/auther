@@ -19,12 +19,39 @@ import {
 import { updateClientPolicySchema } from "@/schemas/clients";
 import { createGroupSchema } from "@/schemas/groups";
 import { validateLuaSyntax, analyzeLuaPolicy, testLuaPolicy } from "@/lib/auth/lua-validator";
+import { metricsService } from "@/lib/services/metrics-service";
 
 export interface AssignUserResult {
   success: boolean;
   error?: string;
   warnings?: string[];
 }
+
+async function emitClientWideAccessGrantCount(clientId: string): Promise<void> {
+  try {
+    const tuples = await tupleRepository.findByEntity("oauth_client", clientId);
+    const activeGrantCount = tuples.filter((tuple) => tuple.relation === "full_access").length;
+
+    await metricsService.gauge("authz.client_full_access.grant_count", activeGrantCount, {
+      client_id: clientId,
+    });
+  } catch (error) {
+    console.error("Failed to emit authz.client_full_access.grant_count metric:", error);
+  }
+}
+
+type HeadersValue = Awaited<ReturnType<typeof headers>>;
+type SessionLike = { user: { id: string } } | null;
+type AccessLevelResult = Awaited<ReturnType<typeof getCurrentUserAccessLevel>>;
+type AuthorizationModelLookupResult = Awaited<
+  ReturnType<typeof authorizationModelRepository.findByEntityType>
+>;
+type CreatedApiKeyResult = {
+  id: string;
+  key: string;
+  name?: string | null;
+  expiresAt?: Date | string | null;
+};
 
 // ============================================================================
 // Client Metadata & Access Policy
@@ -256,16 +283,53 @@ export async function checkResourceDependencies(
  * Get all API keys for a client, enriched with ReBAC permissions
  */
 export async function getClientApiKeys(clientId: string) {
+  const runtimeDeps: {
+    guardView: () => Promise<void>;
+    getHeadersFn: () => Promise<HeadersValue>;
+    listApiKeysFn: (input: { headers: HeadersValue }) => Promise<unknown>;
+    findBySubjectFn: typeof tupleRepository.findBySubject;
+  } = {
+    guardView: guards.clients.view,
+    getHeadersFn: headers,
+    listApiKeysFn: auth.api.listApiKeys,
+    findBySubjectFn: tupleRepository.findBySubject.bind(tupleRepository),
+  };
+
+  return await getClientApiKeysWithDeps(clientId, runtimeDeps);
+}
+
+export async function getClientApiKeysWithDeps(
+  clientId: string,
+  deps?: Partial<{
+    guardView: () => Promise<void>;
+    getHeadersFn: () => Promise<HeadersValue>;
+    listApiKeysFn: (input: { headers: HeadersValue }) => Promise<unknown>;
+    findBySubjectFn: typeof tupleRepository.findBySubject;
+  }>
+) {
+  const runtimeDeps: {
+    guardView: () => Promise<void>;
+    getHeadersFn: () => Promise<HeadersValue>;
+    listApiKeysFn: (input: { headers: HeadersValue }) => Promise<unknown>;
+    findBySubjectFn: typeof tupleRepository.findBySubject;
+  } = {
+    guardView: guards.clients.view,
+    getHeadersFn: headers,
+    listApiKeysFn: auth.api.listApiKeys,
+    findBySubjectFn: tupleRepository.findBySubject.bind(tupleRepository),
+    ...deps,
+  };
+
   try {
-    await guards.clients.view();
-    const _headers = await headers();
+    await runtimeDeps.guardView();
+    const _headers = await runtimeDeps.getHeadersFn();
 
     // Check access C1/C2 (must be admin/owner to view keys?)
     // Actually, traditionally view access might be enough, but keys are sensitive.
     // Let's stick to standard requireAuth for now and filter by client metadata.
 
     // 1. List keys from Better Auth
-    const allKeys = await auth.api.listApiKeys({
+    const allKeys = await runtimeDeps.listApiKeysFn({
       headers: _headers,
     });
 
@@ -283,16 +347,16 @@ export async function getClientApiKeys(clientId: string) {
       clientKeys.map(async (key) => {
         // Find tuples where subject is this API key
         // We look for Tuples (Entity, Relation, Subject) -> (client_clientId:resource, action, apikey:keyId)
-        const tuples = await tupleRepository.findBySubject("apikey", key.id);
+        const tuples = await runtimeDeps.findBySubjectFn("apikey", key.id);
 
-        const fullAccessTuple = tuples.find(
+        const directFullAccessTuple = tuples.find(
           (tuple) =>
             tuple.entityType === "oauth_client" &&
             tuple.entityId === clientId &&
             tuple.relation === "full_access"
         );
 
-        if (fullAccessTuple) {
+        if (directFullAccessTuple) {
           return {
             ...key,
             accessMode: "full_access" as const,
@@ -340,14 +404,14 @@ export async function getClientApiKeys(clientId: string) {
 const createApiKeySchema = z.object({
   clientId: z.string().min(1, "Client ID is required"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  accessMode: z.enum(["scoped", "full_access"]).optional(),
+  accessMode: z.enum(["scoped", "full_access"]).default("scoped"),
   permissions: z.record(z.string(), z.array(z.string())).optional(),
   expiresInDays: z.number().min(1).max(3650).optional(),
 }).refine(
   (data) =>
     data.accessMode !== "scoped" ||
-    (data.permissions && Object.keys(data.permissions).length > 0) ||
-    data.accessMode === undefined,
+    (data.permissions &&
+      Object.values(data.permissions).some((actions) => actions.length > 0)),
   {
     message: "permissions required when accessMode is scoped",
     path: ["permissions"],
@@ -365,18 +429,44 @@ export interface ApiKeyResult {
   };
 }
 
+interface CreateClientApiKeyDeps {
+  guardView: () => Promise<void>;
+  getSessionFn: () => Promise<SessionLike>;
+  getCurrentUserAccessLevelFn: (clientId: string) => Promise<AccessLevelResult>;
+  findAuthorizationModelFn: (entityType: string) => Promise<AuthorizationModelLookupResult>;
+  createApiKeyFn: (input: { body: Record<string, unknown> }) => Promise<CreatedApiKeyResult | null>;
+  createTupleIfNotExistsFn: typeof tupleRepository.createIfNotExists;
+  deleteTuplesBySubjectFn: typeof tupleRepository.deleteBySubject;
+  deleteApiKeyFn: (input: { body: { keyId: string }; headers: HeadersValue }) => Promise<{ success?: boolean } | boolean>;
+  getHeadersFn: () => Promise<HeadersValue>;
+}
+
 export async function createClientApiKey(
-  data: z.input<typeof createApiKeySchema>
+  data: z.input<typeof createApiKeySchema>,
+  deps?: Partial<CreateClientApiKeyDeps>
 ): Promise<ApiKeyResult> {
+  const runtimeDeps: CreateClientApiKeyDeps = {
+    guardView: guards.clients.view,
+    getSessionFn: getSession,
+    getCurrentUserAccessLevelFn: getCurrentUserAccessLevel,
+    findAuthorizationModelFn: authorizationModelRepository.findByEntityType.bind(authorizationModelRepository),
+    createApiKeyFn: auth.api.createApiKey,
+    createTupleIfNotExistsFn: tupleRepository.createIfNotExists.bind(tupleRepository),
+    deleteTuplesBySubjectFn: tupleRepository.deleteBySubject.bind(tupleRepository),
+    deleteApiKeyFn: auth.api.deleteApiKey,
+    getHeadersFn: headers,
+    ...deps,
+  };
+
   try {
-    await guards.clients.view();
-    const session = await getSession();
+    await runtimeDeps.guardView();
+    const session = await runtimeDeps.getSessionFn();
     if (!session) throw new Error("Unauthorized");
     const validated = createApiKeySchema.parse(data);
-    const accessMode = validated.accessMode ?? "scoped";
+    const accessMode = validated.accessMode;
 
     // 1. Verify caller is admin/owner (C2)
-    const { level, canManageAccess } = await getCurrentUserAccessLevel(validated.clientId);
+    const { level, canManageAccess } = await runtimeDeps.getCurrentUserAccessLevelFn(validated.clientId);
     if (!canManageAccess) {
       return {
         success: false,
@@ -393,7 +483,7 @@ export async function createClientApiKey(
     if (accessMode === "scoped") {
       for (const [resource, actions] of Object.entries(validated.permissions ?? {})) {
         const entityType = `client_${validated.clientId}:${resource}`;
-        const model = await authorizationModelRepository.findByEntityType(entityType);
+        const model = await runtimeDeps.findAuthorizationModelFn(entityType);
 
         if (!model) {
           return {
@@ -427,7 +517,7 @@ export async function createClientApiKey(
       ? validated.expiresInDays * 24 * 60 * 60
       : null;
 
-    const result = await auth.api.createApiKey({
+    const result = await runtimeDeps.createApiKeyFn({
       body: {
         name: validated.name,
         permissions: {}, // Intentionally empty - using Tuples instead
@@ -450,7 +540,7 @@ export async function createClientApiKey(
     // 3. Create tuples for requested access mode
     try {
       if (accessMode === "full_access") {
-        await tupleRepository.createIfNotExists({
+        await runtimeDeps.createTupleIfNotExistsFn({
           entityType: "oauth_client",
           entityTypeId: null,
           entityId: validated.clientId,
@@ -459,9 +549,11 @@ export async function createClientApiKey(
           subjectId: result.id,
           condition: null,
         });
+
+        await emitClientWideAccessGrantCount(validated.clientId);
       } else {
         for (const grant of preparedGrants) {
-          await tupleRepository.createIfNotExists({
+          await runtimeDeps.createTupleIfNotExistsFn({
             entityType: grant.entityType,
             entityTypeId: grant.entityTypeId,
             entityId: "*",
@@ -477,15 +569,15 @@ export async function createClientApiKey(
       let rollbackComplete = true;
 
       try {
-        await tupleRepository.deleteBySubject("apikey", result.id);
+        await runtimeDeps.deleteTuplesBySubjectFn("apikey", result.id);
       } catch (rollbackError) {
         rollbackComplete = false;
         console.error("createClientApiKey tuple rollback error:", rollbackError);
       }
 
       try {
-        const requestHeaders = await headers();
-        const revoked = await auth.api.deleteApiKey({
+        const requestHeaders = await runtimeDeps.getHeadersFn();
+        const revoked = await runtimeDeps.deleteApiKeyFn({
           body: { keyId: result.id },
           headers: requestHeaders,
         });
@@ -535,11 +627,42 @@ export async function createClientApiKey(
  * Revoke an API key and clean up permissions
  */
 export async function revokeClientApiKey(keyId: string): Promise<AssignUserResult> {
-  try {
-    await guards.clients.view();
-    const _headers = await headers();
+  return await revokeClientApiKeyWithDeps(keyId);
+}
 
-    const allKeys = await auth.api.listApiKeys({ headers: _headers });
+export async function revokeClientApiKeyWithDeps(
+  keyId: string,
+  deps?: Partial<{
+    guardView: () => Promise<void>;
+    getHeadersFn: () => Promise<HeadersValue>;
+    listApiKeysFn: (input: { headers: HeadersValue }) => Promise<unknown>;
+    getCurrentUserAccessLevelFn: (clientId: string) => Promise<AccessLevelResult>;
+    deleteApiKeyFn: (input: { body: { keyId: string }; headers: HeadersValue }) => Promise<{ success?: boolean } | boolean>;
+    deleteTuplesBySubjectFn: typeof tupleRepository.deleteBySubject;
+  }>
+): Promise<AssignUserResult> {
+  const runtimeDeps: {
+    guardView: () => Promise<void>;
+    getHeadersFn: () => Promise<HeadersValue>;
+    listApiKeysFn: (input: { headers: HeadersValue }) => Promise<unknown>;
+    getCurrentUserAccessLevelFn: (clientId: string) => Promise<AccessLevelResult>;
+    deleteApiKeyFn: (input: { body: { keyId: string }; headers: HeadersValue }) => Promise<{ success?: boolean } | boolean>;
+    deleteTuplesBySubjectFn: typeof tupleRepository.deleteBySubject;
+  } = {
+    guardView: guards.clients.view,
+    getHeadersFn: headers,
+    listApiKeysFn: auth.api.listApiKeys,
+    getCurrentUserAccessLevelFn: getCurrentUserAccessLevel,
+    deleteApiKeyFn: auth.api.deleteApiKey,
+    deleteTuplesBySubjectFn: tupleRepository.deleteBySubject.bind(tupleRepository),
+    ...deps,
+  };
+
+  try {
+    await runtimeDeps.guardView();
+    const _headers = await runtimeDeps.getHeadersFn();
+
+    const allKeys = await runtimeDeps.listApiKeysFn({ headers: _headers });
     const key = Array.isArray(allKeys) ? allKeys.find((item) => item.id === keyId) : null;
 
     if (!key) {
@@ -557,7 +680,7 @@ export async function revokeClientApiKey(keyId: string): Promise<AssignUserResul
       };
     }
 
-    const { canManageAccess } = await getCurrentUserAccessLevel(clientId);
+    const { canManageAccess } = await runtimeDeps.getCurrentUserAccessLevelFn(clientId);
     if (!canManageAccess) {
       return {
         success: false,
@@ -567,14 +690,21 @@ export async function revokeClientApiKey(keyId: string): Promise<AssignUserResul
 
     // 1. Revoke in Better Auth (sets status to disabled/revoked?)
     // Better Auth's revokeApiKey usually deletes or disables.
-    const result = await auth.api.deleteApiKey({
+    const result = await runtimeDeps.deleteApiKeyFn({
       body: {
         keyId: keyId
       },
       headers: _headers,
     });
 
-    if (!result.success) {
+    const revokeSucceeded =
+      result &&
+      typeof result === "object" &&
+      "success" in result
+        ? Boolean((result as { success?: boolean }).success)
+        : Boolean(result);
+
+    if (!revokeSucceeded) {
       return {
         success: false,
         error: "Failed to revoke API key in auth provider"
@@ -582,7 +712,8 @@ export async function revokeClientApiKey(keyId: string): Promise<AssignUserResul
     }
 
     // 2. Cleanup Tuples
-    await tupleRepository.deleteBySubject("apikey", keyId);
+    await runtimeDeps.deleteTuplesBySubjectFn("apikey", keyId);
+    await emitClientWideAccessGrantCount(clientId);
 
     return { success: true };
   } catch (error) {
@@ -1061,6 +1192,8 @@ export async function grantClientWideAccess(
       condition: null,
     });
 
+    await emitClientWideAccessGrantCount(clientId);
+
     return { success: true };
   } catch (error) {
     console.error("grantClientWideAccess error:", error);
@@ -1104,6 +1237,8 @@ export async function revokeClientWideAccess(
         error: "Full access grant not found",
       };
     }
+
+    await emitClientWideAccessGrantCount(clientId);
 
     return { success: true };
   } catch (error) {

@@ -26,12 +26,30 @@ function makeTuple(overrides: Partial<Tuple>): Tuple {
 test("resolveClientFullAccess returns direct API key full_access client IDs", async () => {
   const resolver = new ApiKeyPermissionResolver();
 
-  const originalFindBySubject = tupleRepository.findBySubject;
+  const originalExpandSubjectsForResolution =
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution;
   const originalFindBySubjectAndEntityTypeAndRelation =
     tupleRepository.findBySubjectAndEntityTypeAndRelation;
 
   try {
-    tupleRepository.findBySubject = async () => [];
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution = async () => [
+      { type: "apikey", id: "key_1" },
+    ];
+
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
       async (subjectType, subjectId, entityType, relation) => {
         if (
@@ -49,7 +67,16 @@ test("resolveClientFullAccess returns direct API key full_access client IDs", as
     const clientIds = await resolver.resolveClientFullAccess("key_1");
     assert.deepEqual(clientIds, ["client_a"]);
   } finally {
-    tupleRepository.findBySubject = originalFindBySubject;
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution =
+      originalExpandSubjectsForResolution;
+
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
       originalFindBySubjectAndEntityTypeAndRelation;
   }
@@ -58,20 +85,29 @@ test("resolveClientFullAccess returns direct API key full_access client IDs", as
 test("resolveClientFullAccess returns group-inherited full_access client IDs", async () => {
   const resolver = new ApiKeyPermissionResolver();
 
-  const originalFindBySubject = tupleRepository.findBySubject;
+  const originalExpandSubjectsForResolution =
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution;
   const originalFindBySubjectAndEntityTypeAndRelation =
     tupleRepository.findBySubjectAndEntityTypeAndRelation;
 
   try {
-    tupleRepository.findBySubject = async () => [
-      makeTuple({
-        id: "tpl_group_member",
-        entityType: "group",
-        entityId: "group_a",
-        relation: "member",
-        subjectType: "apikey",
-        subjectId: "key_1",
-      }),
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution = async () => [
+      { type: "apikey", id: "key_1" },
+      { type: "group", id: "group_a" },
     ];
 
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
@@ -93,7 +129,16 @@ test("resolveClientFullAccess returns group-inherited full_access client IDs", a
     const clientIds = await resolver.resolveClientFullAccess("key_1");
     assert.deepEqual(clientIds, ["client_a"]);
   } finally {
-    tupleRepository.findBySubject = originalFindBySubject;
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution =
+      originalExpandSubjectsForResolution;
+
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
       originalFindBySubjectAndEntityTypeAndRelation;
   }
@@ -102,18 +147,45 @@ test("resolveClientFullAccess returns group-inherited full_access client IDs", a
 test("resolveClientFullAccess returns empty list when no full_access grants exist", async () => {
   const resolver = new ApiKeyPermissionResolver();
 
-  const originalFindBySubject = tupleRepository.findBySubject;
+  const originalExpandSubjectsForResolution =
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution;
   const originalFindBySubjectAndEntityTypeAndRelation =
     tupleRepository.findBySubjectAndEntityTypeAndRelation;
 
   try {
-    tupleRepository.findBySubject = async () => [];
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution = async () => [
+      { type: "apikey", id: "key_1" },
+    ];
+
     tupleRepository.findBySubjectAndEntityTypeAndRelation = async () => [];
 
     const clientIds = await resolver.resolveClientFullAccess("key_1");
     assert.deepEqual(clientIds, []);
   } finally {
-    tupleRepository.findBySubject = originalFindBySubject;
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution =
+      originalExpandSubjectsForResolution;
+
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
       originalFindBySubjectAndEntityTypeAndRelation;
   }
@@ -122,20 +194,29 @@ test("resolveClientFullAccess returns empty list when no full_access grants exis
 test("resolveClientFullAccess returns unique client IDs when multiple grants exist", async () => {
   const resolver = new ApiKeyPermissionResolver();
 
-  const originalFindBySubject = tupleRepository.findBySubject;
+  const originalExpandSubjectsForResolution =
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution;
   const originalFindBySubjectAndEntityTypeAndRelation =
     tupleRepository.findBySubjectAndEntityTypeAndRelation;
 
   try {
-    tupleRepository.findBySubject = async () => [
-      makeTuple({
-        id: "tpl_group_member",
-        entityType: "group",
-        entityId: "group_a",
-        relation: "member",
-        subjectType: "apikey",
-        subjectId: "key_1",
-      }),
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution = async () => [
+      { type: "apikey", id: "key_1" },
+      { type: "group", id: "group_a" },
     ];
 
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
@@ -164,7 +245,16 @@ test("resolveClientFullAccess returns unique client IDs when multiple grants exi
     const clientIds = await resolver.resolveClientFullAccess("key_1");
     assert.deepEqual(clientIds.sort(), ["client_a", "client_b"]);
   } finally {
-    tupleRepository.findBySubject = originalFindBySubject;
+    (resolver as unknown as {
+      permissionService: {
+        expandSubjectsForResolution: (
+          type: string,
+          id: string
+        ) => Promise<Array<{ type: string; id: string }>>;
+      };
+    }).permissionService.expandSubjectsForResolution =
+      originalExpandSubjectsForResolution;
+
     tupleRepository.findBySubjectAndEntityTypeAndRelation =
       originalFindBySubjectAndEntityTypeAndRelation;
   }
