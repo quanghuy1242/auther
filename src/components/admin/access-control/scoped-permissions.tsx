@@ -23,10 +23,11 @@ import {
   listClientWideAccess,
   revokeClientWideAccess,
 } from "@/app/admin/clients/[id]/access/actions";
+import type { AddPermissionSubmission } from "./add-permission-modal";
 
 interface ScopedPermissionsProps {
   permissions: ScopedPermission[];
-  onSave: (permissions: Partial<ScopedPermission>[]) => void;
+  onSave: (submission: AddPermissionSubmission) => Promise<boolean> | boolean;
   onRemove: (id: string) => void;
   resourceConfig: Record<string, string[]>;
   apiKeys: ApiKey[];
@@ -209,8 +210,8 @@ export function ScopedPermissions({
     setIsModalOpen(true);
   };
 
-  const handleSavePermission = (perms: Partial<ScopedPermission>[]) => {
-    onSave(perms);
+  const handleSavePermission = (submission: AddPermissionSubmission) => {
+    return onSave(submission);
   };
 
   const handleRemoveGroup = (group: SubjectGroup) => {

@@ -19,7 +19,7 @@ import {
 import { SectionHeader } from "@/components/ui/section-header";
 import { CreateApiKeyModal, type ApiKey } from "./create-api-key-modal";
 import { ScopedPermissions } from "./scoped-permissions";
-import { type ScopedPermission } from "./add-permission-modal";
+import { type AddPermissionSubmission, type ScopedPermission } from "./add-permission-modal";
 import { createClientApiKey, revokeClientApiKey, getClientApiKeys, type ApiKeyResult } from "@/app/admin/clients/[id]/access/actions";
 import { toast } from "sonner";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
@@ -28,7 +28,7 @@ export interface ApiKeyManagementProps {
   apiKeys: ApiKey[];
   onChange: (keys: ApiKey[]) => void;
   permissions: ScopedPermission[];
-  onSavePermission: (perms: Partial<ScopedPermission>[]) => void;
+  onSavePermission: (submission: AddPermissionSubmission) => Promise<boolean> | boolean;
   onRemovePermission: (id: string) => void;
   resourceConfig: Record<string, string[]>;
   enabled: boolean;

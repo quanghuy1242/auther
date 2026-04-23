@@ -9,7 +9,7 @@ import { DataModelEditor } from "./data-model-editor";
 import { AccessControlGuideModal } from "./access-control-guide-modal";
 import { useClient } from "@/app/admin/clients/[id]/client-context";
 import type { PlatformUser } from "./add-member-modal";
-import type { ScopedPermission, ApiKey } from "./add-permission-modal";
+import type { AddPermissionSubmission, ScopedPermission, ApiKey } from "./add-permission-modal";
 import {
   getPlatformAccessList,
   grantPlatformAccess,
@@ -18,6 +18,7 @@ import {
   updateEntityTypeModel,
   deleteEntityTypeModel,
   renameEntityType,
+  grantClientWideAccess,
   getScopedPermissions,
   grantScopedPermission,
   revokeScopedPermission,
@@ -378,16 +379,32 @@ export function AccessControl({ initialData }: AccessControlProps) {
   };
 
   // --- Scoped Permission Handlers ---
-  const handleSavePermission = async (permData: Partial<ScopedPermission>[]) => {
+  const handleSavePermission = async (submission: AddPermissionSubmission): Promise<boolean> => {
     if (!canManageAccess) {
       console.error("Permission denied: C2 check failed");
-      return;
+      return false;
     }
+
+    if (submission.accessMode === "full_access") {
+      const subjectType = submission.subject.type.toLowerCase() as "user" | "group" | "apikey";
+      const result = await grantClientWideAccess(clientId, subjectType, submission.subject.id);
+
+      if (!result.success) {
+        setError(result.error || "Failed to grant full access");
+        return false;
+      }
+
+      await loadData();
+      return true;
+    }
+
+    let hadError = false;
+    let firstError: string | null = null;
 
     // If editing existing permissions, revoke the originals before re-creating
     const idsToRevoke = Array.from(
       new Set(
-        permData
+        submission.permissions
           .map((p) => p.id)
           .filter((id): id is string => Boolean(id))
       )
@@ -397,11 +414,16 @@ export function AccessControl({ initialData }: AccessControlProps) {
       const revokeResult = await revokeScopedPermission(id);
       if (!revokeResult.success && revokeResult.error && revokeResult.error !== "Permission not found") {
         console.warn(`Failed to revoke existing scoped permission ${id}:`, revokeResult.error);
+        hadError = true;
+        firstError ??= revokeResult.error;
       }
     }
 
-    for (const pData of permData) {
+    let appliedCount = 0;
+
+    for (const pData of submission.permissions) {
       if (!pData.subject || !pData.relation || !pData.resourceType || !pData.resourceId) continue;
+      appliedCount += 1;
 
       const result = await grantScopedPermission(
         clientId,
@@ -415,9 +437,24 @@ export function AccessControl({ initialData }: AccessControlProps) {
 
       if (!result.success) {
         console.error("Failed to grant permission:", result.error);
+        hadError = true;
+        firstError ??= result.error ?? "Failed to grant permission";
       }
     }
+
+    if (appliedCount === 0) {
+      hadError = true;
+      firstError ??= "No valid permissions were submitted.";
+    }
+
     await loadData();
+
+    if (hadError) {
+      setError(firstError ?? "Failed to save permissions");
+      return false;
+    }
+
+    return true;
   };
 
   const handleRemovePermission = async (id: string) => {

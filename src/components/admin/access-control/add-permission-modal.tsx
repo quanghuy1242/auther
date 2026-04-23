@@ -11,7 +11,8 @@ import {
   Icon,
   Tabs,
   Badge,
-  Alert
+  Alert,
+  Checkbox,
 } from "@/components/ui";
 import { UserGroupPicker } from "@/components/ui/user-group-picker";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -46,10 +47,24 @@ export interface ApiKey {
   status: "Active" | "Revoked";
 }
 
+export type AccessMode = "scoped" | "full_access";
+
+export interface AddPermissionSubmission {
+  accessMode: AccessMode;
+  subject: {
+    id: string;
+    name: string;
+    type: "User" | "Group" | "ApiKey";
+    description?: string;
+    avatarUrl?: string;
+  };
+  permissions: Partial<ScopedPermission>[];
+}
+
 interface AddPermissionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (permissions: Partial<ScopedPermission>[]) => void;
+  onSave: (submission: AddPermissionSubmission) => Promise<boolean> | boolean;
   /** Array of permissions to edit (all for same subject) */
   initialPermissions?: ScopedPermission[];
   fixedSubject?: {
@@ -92,6 +107,8 @@ export function AddPermissionModal({
     type?: string;
   } | null>(null);
   const [rules, setRules] = React.useState<PermissionRule[]>([]);
+  const [accessMode, setAccessMode] = React.useState<AccessMode>("scoped");
+  const [fullAccessConfirmed, setFullAccessConfirmed] = React.useState(false);
 
   // Picker State
   const [isUserGroupPickerOpen, setIsUserGroupPickerOpen] = React.useState(false);
@@ -100,6 +117,8 @@ export function AddPermissionModal({
   const [scriptErrors, setScriptErrors] = React.useState<Record<string, string | null>>({});
   const [isValidatingScript, setIsValidatingScript] = React.useState<string | null>(null);
   const scriptValidationTimeouts = React.useRef<Record<string, NodeJS.Timeout>>({});
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Test modal state - just track which rule is being tested
   const [testModalKey, setTestModalKey] = React.useState<string | null>(null);
@@ -120,6 +139,11 @@ export function AddPermissionModal({
 
   // --- Initialization ---
   React.useEffect(() => {
+    setSubmitError(null);
+    setIsSubmitting(false);
+    setAccessMode("scoped");
+    setFullAccessConfirmed(false);
+
     if (initialPermissions && initialPermissions.length > 0) {
       // Edit Mode - load all permissions for this subject
       const firstPerm = initialPermissions[0];
@@ -197,7 +221,9 @@ export function AddPermissionModal({
     setSelectedSubject(null);
   };
 
-  const handleSubmit = () => {
+  const isFullAccessMode = accessMode === "full_access";
+
+  const handleSubmit = async () => {
     if (!selectedSubject) return;
 
     const payload: Partial<ScopedPermission>[] = [];
@@ -251,18 +277,54 @@ export function AddPermissionModal({
       }
     });
 
-    if (payload.length > 0) {
-      onSave(payload);
+    if (!isFullAccessMode && payload.length === 0) {
+      setSubmitError("No valid permissions were selected.");
+      return;
     }
-    onClose();
+
+    if (isFullAccessMode && !fullAccessConfirmed) {
+      setSubmitError("Confirm full client access before saving.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const saved = await Promise.resolve(onSave({
+        accessMode,
+        subject: {
+          id: selectedSubject.id,
+          name: selectedSubject.name || "",
+          type: subjectType,
+          description: selectedSubject.description,
+          avatarUrl: selectedSubject.avatarUrl,
+        },
+        permissions: isFullAccessMode ? [] : payload,
+      }));
+      if (saved) {
+        onClose();
+        return;
+      }
+
+      setSubmitError("Failed to save permissions.");
+    } catch {
+      setSubmitError("Failed to save permissions.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const isFormValid = selectedSubject && rules.every(r => {
+  const isFormValid = selectedSubject && (
+    isFullAccessMode
+      ? fullAccessConfirmed
+      : rules.every(r => {
     if (r.scopeType === "global") return !!r.relation;
     if (r.scopeType === "specific") return !!r.relation && !!r.resourceId;
     if (r.scopeType === "script") return !!r.relation && !!r.resourceId && !scriptErrors[r.key];
     return false;
-  });
+    })
+  );
 
   // Debounced script validation
   const validateScript = React.useCallback((ruleKey: string, script: string) => {
@@ -363,6 +425,38 @@ export function AddPermissionModal({
                   </Button>
                 )
               )}
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-white">Access Mode</p>
+                <SegmentedControl
+                  value={accessMode}
+                  onChange={(value) => {
+                    setAccessMode(value as AccessMode);
+                    setSubmitError(null);
+                    if (value !== "full_access") {
+                      setFullAccessConfirmed(false);
+                    }
+                  }}
+                  options={[
+                    { label: "Fine-grained access", value: "scoped" },
+                    { label: "Full client access", value: "full_access" },
+                  ]}
+                  size="md"
+                />
+              </div>
+
+              {isFullAccessMode ? (
+                <div className="space-y-3">
+                  <Alert variant="warning" title="High-Privilege Access">
+                    Full client access grants this subject permission to perform any operation on any resource type within this client. This is intended for service accounts and automation. Use scoped permissions for least-privilege access.
+                  </Alert>
+                  <Checkbox
+                    checked={fullAccessConfirmed}
+                    onChange={setFullAccessConfirmed}
+                    label="I understand this subject will have full access to all resources in this client"
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -373,10 +467,10 @@ export function AddPermissionModal({
                 <Badge variant="info" className="rounded-full w-6 h-6 flex items-center justify-center p-0">2</Badge>
                 <h3 className="text-sm font-medium text-white">Access Rules</h3>
               </div>
-              <Button variant="ghost" size="xs" onClick={handleAddRule} leftIcon="add">Add Rule</Button>
+              <Button variant="ghost" size="xs" onClick={handleAddRule} leftIcon="add" disabled={isFullAccessMode}>Add Rule</Button>
             </div>
 
-            <div className="pl-8 space-y-4">
+            <div className={`pl-8 space-y-4 ${isFullAccessMode ? "opacity-50 pointer-events-none" : ""}`}>
               {rules.map((rule) => {
                 const relations = resourceConfig[rule.resourceType] || [];
                 return (
@@ -396,13 +490,14 @@ export function AddPermissionModal({
                         value={rule.resourceType}
                         onChange={(val) => updateRule(rule.key, { resourceType: val })}
                         options={availableResourceTypes.map(t => ({ value: t, label: t }))}
+                        disabled={isFullAccessMode}
                       />
                       <Select
                         label="Permission / Relation"
                         value={rule.relation}
                         onChange={(val) => updateRule(rule.key, { relation: val })}
                         options={relations.map(r => ({ value: r, label: r }))}
-                        disabled={!relations.length}
+                        disabled={isFullAccessMode || !relations.length}
                         placeholder={relations.length ? "Select..." : "No relations defined"}
                       />
                     </div>
@@ -414,10 +509,12 @@ export function AddPermissionModal({
                         tabs={[
                           {
                             label: "Global (All)",
+                            disabled: isFullAccessMode,
                             content: <div className="text-xs text-gray-500 pt-2 min-h-[120px]">Applies to all {rule.resourceType} resources (*)</div>
                           },
                           {
                             label: "Specific ID(s)",
+                            disabled: isFullAccessMode,
                             content: (
                               <div className="pt-2 min-h-[120px]">
                                 <Input
@@ -431,6 +528,7 @@ export function AddPermissionModal({
                           },
                           {
                             label: "Custom Script (ABAC)",
+                            disabled: isFullAccessMode,
                             content: (
                               <div className="pt-2 space-y-2 min-h-[120px]">
                                 <Textarea
@@ -472,6 +570,7 @@ export function AddPermissionModal({
                         defaultIndex={
                           rule.scopeType === "specific" ? 1 : rule.scopeType === "script" ? 2 : 0
                         }
+                        selectedIndex={rule.scopeType === "specific" ? 1 : rule.scopeType === "script" ? 2 : 0}
                         onChange={(idx) => {
                           const scopes: ScopeType[] = ["global", "specific", "script"];
                           updateRule(rule.key, { scopeType: scopes[idx], resourceId: "" });
@@ -486,10 +585,22 @@ export function AddPermissionModal({
 
         </div>
 
+        {submitError && (
+          <div className="px-8">
+            <Alert variant="error">{submitError}</Alert>
+          </div>
+        )}
+
         <ModalFooter>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={handleSubmit} disabled={!isFormValid}>
-            {initialPermissions && initialPermissions.length > 0 ? "Save Changes" : "Assign Permissions"}
+          <Button variant="primary" onClick={handleSubmit} disabled={!isFormValid || isSubmitting}>
+            {isSubmitting
+              ? "Saving..."
+              : isFullAccessMode
+                ? "Grant Full Access"
+                : initialPermissions && initialPermissions.length > 0
+                  ? "Save Changes"
+                : "Assign Permissions"}
           </Button>
         </ModalFooter>
       </Modal>
