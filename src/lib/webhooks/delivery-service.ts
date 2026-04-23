@@ -176,7 +176,8 @@ export async function emitWebhookEvent(
     });
 
     const queueResults = await Promise.allSettled(queuePromises);
-    const failedQueueCount = queueResults.filter((result) => result.status === "rejected").length;
+    const failedResults = queueResults.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    const failedQueueCount = failedResults.length;
 
     if (failedQueueCount > 0) {
       void metricsService.count("webhook.emit.queue_failed.count", failedQueueCount, {
@@ -187,6 +188,7 @@ export async function emitWebhookEvent(
         eventType,
         failedQueueCount,
         totalEndpoints: endpoints.length,
+        errors: failedResults.map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason))),
       });
     }
 
