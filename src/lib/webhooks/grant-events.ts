@@ -109,7 +109,7 @@ async function emitSystemScopedEvent(
 
     await Promise.allSettled(
       subscriberUserIds.map((userId) =>
-        emitWebhookEvent(userId, eventType, payloadWithClient)
+        emitWebhookEvent(userId, eventType, payloadWithClient, clientId)
       )
     );
   } catch (error) {
