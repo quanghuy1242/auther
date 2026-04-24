@@ -82,7 +82,7 @@ export function ScopedPermissions({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [removingGroup, setRemovingGroup] = React.useState<SubjectGroup | null>(null);
   const [expandedSubjects, setExpandedSubjects] = React.useState<Set<string>>(new Set());
-  const [fullAccessSubjects, setFullAccessSubjects] = React.useState<Set<string>>(new Set());
+  const [fullAccessSubjects, setFullAccessSubjects] = React.useState<Map<string, string>>(new Map());
   const [updatingSubjectKey, setUpdatingSubjectKey] = React.useState<string | null>(null);
   const [grantingSubject, setGrantingSubject] = React.useState<SubjectGroup["subject"] | null>(null);
   const [fullAccessError, setFullAccessError] = React.useState<string | null>(null);
@@ -96,11 +96,11 @@ export function ScopedPermissions({
   const refreshClientWideAccess = React.useCallback(async () => {
     try {
       const tuples = await listClientWideAccess(clientId);
-      const next = new Set<string>();
+      const next = new Map<string, string>();
 
       for (const tuple of tuples) {
         if (tuple.subjectType === "user" || tuple.subjectType === "group") {
-          next.add(buildSubjectKey(tuple.subjectType, tuple.subjectId));
+          next.set(buildSubjectKey(tuple.subjectType, tuple.subjectId), tuple.subjectName);
         }
       }
 
@@ -113,7 +113,7 @@ export function ScopedPermissions({
 
   React.useEffect(() => {
     void refreshClientWideAccess();
-  }, [refreshClientWideAccess]);
+  }, [refreshClientWideAccess, permissions]);
 
   const filteredPermissions = subjectFilter
     ? permissions.filter(
@@ -136,7 +136,7 @@ export function ScopedPermissions({
 
     const rows: SubjectGroup[] = [];
 
-    for (const key of fullAccessSubjects) {
+    for (const [key, subjectName] of fullAccessSubjects.entries()) {
       if (existingKeys.has(key)) {
         continue;
       }
@@ -156,7 +156,7 @@ export function ScopedPermissions({
       if (
         subjectFilter &&
         (subjectFilter.type !== subjectTypeLabel ||
-          (subjectFilter.id !== subjectId && subjectFilter.name !== subjectId))
+          (subjectFilter.id !== subjectId && subjectFilter.name !== subjectId && subjectFilter.name !== subjectName))
       ) {
         continue;
       }
@@ -164,7 +164,7 @@ export function ScopedPermissions({
       rows.push({
         subject: {
           id: subjectId,
-          name: subjectId,
+          name: subjectName || subjectId,
           type: subjectTypeLabel,
           description: "Full access grant",
         },

@@ -1253,12 +1253,51 @@ export async function revokeClientWideAccess(
 /**
  * List all client-wide full access grants for a client.
  */
-export async function listClientWideAccess(clientId: string): Promise<Tuple[]> {
+export async function listClientWideAccess(
+  clientId: string
+): Promise<Array<Tuple & { subjectName: string }>> {
   try {
     await guards.clients.view();
 
     const tuples = await tupleRepository.findByEntity("oauth_client", clientId);
-    return tuples.filter((tuple) => tuple.relation === "full_access");
+    const fullAccessTuples = tuples.filter((tuple) => tuple.relation === "full_access");
+
+    const userIds = Array.from(
+      new Set(
+        fullAccessTuples
+          .filter((tuple) => tuple.subjectType === "user")
+          .map((tuple) => tuple.subjectId)
+      )
+    );
+    const groupIds = Array.from(
+      new Set(
+        fullAccessTuples
+          .filter((tuple) => tuple.subjectType === "group")
+          .map((tuple) => tuple.subjectId)
+      )
+    );
+
+    const [users, groups] = await Promise.all([
+      userIds.length > 0
+        ? db.select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, userIds))
+        : Promise.resolve([] as Array<{ id: string; name: string }>),
+      groupIds.length > 0
+        ? db.select({ id: userGroup.id, name: userGroup.name }).from(userGroup).where(inArray(userGroup.id, groupIds))
+        : Promise.resolve([] as Array<{ id: string; name: string }>),
+    ]);
+
+    const userNames = new Map(users.map((userRow) => [userRow.id, userRow.name]));
+    const groupNames = new Map(groups.map((groupRow) => [groupRow.id, groupRow.name]));
+
+    return fullAccessTuples.map((tuple) => ({
+      ...tuple,
+      subjectName:
+        tuple.subjectType === "user"
+          ? userNames.get(tuple.subjectId) ?? tuple.subjectId
+          : tuple.subjectType === "group"
+            ? groupNames.get(tuple.subjectId) ?? tuple.subjectId
+            : tuple.subjectId,
+    }));
   } catch (error) {
     console.error("listClientWideAccess error:", error);
     return [];
