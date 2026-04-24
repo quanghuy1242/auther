@@ -252,7 +252,8 @@ export class WebhookRepository {
    */
   async findActiveEndpointsByEvent(
     userId: string,
-    eventType: string
+    eventType: string,
+    clientId?: string | null
   ): Promise<WebhookEndpointEntity[]> {
     try {
       const endpointIds = await db
@@ -278,7 +279,15 @@ export class WebhookRepository {
           )
         );
 
-      return endpoints as WebhookEndpointEntity[];
+      // Filter by clientId: endpoints with a clientId set only receive events for that client.
+      // Endpoints with null clientId receive all events.
+      const filtered = (endpoints as WebhookEndpointEntity[]).filter((ep) => {
+        if (!ep.clientId) return true; // no filter — receive all
+        if (!clientId) return false;   // endpoint wants a client but event has none
+        return ep.clientId === clientId;
+      });
+
+      return filtered;
     } catch (error) {
       console.error("WebhookRepository.findActiveEndpointsByEvent error:", error);
       return [];
@@ -289,7 +298,10 @@ export class WebhookRepository {
    * Find user IDs that own active endpoints subscribed to a specific event type.
    * Used for emitting system-level events that are not scoped to one actor.
    */
-  async findSubscribedUserIdsByEvent(eventType: string): Promise<string[]> {
+  async findSubscribedUserIdsByEvent(
+    eventType: string,
+    clientId?: string | null
+  ): Promise<string[]> {
     try {
       const endpointIds = await db
         .select({ id: webhookSubscription.endpointId })
@@ -301,7 +313,7 @@ export class WebhookRepository {
       }
 
       const endpoints = await db
-        .select({ userId: webhookEndpoint.userId })
+        .select({ userId: webhookEndpoint.userId, clientId: webhookEndpoint.clientId })
         .from(webhookEndpoint)
         .where(
           and(
@@ -313,7 +325,15 @@ export class WebhookRepository {
           )
         );
 
-      return Array.from(new Set(endpoints.map((endpoint) => endpoint.userId)));
+      // Respect clientId filter: endpoints with null clientId receive all events;
+      // endpoints with a set clientId only receive events for that client.
+      const filtered = endpoints.filter((ep) => {
+        if (!ep.clientId) return true;
+        if (!clientId) return false;
+        return ep.clientId === clientId;
+      });
+
+      return Array.from(new Set(filtered.map((ep) => ep.userId)));
     } catch (error) {
       console.error("WebhookRepository.findSubscribedUserIdsByEvent error:", error);
       return [];
@@ -326,6 +346,7 @@ export class WebhookRepository {
   async create(data: {
     id: string;
     userId: string;
+    clientId?: string | null;
     displayName: string;
     url: string | null;
     encryptedSecret: string;

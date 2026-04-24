@@ -138,6 +138,10 @@ export const webhookEndpoint = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // Optional client scope filter: when set, only deliver events belonging to this client.
+    // When null, deliver all events regardless of client (platform-wide).
+    clientId: text("client_id")
+      .references(() => oauthApplication.clientId, { onDelete: "set null" }),
     displayName: text("display_name").notNull(),
     url: text("url"), // Nullable - webhooks can be created without URL (pending setup)
     encryptedSecret: text("encrypted_secret").notNull(), // Store encrypted webhook signing secret

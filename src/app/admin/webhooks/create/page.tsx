@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, Button, WebhookSecretField } from "@/components/ui";
 import {
@@ -9,7 +9,7 @@ import {
 } from "@/components/forms";
 import { PageHeading } from "@/components/layout";
 import { Icon } from "@/components/ui";
-import { createWebhook } from "../actions";
+import { createWebhook, getClientsForWebhookFilter } from "../actions";
 import { webhookSchema } from "@/schemas/webhooks";
 import { WebhookFormContent } from "../[id]/webhook-form-content";
 
@@ -18,16 +18,22 @@ export default function CreateWebhookPage() {
   const [createdWebhook, setCreatedWebhook] = useState<{ id: string; secret: string } | null>(
     null
   );
+  const [clients, setClients] = useState<{ clientId: string; name: string }[]>([]);
+
+  useEffect(() => {
+    getClientsForWebhookFilter().then(setClients).catch(() => {});
+  }, []);
 
   // Define default values that match the schema defaults
   const defaultValues = {
     displayName: "",
     url: "",
-    isActive: false, // Disabled by default since URL may not be set initially
+    isActive: false,
     eventTypes: [] as string[],
     retryPolicy: "standard" as const,
     deliveryFormat: "json" as const,
     requestMethod: "POST" as const,
+    clientId: "",
   };
 
   const handleSubmit = async (prevState: unknown, formData: FormData) => {
@@ -95,7 +101,7 @@ export default function CreateWebhookPage() {
             onSuccess={handleSuccess}
             defaultValues={defaultValues}
           >
-            <WebhookFormContent />
+            <WebhookFormContent clients={clients} />
 
             {/* Form Actions */}
             <div className="flex flex-col sm:flex-row gap-3 justify-end pt-6 mt-6 border-t border-gray-700">

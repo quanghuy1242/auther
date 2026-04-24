@@ -3,6 +3,7 @@
 import { getSession } from "@/lib/session";
 import { guards } from "@/lib/auth/platform-guard";
 import { webhookRepository, userRepository } from "@/lib/repositories";
+import { oauthClientRepository } from "@/lib/repositories";
 import {
   encryptSecret,
   decryptSecret,
@@ -61,6 +62,24 @@ export interface WebhookFormState {
 // ============================================================================
 // Query Actions
 // ============================================================================
+
+/**
+ * Get a minimal list of OAuth clients for the webhook client-filter dropdown.
+ */
+export async function getClientsForWebhookFilter(): Promise<{ clientId: string; name: string }[]> {
+  try {
+    await guards.webhooks.view();
+    const result = await oauthClientRepository.findMany(1, 200, {});
+    return result.items
+      .map((client) => ({
+        clientId: client.clientId ?? "",
+        name: client.name ?? client.clientId ?? "",
+      }))
+      .filter((client) => client.clientId.length > 0 && client.name.length > 0);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Get paginated list of webhooks with subscriptions and last delivery info
@@ -241,6 +260,7 @@ export async function createWebhook(
       retryPolicy: formData.get("retryPolicy") || "standard",
       deliveryFormat: formData.get("deliveryFormat") || "json",
       requestMethod: formData.get("requestMethod") || "POST",
+      clientId: formData.get("clientId") || null,
     });
 
     if (!result.success) {
@@ -265,6 +285,7 @@ export async function createWebhook(
     const endpoint = await webhookRepository.create({
       id,
       userId: session.user.id,
+      clientId: data.clientId ?? null,
       displayName: data.displayName,
       url: data.url || null,
       encryptedSecret,
@@ -339,6 +360,9 @@ export async function updateWebhook(
     // Parse and validate form data
     const eventTypesRaw = formData.get("eventTypes");
     const eventTypes = eventTypesRaw ? JSON.parse(eventTypesRaw as string) : [];
+    const clientIdValue = formData.has("clientId")
+      ? formData.get("clientId") || null
+      : existing.clientId ?? null;
 
     const result = webhookSchema.safeParse({
       displayName: formData.get("displayName"),
@@ -348,6 +372,7 @@ export async function updateWebhook(
       retryPolicy: formData.get("retryPolicy") || "standard",
       deliveryFormat: formData.get("deliveryFormat") || "json",
       requestMethod: formData.get("requestMethod") || "POST",
+      clientId: clientIdValue,
     });
 
     if (!result.success) {
@@ -367,6 +392,7 @@ export async function updateWebhook(
     const updated = await webhookRepository.update(webhookId, {
       displayName: data.displayName,
       url: data.url || null,
+      clientId: data.clientId ?? null,
       isActive: effectiveIsActive,
       retryPolicy: data.retryPolicy as WebhookRetryPolicy,
       deliveryFormat: data.deliveryFormat as WebhookDeliveryFormat,

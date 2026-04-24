@@ -41,9 +41,10 @@ import { webhookSchema } from "@/schemas/webhooks";
 interface EditWebhookClientProps {
   webhook: WebhookEndpointWithSubscriptions;
   deliveryHistory: WebhookDeliveryEntity[];
+  clients: { clientId: string; name: string }[];
 }
 
-export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClientProps) {
+export function EditWebhookClient({ webhook, deliveryHistory, clients }: EditWebhookClientProps) {
   const router = useRouter();
   const [regeneratedSecret, setRegeneratedSecret] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -57,6 +58,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     retryPolicy: webhook.retryPolicy as "none" | "standard" | "aggressive",
     deliveryFormat: webhook.deliveryFormat,
     requestMethod: webhook.requestMethod,
+    clientId: webhook.clientId ?? "",
   }), [
     webhook.displayName,
     webhook.url,
@@ -65,6 +67,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
     webhook.retryPolicy,
     webhook.deliveryFormat,
     webhook.requestMethod,
+    webhook.clientId,
   ]);
 
   const handleSubmit = async (
@@ -139,7 +142,7 @@ export function EditWebhookClient({ webhook, deliveryHistory }: EditWebhookClien
                 defaultValues={defaultValues}
                 resetOnSuccess={false}
               >
-                <WebhookFormContent />
+                <WebhookFormContent clients={clients} />
 
                 {/* Form Actions */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between pt-6 mt-6 border-t border-gray-700">

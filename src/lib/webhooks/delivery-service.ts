@@ -6,7 +6,7 @@ import {
   generateWebhookDeliveryId,
   decryptSecret,
 } from "@/lib/utils/encryption";
-import { createWebhookSignature } from "./signature";
+import { createWebhookSignatureWithTimestamp } from "./signature";
 import {
   DEFAULT_LOCAL_BASE_URL,
   WEBHOOK_SIGNATURE_HEADER,
@@ -95,7 +95,8 @@ function resolveOriginForEventType(eventType: WebhookEventType): WebhookOrigin {
 export async function emitWebhookEvent(
   userId: string,
   eventType: WebhookEventType,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  clientId?: string | null
 ): Promise<void> {
   const emitStart = performance.now();
   try {
@@ -121,7 +122,8 @@ export async function emitWebhookEvent(
     // Find all active endpoints subscribed to this event type
     const endpoints = await webhookRepository.findActiveEndpointsByEvent(
       userId,
-      eventType
+      eventType,
+      clientId
     );
 
     if (endpoints.length === 0) {
@@ -279,7 +281,7 @@ export async function deliverWebhook(
         timestamp: payload.timestamp.toString(),
         data: JSON.stringify(payload.data),
       }).toString();
-    const signature = createWebhookSignature(body, secret);
+    const signature = createWebhookSignatureWithTimestamp(body, secret, payload.timestamp);
 
     // Build headers
     const headers: Record<string, string> = {

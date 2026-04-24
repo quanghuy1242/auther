@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getWebhookById, getDeliveryHistory } from "../actions";
+import { getWebhookById, getDeliveryHistory, getClientsForWebhookFilter } from "../actions";
 import { EditWebhookClient } from "./edit-webhook-client";
 import { Card, CardContent, Button, Icon } from "@/components/ui";
 import Link from "next/link";
@@ -27,10 +27,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function EditWebhookPage({ params }: PageProps) {
   const resolvedParams = await params;
   
-  // Get webhook data
-  const webhook = await getWebhookById(resolvedParams.id);
-  
-  const deliveryHistoryResult = await getDeliveryHistory(resolvedParams.id, { page: 1, pageSize: 25 });
+  const [webhook, deliveryHistoryResult, clients] = await Promise.all([
+    getWebhookById(resolvedParams.id),
+    getDeliveryHistory(resolvedParams.id, { page: 1, pageSize: 25 }),
+    getClientsForWebhookFilter(),
+  ]);
   const deliveryHistory = deliveryHistoryResult?.deliveries || [];
 
   if (!webhook) {
@@ -54,5 +55,5 @@ export default async function EditWebhookPage({ params }: PageProps) {
     );
   }
 
-  return <EditWebhookClient webhook={webhook} deliveryHistory={deliveryHistory} />;
+  return <EditWebhookClient webhook={webhook} deliveryHistory={deliveryHistory} clients={clients} />;
 }

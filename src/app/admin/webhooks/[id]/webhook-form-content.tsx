@@ -16,9 +16,25 @@ import {
   REQUEST_METHOD_OPTIONS
 } from "@/schemas/webhooks";
 
-export function WebhookFormContent() {
+interface WebhookFormContentProps {
+  clients?: { clientId: string; name: string }[];
+}
+
+export function WebhookFormContent({ clients = [] }: WebhookFormContentProps) {
   const form = useFormContext();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const selectedClientId = String(form.watch("clientId") ?? "");
+  const hasSelectedClientOption =
+    selectedClientId.length > 0 && clients.some((client) => client.clientId === selectedClientId);
+  const shouldShowClientFilter = clients.length > 0 || selectedClientId.length > 0;
+
+  const clientOptions = [
+    { value: "", label: "All clients (no filter)" },
+    ...(!hasSelectedClientOption && selectedClientId
+      ? [{ value: selectedClientId, label: selectedClientId }]
+      : []),
+    ...clients.map((c) => ({ value: c.clientId, label: c.name })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -123,6 +139,22 @@ export function WebhookFormContent() {
               />
             </div>
           </div>
+
+          {shouldShowClientFilter && (
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                Client Filter
+              </label>
+              <ControlledSelect
+                name="clientId"
+                options={clientOptions}
+                placeholder="All clients (no filter)"
+              />
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                Only deliver events from a specific OAuth client. Leave unset to receive events from all clients.
+              </p>
+            </div>
+          )}
         </div>
       </details>
     </div>

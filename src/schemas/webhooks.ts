@@ -44,6 +44,7 @@ export const webhookSchema = z.object({
   retryPolicy: z.enum(["none", "standard", "aggressive"]).default("standard"),
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
   requestMethod: z.enum(["POST", "PUT"]).default("POST"),
+  clientId: z.string().optional().nullable(),
 }).refine(
   (data) => {
     // If no URL, isActive must be false

@@ -16,7 +16,7 @@ import {
   WEBHOOK_IDEMPOTENCY_TTL_SECONDS,
 } from "@/lib/constants";
 import { resolveQueueTargetUrl, type PayloadWebhookEvent } from "@/lib/webhooks/payload";
-import { createWebhookSignature } from "@/lib/webhooks/signature";
+import { createWebhookSignatureWithTimestamp } from "@/lib/webhooks/signature";
 
 const receiver = new Receiver({
   currentSigningKey: env.QSTASH_CURRENT_SIGNING_KEY,
@@ -51,13 +51,19 @@ async function ensureIdempotency(eventId: string): Promise<boolean> {
 }
 
 async function deliverWebhookToPayload(event: PayloadWebhookEvent, body: string): Promise<void> {
+  const timestamp = event.timestamp.toString();
+
   const response = await fetch(env.PAYLOAD_WEBHOOK_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      [WEBHOOK_SIGNATURE_HEADER]: createWebhookSignature(body, env.PAYLOAD_OUTBOUND_WEBHOOK_SECRET),
+      [WEBHOOK_SIGNATURE_HEADER]: createWebhookSignatureWithTimestamp(
+        body,
+        env.PAYLOAD_OUTBOUND_WEBHOOK_SECRET,
+        timestamp
+      ),
       [WEBHOOK_ID_HEADER]: event.id,
-      [WEBHOOK_TIMESTAMP_HEADER]: event.timestamp.toString(),
+      [WEBHOOK_TIMESTAMP_HEADER]: timestamp,
       [WEBHOOK_ORIGIN_HEADER]: event.origin,
     },
     body,

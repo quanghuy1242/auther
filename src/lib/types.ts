@@ -258,6 +258,7 @@ export type WebhookDeliveryStatus = "pending" | "success" | "failed" | "retrying
 export interface WebhookEndpointEntity {
   id: string;
   userId: string;
+  clientId: string | null; // null = deliver all clients' events; set = filter to this client only
   displayName: string;
   url: string | null; // Nullable - webhooks can be created without URL (pending setup)
   encryptedSecret: string;

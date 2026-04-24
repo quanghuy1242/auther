@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { TupleRepository, type Tuple } from "@/lib/repositories/tuple-repository";
+import { resolveGrantClientId } from "@/lib/webhooks/grant-events";
 
 function makeTuple(overrides: Partial<Tuple>): Tuple {
   const now = new Date("2026-01-01T00:00:00.000Z");
@@ -104,4 +105,44 @@ test("shouldEmitGrantWebhook emits for apikey oauth_client full_access only", ()
   assert.equal(shouldEmitFullAccess, true);
   assert.equal(shouldEmitScoped, false);
   assert.equal(shouldEmitOtherOauthClientRelation, false);
+});
+
+test("resolveGrantClientId extracts client ids for all client-scoped grant shapes", () => {
+  assert.equal(
+    resolveGrantClientId({
+      entityType: "client_clientA:invoice",
+      entityId: "*",
+      relation: "read",
+    }),
+    "clientA"
+  );
+
+  assert.equal(
+    resolveGrantClientId({
+      entityType: "client_clientA",
+      entityId: "clientA",
+      relation: "admin",
+    }),
+    "clientA"
+  );
+
+  assert.equal(
+    resolveGrantClientId({
+      entityType: "oauth_client",
+      entityId: "clientA",
+      relation: "full_access",
+    }),
+    "clientA"
+  );
+});
+
+test("resolveGrantClientId ignores non-client oauth_client grants", () => {
+  assert.equal(
+    resolveGrantClientId({
+      entityType: "oauth_client",
+      entityId: "clientA",
+      relation: "admin",
+    }),
+    null
+  );
 });
