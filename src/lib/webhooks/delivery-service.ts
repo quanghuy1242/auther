@@ -59,6 +59,7 @@ export interface WebhookDeliveryJob {
 function resolveQueueBaseUrl(): string {
   return (
     env.QUEUE_TARGET_BASE_URL ??
+    env.PRODUCTION_URL ??
     (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined) ??
     DEFAULT_LOCAL_BASE_URL
   );

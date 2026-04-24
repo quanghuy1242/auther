@@ -53,6 +53,7 @@ export async function POST(request: Request) {
     // Use the URL that QStash used to send the request (from QUEUE_TARGET_BASE_URL)
     // Not request.url, which would be http://localhost:3000 instead of http://app:3000
     const queueBaseUrl = env.QUEUE_TARGET_BASE_URL ?? 
+      env.PRODUCTION_URL ??
       (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined) ?? 
       "http://localhost:3000";
     const verifyUrl = `${queueBaseUrl}/api/internal/queues/webhook-delivery`;
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
       eventId,
       endpointId,
       responseCode: result.responseCode,
+      responseBody: result.responseBody,
       attemptCount,
     });
 
