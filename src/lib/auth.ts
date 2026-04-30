@@ -284,12 +284,14 @@ export const auth = betterAuth({
       jwt: {
         issuer: env.JWT_ISSUER,
         audience: env.JWT_AUDIENCE[0],
+        expirationTime: "2d",
       },
     }),
     oidcProvider({
       loginPage: "/sign-in",
       allowDynamicClientRegistration: true,
       useJWTPlugin: true,
+      accessTokenExpiresIn: 2 * 24 * 60 * 60,
       metadata: {
         issuer: env.JWT_ISSUER,
       },
