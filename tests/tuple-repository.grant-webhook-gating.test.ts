@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TupleRepository, type Tuple } from "@/lib/repositories/tuple-repository";
-import { resolveGrantClientId } from "@/lib/webhooks/grant-events";
+process.env.BLOG_CLIENT_ID ??= "blog-spa-client";
+process.env.BLOG_REDIRECT_URI ??= "http://localhost:3003/api/auth/callback/auther";
+process.env.BLOG_LOGOUT_REDIRECT_URIS ??= "http://localhost:3003";
+
+let TupleRepository: typeof import("@/lib/repositories/tuple-repository").TupleRepository;
+let resolveGrantClientId: typeof import("@/lib/webhooks/grant-events").resolveGrantClientId;
+type Tuple = import("@/lib/repositories/tuple-repository").Tuple;
+
+test.before(async () => {
+  ({ TupleRepository } = await import("@/lib/repositories/tuple-repository"));
+  ({ resolveGrantClientId } = await import("@/lib/webhooks/grant-events"));
+});
 
 function makeTuple(overrides: Partial<Tuple>): Tuple {
   const now = new Date("2026-01-01T00:00:00.000Z");
@@ -110,11 +120,11 @@ test("shouldEmitGrantWebhook emits for apikey oauth_client full_access only", ()
 test("resolveGrantClientId extracts client ids for all client-scoped grant shapes", () => {
   assert.equal(
     resolveGrantClientId({
-      entityType: "client_clientA:invoice",
+      entityType: "client_payload:book",
       entityId: "*",
-      relation: "read",
+      relation: "viewer",
     }),
-    "clientA"
+    "payload"
   );
 
   assert.equal(

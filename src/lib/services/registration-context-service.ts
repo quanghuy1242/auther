@@ -8,6 +8,7 @@ import {
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import { OAuthClientMetadataRepository } from "@/lib/repositories/oauth-client-metadata-repository";
 import { AuthorizationModelRepository } from "@/lib/repositories/authorization-model-repository";
+import { getAuthorizationModelOwnerClientId } from "@/lib/utils/registration-context-grants";
 
 const tupleRepo = new TupleRepository();
 const metadataRepo = new OAuthClientMetadataRepository();
@@ -33,6 +34,11 @@ export interface ContextValidationResult {
     valid: boolean;
     context?: RegistrationContext;
     error?: string;
+}
+
+export interface AppliedContextGrantStats {
+    appliedCount: number;
+    projectedCount: number;
 }
 
 /**
@@ -226,7 +232,10 @@ export class RegistrationContextService {
     async applyContextGrants(
         context: RegistrationContext,
         userId: string
-    ): Promise<void> {
+    ): Promise<AppliedContextGrantStats> {
+        let appliedCount = 0;
+        let projectedCount = 0;
+
         for (const grant of context.grants) {
             // Look up authorization model by ID to get current entity type name
             const model = await authzModelRepo.findById(grant.entityTypeId);
@@ -237,7 +246,7 @@ export class RegistrationContextService {
             }
 
             // Create tuple using the current (possibly renamed) entity type
-            await tupleRepo.createIfNotExists({
+            const result = await tupleRepo.createIfNotExists({
                 entityType: model.entityType, // e.g., "client_abc:invoice" (current name)
                 entityTypeId: model.id, // Stable ID reference
                 entityId: "*", // Wildcard for all entities of this type
@@ -245,7 +254,20 @@ export class RegistrationContextService {
                 subjectType: "user",
                 subjectId: userId,
             });
+
+            if (result.created) {
+                appliedCount += 1;
+                const ownerClientId = getAuthorizationModelOwnerClientId(model.entityType);
+                if (context.clientId && ownerClientId && ownerClientId !== context.clientId) {
+                    projectedCount += 1;
+                }
+            }
         }
+
+        return {
+            appliedCount,
+            projectedCount,
+        };
     }
 
     /**

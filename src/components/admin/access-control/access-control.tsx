@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Tabs, Card, CardContent, Alert, Icon, Modal, ModalFooter, Button } from "@/components/ui";
+import { Tabs, Card, CardContent, Alert, Icon, Modal, ModalFooter, Button, Checkbox } from "@/components/ui";
 import { PlatformAccess } from "./platform-access";
 import { ScopedPermissions } from "./scoped-permissions";
 import { ApiKeyManagement } from "./api-key-management";
@@ -27,6 +27,7 @@ import {
   updateClientAccessPolicy,
   getClientMetadata,
   getClientApiKeys,
+  getGrantProjectionClientOptions,
   type PlatformRelation,
   type ClientAuthorizationModels,
 } from "@/app/admin/clients/[id]/access/actions";
@@ -51,6 +52,7 @@ export interface AccessControlInitialData {
   models: Awaited<ReturnType<typeof getAuthorizationModels>>;
   scopedPerms: Awaited<ReturnType<typeof getScopedPermissions>>;
   apiKeys: Awaited<ReturnType<typeof getClientApiKeys>>;
+  projectionClientOptions: Awaited<ReturnType<typeof getGrantProjectionClientOptions>>;
 }
 
 interface AccessControlProps {
@@ -127,8 +129,15 @@ export function AccessControl({ initialData }: AccessControlProps) {
     allowsApiKeys: boolean;
     allowedResources: Record<string, string[]> | null;
     defaultApiKeyPermissions: Record<string, string[]> | null;
+    grantProjectionClientIds: string[];
   } | null>(
     () => initialData ? initialData.metadata : null
+  );
+  const [projectionClientOptions, setProjectionClientOptions] = React.useState(
+    () => initialData ? initialData.projectionClientOptions : []
+  );
+  const [projectionClientDraft, setProjectionClientDraft] = React.useState<string[]>(
+    () => initialData ? initialData.metadata.grantProjectionClientIds : []
   );
 
   const [apiKeys, setApiKeys] = React.useState<ApiKey[]>(
@@ -189,6 +198,10 @@ export function AccessControl({ initialData }: AccessControlProps) {
       // Load client metadata for API keys
       const metadata = await getClientMetadata(clientId);
       setClientMetadata(metadata);
+      setProjectionClientDraft(metadata.grantProjectionClientIds);
+
+      const projectionOptions = await getGrantProjectionClientOptions(clientId);
+      setProjectionClientOptions(projectionOptions);
 
       // Load platform access list
       const accessList = await getPlatformAccessList(clientId);
@@ -227,6 +240,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
       setPlatformUsers(transformPlatformUsers(initialData.accessList));
       setPermissions(transformScopedPermissions(initialData.scopedPerms));
       setClientMetadata(initialData.metadata);
+      setProjectionClientOptions(initialData.projectionClientOptions);
+      setProjectionClientDraft(initialData.metadata.grantProjectionClientIds);
       setApiKeys(
         initialData.metadata.allowsApiKeys
           ? transformApiKeys(initialData.apiKeys)
@@ -363,6 +378,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
       allowsApiKeys: enabled,
       allowedResources: clientMetadata?.allowedResources || undefined,
       defaultApiKeyPermissions: clientMetadata?.defaultApiKeyPermissions || undefined,
+      grantProjectionClientIds: clientMetadata?.grantProjectionClientIds || [],
     });
 
     if (result.success) {
@@ -375,6 +391,46 @@ export function AccessControl({ initialData }: AccessControlProps) {
     } else {
       console.error("Failed to toggle API keys:", result.error);
       setError(`Failed to toggle API keys: ${result.error}`);
+    }
+  };
+
+  const handleToggleProjectionClient = (targetClientId: string, checked: boolean) => {
+    setProjectionClientDraft((current) => {
+      if (checked) {
+        return current.includes(targetClientId) ? current : [...current, targetClientId];
+      }
+
+      return current.filter((clientId) => clientId !== targetClientId);
+    });
+  };
+
+  const handleSaveProjectionTargets = async () => {
+    if (!canManageAccess) {
+      console.error("Permission denied: C2 check failed");
+      return;
+    }
+
+    const result = await updateClientAccessPolicy({
+      clientId,
+      accessPolicy: clientMetadata?.accessPolicy || "all_users",
+      allowsApiKeys: clientMetadata?.allowsApiKeys ?? false,
+      allowedResources: clientMetadata?.allowedResources || undefined,
+      defaultApiKeyPermissions: clientMetadata?.defaultApiKeyPermissions || undefined,
+      grantProjectionClientIds: projectionClientDraft,
+    });
+
+    if (result.success) {
+      setClientMetadata((current) =>
+        current
+          ? {
+              ...current,
+              grantProjectionClientIds: projectionClientDraft,
+            }
+          : null
+      );
+    } else {
+      console.error("Failed to update projection targets:", result.error);
+      setError(`Failed to update projection targets: ${result.error}`);
     }
   };
 
@@ -610,6 +666,46 @@ export function AccessControl({ initialData }: AccessControlProps) {
             <Button variant="ghost" size="sm" className="w-8 px-0" onClick={() => setIsGuideOpen(true)} title="Documentation & API Guide">
               <Icon name="help" className="text-gray-400 hover:text-white transition-colors" />
             </Button>
+          </div>
+
+          <div className="mb-6 rounded-lg border border-[#243647] bg-[#111921] p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl space-y-1">
+                <h3 className="text-sm font-semibold text-white">Grant Projection Targets</h3>
+                <p className="text-sm text-gray-400">
+                  Allow this client&apos;s registration contexts to target models owned by specific OAuth clients. This only affects registration-context grant projection.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSaveProjectionTargets}
+                disabled={!canManageAccess}
+              >
+                Save Targets
+              </Button>
+            </div>
+
+            {projectionClientOptions.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {projectionClientOptions.map((option) => (
+                  <div
+                    key={option.clientId}
+                    className="rounded-md border border-[#243647] bg-[#0d141b] p-3"
+                  >
+                    <Checkbox
+                      checked={projectionClientDraft.includes(option.clientId)}
+                      onChange={(checked) => handleToggleProjectionClient(option.clientId, checked)}
+                      disabled={!canManageAccess}
+                      label={option.name}
+                    />
+                    <p className="mt-2 text-xs text-gray-500 font-mono">{option.clientId}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-gray-500">No other OAuth clients are available for projection.</p>
+            )}
           </div>
 
           <Tabs

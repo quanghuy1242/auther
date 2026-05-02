@@ -17,6 +17,7 @@ import { AuthorizationModelService } from "@/lib/auth/authorization-model-servic
 import { SYSTEM_MODELS } from "@/lib/auth/system-models";
 import { AuthorizationModelDefinition } from "@/schemas/rebac";
 import { metricsService } from "@/lib/services";
+import { resolveRegistrationContextGrantTargets } from "@/lib/utils/registration-context-grants";
 
 const authorizationModelService = new AuthorizationModelService();
 
@@ -431,6 +432,17 @@ export async function createPlatformContext(data: {
         const existing = await registrationContextRepo.findBySlug(data.slug);
         if (existing) {
             return { success: false, error: "Context with this slug already exists" };
+        }
+
+        const validation = await resolveRegistrationContextGrantTargets({
+            sourceClientId: null,
+            allowedProjectionClientIds: [],
+            grants: data.grants,
+            resolveModelById: (entityTypeId) => authorizationModelRepository.findById(entityTypeId),
+        });
+
+        if (!validation.ok) {
+            return { success: false, error: validation.error };
         }
 
         const context = await registrationContextRepo.create({

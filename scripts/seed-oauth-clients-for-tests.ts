@@ -13,6 +13,9 @@ async function main() {
   const payloadRedirectUri = process.env.PAYLOAD_REDIRECT_URI;
   const payloadSpaClientId = process.env.PAYLOAD_SPA_CLIENT_ID;
   const payloadSpaRedirectUris = process.env.PAYLOAD_SPA_REDIRECT_URIS;
+  const blogClientId = process.env.BLOG_CLIENT_ID;
+  const blogRedirectUri = process.env.BLOG_REDIRECT_URI;
+  const blogLogoutRedirectUris = process.env.BLOG_LOGOUT_REDIRECT_URIS;
 
   if (!payloadClientId || !payloadClientSecret || !payloadRedirectUri) {
     console.error('Missing required environment variables for OAuth client seeding');
@@ -62,6 +65,32 @@ async function main() {
       }).onConflictDoNothing();
 
       console.log(`✅ Seeded Payload SPA client: ${payloadSpaClientId}`);
+    }
+
+    if (blogClientId && blogRedirectUri) {
+      const postLogoutRedirectUris = blogLogoutRedirectUris
+        ? blogLogoutRedirectUris.split(",").map((uri) => uri.trim()).filter(Boolean)
+        : [];
+
+      await db.insert(oauthApplication).values({
+        id: `oauth_app_${blogClientId}`,
+        clientId: blogClientId,
+        clientSecret: null,
+        name: "Next Blog",
+        redirectURLs: JSON.stringify([blogRedirectUri]),
+        type: "public",
+        disabled: false,
+        userId: null,
+        metadata: JSON.stringify({
+          tokenEndpointAuthMethod: "none",
+          grantTypes: ["authorization_code"],
+          postLogoutRedirectUris,
+        }),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).onConflictDoNothing();
+
+      console.log(`✅ Seeded Next Blog client: ${blogClientId}`);
     }
 
     console.log('\n✅ OAuth client seeding complete');

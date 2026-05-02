@@ -47,6 +47,8 @@ const trustedOriginCandidates = [
   env.PAYLOAD_REDIRECT_URI,
   ...env.PAYLOAD_SPA_REDIRECT_URIS,
   ...(env.PAYLOAD_SPA_LOGOUT_URIS ?? []),
+  env.BLOG_REDIRECT_URI,
+  ...(env.BLOG_LOGOUT_REDIRECT_URIS ?? []),
 ];
 
 const wildcardTrustedOrigins = Array.from(
@@ -63,6 +65,8 @@ const payloadAdminRedirects = new Set<string>([env.PAYLOAD_REDIRECT_URI]);
 const payloadSPAInitialRedirects = env.PAYLOAD_SPA_REDIRECT_URIS.filter(Boolean);
 const payloadSPARedirects = new Set<string>(payloadSPAInitialRedirects);
 const payloadSPALogoutRedirects = new Set<string>(env.PAYLOAD_SPA_LOGOUT_URIS ?? []);
+const blogRedirects = new Set<string>([env.BLOG_REDIRECT_URI]);
+const blogLogoutRedirects = new Set<string>(env.BLOG_LOGOUT_REDIRECT_URIS ?? []);
 
 const payloadAdminClient = {
   clientId: env.PAYLOAD_CLIENT_ID,
@@ -92,6 +96,20 @@ const payloadSPAClient = {
   skipConsent: true,
 };
 
+const blogClient = {
+  clientId: env.BLOG_CLIENT_ID,
+  type: "public" as const,
+  name: "Next Blog (PKCE)",
+  redirectURLs: Array.from(blogRedirects),
+  metadata: {
+    tokenEndpointAuthMethod: "none",
+    grantTypes: ["authorization_code"],
+    postLogoutRedirectUris: Array.from(blogLogoutRedirects),
+  },
+  disabled: false,
+  skipConsent: true,
+};
+
 const dynamicRedirectConfig = new Map<string, TrustedClientConfig>([
   [
     payloadAdminClient.clientId,
@@ -105,6 +123,13 @@ const dynamicRedirectConfig = new Map<string, TrustedClientConfig>([
     {
       redirectSet: payloadSPARedirects,
       client: payloadSPAClient,
+    },
+  ],
+  [
+    blogClient.clientId,
+    {
+      redirectSet: blogRedirects,
+      client: blogClient,
     },
   ],
 ]);
@@ -295,7 +320,7 @@ export const auth = betterAuth({
       metadata: {
         issuer: env.JWT_ISSUER,
       },
-      trustedClients: [payloadAdminClient, payloadSPAClient],
+      trustedClients: [payloadAdminClient, payloadSPAClient, blogClient],
     }),
     oAuthProxy({
       productionURL,

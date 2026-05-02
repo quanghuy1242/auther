@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import type {
     RegistrationContext,
     PermissionRequest,
+    ClientRegistrationGrantTarget,
 } from "./registration-actions";
 import {
     createClientContext,
@@ -41,10 +42,10 @@ interface RegistrationTabProps {
     clientId: string;
     contexts: RegistrationContext[];
     allowsContexts: boolean;
-    entityTypes: Array<{ id: string; name: string; relations: string[] }>;
+    grantTargets: ClientRegistrationGrantTarget[];
 }
 
-export function RegistrationTab({ clientId, contexts, allowsContexts, entityTypes }: RegistrationTabProps) {
+export function RegistrationTab({ clientId, contexts, allowsContexts, grantTargets }: RegistrationTabProps) {
     const [showCreate, setShowCreate] = React.useState(false);
     const [creating, setCreating] = React.useState(false);
     const [updating, setUpdating] = React.useState<string | null>(null);
@@ -140,19 +141,32 @@ export function RegistrationTab({ clientId, contexts, allowsContexts, entityType
         setGrants(updated);
     }
 
-    // Build flat options for Select: value = "entityTypeId:relation", label = "name → relation"
+    const grantLabelByKey = React.useMemo(() => {
+        const labels = new Map<string, string>();
+        for (const target of grantTargets) {
+            for (const relation of target.relations) {
+                labels.set(
+                    `${target.id}:${relation}`,
+                    `${target.clientName} / ${target.name} / ${relation}`
+                );
+            }
+        }
+        return labels;
+    }, [grantTargets]);
+
+    // Build flat options for Select: value = "entityTypeId:relation", label = "Client / model / relation"
     const grantOptions = React.useMemo(() => {
         const options: Array<{ value: string; label: string }> = [];
-        for (const et of entityTypes) {
+        for (const et of grantTargets) {
             for (const rel of et.relations) {
                 options.push({
-                    value: `${et.id}:${rel}`,  // Use ID for stable references
-                    label: `${et.name} → ${rel}`,  // Show name for display
+                    value: `${et.id}:${rel}`,
+                    label: `${et.clientName} / ${et.name} / ${rel}`,
                 });
             }
         }
         return options;
-    }, [entityTypes]);
+    }, [grantTargets]);
 
     if (!allowsContexts) {
         return (
@@ -253,7 +267,7 @@ export function RegistrationTab({ clientId, contexts, allowsContexts, entityType
                                             <div className="flex flex-wrap gap-1">
                                                 {context.grants.map((grant, idx) => (
                                                     <Badge key={idx} variant="default" className="text-xs font-mono">
-                                                        {grant.relation}
+                                                        {grantLabelByKey.get(`${grant.entityTypeId}:${grant.relation}`) ?? `${grant.entityTypeId} / ${grant.relation}`}
                                                     </Badge>
                                                 ))}
                                             </div>

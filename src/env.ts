@@ -30,6 +30,12 @@ const serverSchema = z.object({
     .string()
     .transform(parseCommaSeparatedList)
     .optional(),
+  BLOG_CLIENT_ID: z.string().min(1, "BLOG_CLIENT_ID is required"),
+  BLOG_REDIRECT_URI: z.string().url("BLOG_REDIRECT_URI must be a valid URL"),
+  BLOG_LOGOUT_REDIRECT_URIS: z
+    .string()
+    .transform(parseCommaSeparatedList)
+    .optional(),
   PAYLOAD_PREVIEW_ORIGIN_PATTERNS: z
     .string()
     .transform(parseCommaSeparatedList)
@@ -92,6 +98,7 @@ export const env: ServerEnv & ClientEnv & {
   JWT_AUDIENCE: string[];
   PAYLOAD_SPA_REDIRECT_URIS: string[];
   PAYLOAD_SPA_LOGOUT_URIS?: string[];
+  BLOG_LOGOUT_REDIRECT_URIS?: string[];
   PAYLOAD_PREVIEW_ORIGIN_PATTERNS: string[];
 } = {
   ...serverEnv,

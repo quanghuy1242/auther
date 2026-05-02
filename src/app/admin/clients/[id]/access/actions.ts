@@ -14,6 +14,7 @@ import {
   tupleRepository,
   authorizationModelRepository,
   oauthClientMetadataRepository,
+  oauthClientRepository,
   userGroupRepository,
 } from "@/lib/repositories";
 import { updateClientPolicySchema } from "@/schemas/clients";
@@ -89,6 +90,7 @@ export async function updateClientAccessPolicy(
         allowsApiKeys: validated.allowsApiKeys,
         allowedResources: validated.allowedResources,
         defaultApiKeyPermissions: validated.defaultApiKeyPermissions,
+        grantProjectionClientIds: validated.grantProjectionClientIds,
       });
     } else {
       // Update existing metadata
@@ -99,6 +101,7 @@ export async function updateClientAccessPolicy(
           allowsApiKeys: validated.allowsApiKeys,
           allowedResources: validated.allowedResources,
           defaultApiKeyPermissions: validated.defaultApiKeyPermissions,
+          grantProjectionClientIds: validated.grantProjectionClientIds,
         }
       );
 
@@ -138,6 +141,7 @@ export async function getClientMetadata(clientId: string) {
         allowsApiKeys: false,
         allowedResources: null,
         defaultApiKeyPermissions: null,
+        grantProjectionClientIds: [],
       };
     }
 
@@ -147,6 +151,7 @@ export async function getClientMetadata(clientId: string) {
       allowsApiKeys: metadata.allowsApiKeys,
       allowedResources: metadata.allowedResources,
       defaultApiKeyPermissions: metadata.defaultApiKeyPermissions,
+      grantProjectionClientIds: metadata.grantProjectionClientIds,
     };
   } catch (error) {
     console.error("getClientMetadata error:", error);
@@ -156,8 +161,28 @@ export async function getClientMetadata(clientId: string) {
       allowsApiKeys: false,
       allowedResources: null,
       defaultApiKeyPermissions: null,
+      grantProjectionClientIds: [],
     };
   }
+}
+
+export async function getGrantProjectionClientOptions(clientId: string): Promise<
+  Array<{ clientId: string; name: string }>
+> {
+  await guards.clients.view();
+
+  const clients = await oauthClientRepository.findMany(1, 500);
+
+  return clients.items
+    .filter(
+      (client): client is typeof client & { clientId: string } =>
+        Boolean(client.clientId) && client.clientId !== clientId
+    )
+    .map((client) => ({
+      clientId: client.clientId,
+      name: client.name?.trim() || client.clientId,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.clientId.localeCompare(b.clientId));
 }
 
 /**

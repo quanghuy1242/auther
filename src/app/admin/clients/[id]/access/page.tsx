@@ -6,6 +6,7 @@ import {
   getAuthorizationModels,
   getScopedPermissions,
   getClientApiKeys,
+  getGrantProjectionClientOptions,
 } from "./actions";
 
 interface PageProps {
@@ -18,12 +19,13 @@ export default async function AccessControlPage({ params }: PageProps) {
   const { id } = await params;
 
   // Parallel fetch for core data
-  const [accessLevel, metadata, accessList, modelsResult, scopedPerms] = await Promise.all([
+  const [accessLevel, metadata, accessList, modelsResult, scopedPerms, projectionClientOptions] = await Promise.all([
     getCurrentUserAccessLevel(id),
     getClientMetadata(id),
     getPlatformAccessList(id),
     getAuthorizationModels(id),
     getScopedPermissions(id),
+    getGrantProjectionClientOptions(id),
   ]);
 
   // Conditional fetch for API keys
@@ -39,6 +41,7 @@ export default async function AccessControlPage({ params }: PageProps) {
     models: modelsResult,
     scopedPerms,
     apiKeys,
+    projectionClientOptions,
   };
 
   return <AccessControl initialData={initialData} />;

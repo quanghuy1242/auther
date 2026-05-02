@@ -9,8 +9,13 @@ import {
     type RegistrationContext,
     type PermissionRequest,
 } from "@/lib/repositories/platform-access-repository";
-import { oauthClientMetadataRepository, authorizationModelRepository } from "@/lib/repositories";
+import {
+    oauthClientMetadataRepository,
+    authorizationModelRepository,
+    oauthClientRepository,
+} from "@/lib/repositories";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
+import { resolveRegistrationContextGrantTargets } from "@/lib/utils/registration-context-grants";
 
 // Re-export types
 export type { RegistrationContext, PermissionRequest };
@@ -18,6 +23,14 @@ export type { RegistrationContext, PermissionRequest };
 export interface ClientRegistrationStatus {
     allowsContexts: boolean;
     contextCount: number;
+}
+
+export interface ClientRegistrationGrantTarget {
+    id: string;
+    clientId: string;
+    clientName: string;
+    name: string;
+    relations: string[];
 }
 
 // ============================================================================
@@ -45,28 +58,53 @@ export async function getClientRegistrationStatus(clientId: string): Promise<Cli
  * Get available relations from the client's authorization model.
  * Returns entity types with their stable IDs for grant references.
  */
-export async function getClientRelations(
+export async function getClientRegistrationGrantTargets(
     clientId: string
 ): Promise<{
-    entityTypes: Array<{ id: string; name: string; relations: string[] }>;
+    targets: ClientRegistrationGrantTarget[];
     error?: string;
 }> {
     try {
         await guards.clients.view();
 
-        // Find ALL authorization models for this client with their stable IDs
-        const entityTypes = await authorizationModelRepository.findAllForClientWithIds(clientId);
+        const metadata = await oauthClientMetadataRepository.findOrCreate(clientId);
+        const targetClientIds = Array.from(
+            new Set([clientId, ...metadata.grantProjectionClientIds])
+        );
 
-        if (entityTypes.length === 0) {
-            return { entityTypes: [], error: "No authorization model configured for this client" };
+        const targets = await Promise.all(
+            targetClientIds.map(async (targetClientId) => {
+                const client = await oauthClientRepository.findByClientId(targetClientId);
+                const entityTypes = await authorizationModelRepository.findAllForClientWithIds(targetClientId);
+
+                return entityTypes.map((entityType) => ({
+                    id: entityType.id,
+                    clientId: targetClientId,
+                    clientName: client?.name?.trim() || targetClientId,
+                    name: entityType.name,
+                    relations: entityType.relations,
+                }));
+            })
+        );
+
+        const flattenedTargets = targets
+            .flat()
+            .sort((a, b) =>
+                a.clientName.localeCompare(b.clientName) ||
+                a.name.localeCompare(b.name) ||
+                a.id.localeCompare(b.id)
+            );
+
+        if (flattenedTargets.length === 0) {
+            return { targets: [], error: "No authorization model configured for this client or its allowed projection targets" };
         }
 
-        return { entityTypes };
+        return { targets: flattenedTargets };
     } catch (error) {
-        console.error("getClientRelations error:", error);
+        console.error("getClientRegistrationGrantTargets error:", error);
         return {
-            entityTypes: [],
-            error: error instanceof Error ? error.message : "Failed to get relations",
+            targets: [],
+            error: error instanceof Error ? error.message : "Failed to get grant targets",
         };
     }
 }
@@ -88,6 +126,17 @@ export async function createClientContext(
         const metadata = await oauthClientMetadataRepository.findByClientId(clientId);
         if (!metadata?.allowsRegistrationContexts) {
             return { success: false, error: "This client is not allowed to create registration contexts" };
+        }
+
+        const validation = await resolveRegistrationContextGrantTargets({
+            sourceClientId: clientId,
+            allowedProjectionClientIds: metadata.grantProjectionClientIds,
+            grants: data.grants,
+            resolveModelById: (entityTypeId) => authorizationModelRepository.findById(entityTypeId),
+        });
+
+        if (!validation.ok) {
+            return { success: false, error: validation.error };
         }
 
         // Check if slug already exists

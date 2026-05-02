@@ -6,6 +6,7 @@
  */
 
 import { registrationContextService } from "@/lib/services/registration-context-service";
+import { metricsService } from "@/lib/services";
 import {
     platformInviteRepo,
     registrationContextRepo,
@@ -114,7 +115,19 @@ export async function applyClientContextGrants(
         if (!context.enabled) continue;
 
         try {
-            await registrationContextService.applyContextGrants(context, userId);
+            const result = await registrationContextService.applyContextGrants(context, userId);
+            if (result.appliedCount > 0) {
+                void metricsService.count("auth.context_grant.applied.count", result.appliedCount, {
+                    source_client_id: clientId,
+                    context_slug: context.slug,
+                });
+            }
+            if (result.projectedCount > 0) {
+                void metricsService.count("auth.context_grant.projected.count", result.projectedCount, {
+                    source_client_id: clientId,
+                    context_slug: context.slug,
+                });
+            }
             console.log(
                 `Applied client context grants: ${context.slug} -> user ${userId}`
             );
@@ -123,6 +136,10 @@ export async function applyClientContextGrants(
                 `Failed to apply client context grants for ${context.slug}:`,
                 error
             );
+            void metricsService.count("auth.context_grant.projected.error.count", 1, {
+                source_client_id: clientId,
+                context_slug: context.slug,
+            });
             // Continue with other contexts even if one fails
         }
     }

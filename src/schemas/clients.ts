@@ -6,6 +6,7 @@ export const updateClientPolicySchema = z.object({
   allowsApiKeys: z.boolean().optional(),
   allowedResources: z.record(z.string(), z.array(z.string())).optional(),
   defaultApiKeyPermissions: z.record(z.string(), z.array(z.string())).optional(),
+  grantProjectionClientIds: z.array(z.string().min(1)).optional(),
 });
 
 export const registerClientSchema = z.object({
@@ -29,6 +30,7 @@ export const clientMetadataSchema = z.object({
   allowsApiKeys: z.boolean(),
   allowedResources: z.record(z.string(), z.array(z.string())).nullable(),
   defaultApiKeyPermissions: z.record(z.string(), z.array(z.string())).nullable(),
+  grantProjectionClientIds: z.array(z.string().min(1)),
 });
 
 export type ClientMetadata = z.infer<typeof clientMetadataSchema>;

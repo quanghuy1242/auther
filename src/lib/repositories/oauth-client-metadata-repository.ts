@@ -5,12 +5,34 @@ import { generateApiKeyId } from "@/lib/utils/api-key";
 import type { ResourcePermissions } from "@/lib/utils/permissions";
 import { parsePermissions, stringifyPermissions } from "@/lib/utils/permissions";
 
+function parseStringArray(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function stringifyStringArray(value: string[] | undefined): string {
+  return JSON.stringify(Array.from(new Set((value ?? []).filter(Boolean))));
+}
+
 export interface OAuthClientMetadataEntity {
   id: string;
   clientId: string;
   allowedResources: ResourcePermissions;
   allowsApiKeys: boolean;
   defaultApiKeyPermissions: ResourcePermissions;
+  grantProjectionClientIds: string[];
   accessPolicy: "all_users" | "restricted";
   allowsRegistrationContexts: boolean;
   createdAt: Date;
@@ -22,6 +44,7 @@ export interface CreateOAuthClientMetadataData {
   allowedResources?: ResourcePermissions;
   allowsApiKeys?: boolean;
   defaultApiKeyPermissions?: ResourcePermissions;
+  grantProjectionClientIds?: string[];
   accessPolicy?: "all_users" | "restricted";
   allowsRegistrationContexts?: boolean;
 }
@@ -41,6 +64,7 @@ export class OAuthClientMetadataRepository {
       allowedResources: parsePermissions(row.allowedResources),
       allowsApiKeys: row.allowsApiKeys,
       defaultApiKeyPermissions: parsePermissions(row.defaultApiKeyPermissions),
+      grantProjectionClientIds: parseStringArray(row.grantProjectionClientIds),
       accessPolicy: row.accessPolicy as "all_users" | "restricted",
       allowsRegistrationContexts: row.allowsRegistrationContexts ?? false,
       createdAt: row.createdAt,
@@ -83,6 +107,7 @@ export class OAuthClientMetadataRepository {
       defaultApiKeyPermissions: data.defaultApiKeyPermissions
         ? stringifyPermissions(data.defaultApiKeyPermissions)
         : "{}",
+      grantProjectionClientIds: stringifyStringArray(data.grantProjectionClientIds),
       accessPolicy: data.accessPolicy ?? "all_users",
       allowsRegistrationContexts: data.allowsRegistrationContexts ?? false,
       createdAt: now,
@@ -98,6 +123,7 @@ export class OAuthClientMetadataRepository {
           allowedResources: values.allowedResources,
           allowsApiKeys: values.allowsApiKeys,
           defaultApiKeyPermissions: values.defaultApiKeyPermissions,
+          grantProjectionClientIds: values.grantProjectionClientIds,
           accessPolicy: values.accessPolicy,
           allowsRegistrationContexts: values.allowsRegistrationContexts,
           updatedAt: now,
@@ -131,6 +157,10 @@ export class OAuthClientMetadataRepository {
 
       if (data.defaultApiKeyPermissions !== undefined) {
         updateData.defaultApiKeyPermissions = stringifyPermissions(data.defaultApiKeyPermissions);
+      }
+
+      if (data.grantProjectionClientIds !== undefined) {
+        updateData.grantProjectionClientIds = stringifyStringArray(data.grantProjectionClientIds);
       }
 
       if (data.accessPolicy !== undefined) {
