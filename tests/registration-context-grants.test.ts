@@ -13,6 +13,7 @@ function makeModel(overrides: Partial<AuthorizationModelEntity>): AuthorizationM
   return {
     id: "model_default",
     entityType: "client_payload:book",
+    authorizationSpaceId: null,
     definition: {
       relations: {
         viewer: {},
@@ -72,6 +73,67 @@ test("resolveRegistrationContextGrantTargets rejects disallowed target clients",
   }
 
   assert.match(result.error, /Target client 'payload' is not allowed/);
+});
+
+test("resolveRegistrationContextGrantTargets allows models in linked authorization spaces", async () => {
+  const result = await resolveRegistrationContextGrantTargets({
+    sourceClientId: "blog",
+    allowedProjectionClientIds: [],
+    allowedAuthorizationSpaceIds: ["space_payload"],
+    grants: [{ entityTypeId: "book", relation: "viewer" }],
+    resolveModelById: async () =>
+      makeModel({
+        id: "book",
+        entityType: "client_payload:book",
+        authorizationSpaceId: "space_payload",
+      }),
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    return;
+  }
+
+  assert.equal(result.targets[0]?.authorizationSpaceId, "space_payload");
+});
+
+test("resolveRegistrationContextGrantTargets rejects unlinked authorization spaces", async () => {
+  const result = await resolveRegistrationContextGrantTargets({
+    sourceClientId: "blog",
+    allowedProjectionClientIds: ["payload"],
+    allowedAuthorizationSpaceIds: ["space_other"],
+    grants: [{ entityTypeId: "book", relation: "viewer" }],
+    resolveModelById: async () =>
+      makeModel({
+        id: "book",
+        entityType: "client_payload:book",
+        authorizationSpaceId: "space_payload",
+      }),
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) {
+    return;
+  }
+
+  assert.match(result.error, /Authorization space 'space_payload' is not linked/);
+});
+
+test("resolveRegistrationContextGrantTargets keeps client allowlist compatibility for unbackfilled models", async () => {
+  const result = await resolveRegistrationContextGrantTargets({
+    sourceClientId: "blog",
+    allowedProjectionClientIds: ["payload"],
+    allowedAuthorizationSpaceIds: ["space_payload"],
+    grants: [{ entityTypeId: "book", relation: "viewer" }],
+    resolveModelById: async () =>
+      makeModel({
+        id: "book",
+        entityType: "client_payload:book",
+        authorizationSpaceId: null,
+      }),
+  });
+
+  assert.equal(result.ok, true);
 });
 
 test("resolveRegistrationContextGrantTargets rejects missing relations", async () => {

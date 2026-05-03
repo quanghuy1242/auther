@@ -144,24 +144,26 @@ export function RegistrationTab({ clientId, contexts, allowsContexts, grantTarge
     const grantLabelByKey = React.useMemo(() => {
         const labels = new Map<string, string>();
         for (const target of grantTargets) {
+            const ownerLabel = target.authorizationSpaceName ?? target.clientName;
             for (const relation of target.relations) {
                 labels.set(
                     `${target.id}:${relation}`,
-                    `${target.clientName} / ${target.name} / ${relation}`
+                    `${ownerLabel} / ${target.name} / ${relation}`
                 );
             }
         }
         return labels;
     }, [grantTargets]);
 
-    // Build flat options for Select: value = "entityTypeId:relation", label = "Client / model / relation"
+    // Build flat options for Select: value = "entityTypeId:relation", label = "Space or client / model / relation"
     const grantOptions = React.useMemo(() => {
         const options: Array<{ value: string; label: string }> = [];
         for (const et of grantTargets) {
+            const ownerLabel = et.authorizationSpaceName ?? et.clientName;
             for (const rel of et.relations) {
                 options.push({
                     value: `${et.id}:${rel}`,
-                    label: `${et.clientName} / ${et.name} / ${rel}`,
+                    label: `${ownerLabel} / ${et.name} / ${rel}`,
                 });
             }
         }

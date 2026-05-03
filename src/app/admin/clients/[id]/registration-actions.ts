@@ -13,7 +13,10 @@ import {
     oauthClientMetadataRepository,
     authorizationModelRepository,
     oauthClientRepository,
+    authorizationSpaceRepository,
+    oauthClientSpaceLinkRepository,
 } from "@/lib/repositories";
+import type { ClientSpaceAccessMode } from "@/lib/repositories";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import { resolveRegistrationContextGrantTargets } from "@/lib/utils/registration-context-grants";
 
@@ -29,6 +32,8 @@ export interface ClientRegistrationGrantTarget {
     id: string;
     clientId: string;
     clientName: string;
+    authorizationSpaceId: string | null;
+    authorizationSpaceName: string | null;
     name: string;
     relations: string[];
 }
@@ -68,6 +73,37 @@ export async function getClientRegistrationGrantTargets(
         await guards.clients.view();
 
         const metadata = await oauthClientMetadataRepository.findOrCreate(clientId);
+        const spaceLinks = await oauthClientSpaceLinkRepository.listByClientId(clientId);
+        const triggerSpaceLinks = spaceLinks.filter((link) =>
+            link.accessMode === "can_trigger_contexts" || link.accessMode === "full"
+        );
+        const spaces = await Promise.all(
+            triggerSpaceLinks.map((link) => authorizationSpaceRepository.findById(link.authorizationSpaceId))
+        );
+        const existingSpaces = spaces.filter(
+            (space): space is NonNullable<typeof space> => space !== null && space.enabled
+        );
+        const spaceTargets = await Promise.all(
+            existingSpaces.map(async (space) => {
+                const entityTypes = await authorizationModelRepository.findAllForAuthorizationSpaceWithIds(space.id);
+                return entityTypes.map((entityType) => {
+                    const ownerClientId = entityType.entityType.startsWith("client_")
+                        ? entityType.entityType.slice("client_".length).split(":")[0]
+                        : "";
+
+                    return {
+                        id: entityType.id,
+                        clientId: ownerClientId,
+                        clientName: ownerClientId,
+                        authorizationSpaceId: space.id,
+                        authorizationSpaceName: space.name,
+                        name: entityType.name,
+                        relations: entityType.relations,
+                    };
+                });
+            })
+        );
+
         const targetClientIds = Array.from(
             new Set([clientId, ...metadata.grantProjectionClientIds])
         );
@@ -81,16 +117,21 @@ export async function getClientRegistrationGrantTargets(
                     id: entityType.id,
                     clientId: targetClientId,
                     clientName: client?.name?.trim() || targetClientId,
+                    authorizationSpaceId: entityType.authorizationSpaceId,
+                    authorizationSpaceName: null,
                     name: entityType.name,
                     relations: entityType.relations,
                 }));
             })
         );
 
-        const flattenedTargets = targets
+        const flattenedTargets = [...spaceTargets.flat(), ...targets.flat()]
+            .filter((target, index, all) =>
+                all.findIndex((candidate) => candidate.id === target.id) === index
+            )
             .flat()
             .sort((a, b) =>
-                a.clientName.localeCompare(b.clientName) ||
+                (a.authorizationSpaceName ?? a.clientName).localeCompare(b.authorizationSpaceName ?? b.clientName) ||
                 a.name.localeCompare(b.name) ||
                 a.id.localeCompare(b.id)
             );
@@ -131,6 +172,7 @@ export async function createClientContext(
         const validation = await resolveRegistrationContextGrantTargets({
             sourceClientId: clientId,
             allowedProjectionClientIds: metadata.grantProjectionClientIds,
+            allowedAuthorizationSpaceIds: await getContextTriggerSpaceIds(clientId),
             grants: data.grants,
             resolveModelById: (entityTypeId) => authorizationModelRepository.findById(entityTypeId),
         });
@@ -166,6 +208,19 @@ export async function createClientContext(
             error: error instanceof Error ? error.message : "Failed to create context",
         };
     }
+}
+
+async function getContextTriggerSpaceIds(clientId: string): Promise<string[]> {
+    const canTrigger: ClientSpaceAccessMode[] = ["can_trigger_contexts", "full"];
+    const links = await oauthClientSpaceLinkRepository.listByClientId(clientId);
+    const triggerLinks = links.filter((link) => canTrigger.includes(link.accessMode));
+    const spaces = await Promise.all(
+        triggerLinks.map((link) => authorizationSpaceRepository.findById(link.authorizationSpaceId))
+    );
+
+    return spaces
+        .filter((space): space is NonNullable<typeof space> => space !== null && space.enabled)
+        .map((space) => space.id);
 }
 
 export async function toggleClientContext(

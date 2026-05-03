@@ -673,7 +673,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
               <div className="max-w-2xl space-y-1">
                 <h3 className="text-sm font-semibold text-white">Grant Projection Targets</h3>
                 <p className="text-sm text-gray-400">
-                  Allow this client&apos;s registration contexts to target models owned by specific OAuth clients. This only affects registration-context grant projection.
+                  Transitional R1 metadata. Prefer authorization-space links for new configuration; this only keeps registration-context grant projection compatible during migration.
                 </p>
               </div>
               <Button

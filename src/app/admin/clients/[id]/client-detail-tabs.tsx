@@ -24,6 +24,11 @@ export function ClientDetailTabs({ clientId }: ClientDetailTabsProps) {
       icon: "person_add",
     },
     {
+      label: "Spaces",
+      href: `/admin/clients/${clientId}/spaces`,
+      icon: "category",
+    },
+    {
       label: "Requests",
       href: `/admin/clients/${clientId}/requests`,
       icon: "pending_actions",

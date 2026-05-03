@@ -11,12 +11,14 @@ export interface RegistrationContextGrantTarget {
   modelName: string;
   relation: string;
   ownerClientId: string | null;
+  authorizationSpaceId: string | null;
   isProjected: boolean;
 }
 
 interface ResolveGrantTargetsArgs {
   sourceClientId: string | null;
   allowedProjectionClientIds: string[];
+  allowedAuthorizationSpaceIds?: string[];
   grants: RegistrationContextGrantInput[];
   resolveModelById: (entityTypeId: string) => Promise<AuthorizationModelEntity | null>;
 }
@@ -59,10 +61,27 @@ export function getAuthorizationModelName(entityType: string): string {
   return entityType.slice(separatorIndex + 1);
 }
 
+export function resolveModelOwningClientOrSpace(model: AuthorizationModelEntity): {
+  ownerClientId: string | null;
+  authorizationSpaceId: string | null;
+} {
+  return {
+    ownerClientId: getAuthorizationModelOwnerClientId(model.entityType),
+    authorizationSpaceId: model.authorizationSpaceId,
+  };
+}
+
+export function resolveTargetAuthorizationSpace(
+  model: AuthorizationModelEntity
+): string | null {
+  return model.authorizationSpaceId;
+}
+
 export async function resolveRegistrationContextGrantTargets(
   args: ResolveGrantTargetsArgs
 ): Promise<ResolveGrantTargetsResult> {
   const allowedProjectionClientIds = new Set(args.allowedProjectionClientIds);
+  const allowedAuthorizationSpaceIds = new Set(args.allowedAuthorizationSpaceIds ?? []);
   const targets: RegistrationContextGrantTarget[] = [];
 
   for (const grant of args.grants) {
@@ -82,24 +101,35 @@ export async function resolveRegistrationContextGrantTargets(
       };
     }
 
-    const ownerClientId = getAuthorizationModelOwnerClientId(model.entityType);
+    const { ownerClientId, authorizationSpaceId } = resolveModelOwningClientOrSpace(model);
 
     if (args.sourceClientId !== null) {
-      if (!ownerClientId) {
-        return {
-          ok: false,
-          error: `Client-scoped registration contexts can only target client-owned models. '${model.entityType}' is not client-owned.`,
-        };
-      }
+      if (authorizationSpaceId) {
+        if (!allowedAuthorizationSpaceIds.has(authorizationSpaceId)) {
+          return {
+            ok: false,
+            error: `Authorization space '${authorizationSpaceId}' is not linked to client '${args.sourceClientId}' with context-trigger access.`,
+          };
+        }
+      } else {
+        // R2 transition compatibility: models without space ownership keep using
+        // the R1 client/projection validation path until backfill is complete.
+        if (!ownerClientId) {
+          return {
+            ok: false,
+            error: `Client-scoped registration contexts can only target client-owned models. '${model.entityType}' is not client-owned.`,
+          };
+        }
 
-      const isSameClient = ownerClientId === args.sourceClientId;
-      const isAllowedProjection = allowedProjectionClientIds.has(ownerClientId);
+        const isSameClient = ownerClientId === args.sourceClientId;
+        const isAllowedProjection = allowedProjectionClientIds.has(ownerClientId);
 
-      if (!isSameClient && !isAllowedProjection) {
-        return {
-          ok: false,
-          error: `Target client '${ownerClientId}' is not allowed for client '${args.sourceClientId}'. Add it to grantProjectionClientIds before using '${model.entityType}'.`,
-        };
+        if (!isSameClient && !isAllowedProjection) {
+          return {
+            ok: false,
+            error: `Target client '${ownerClientId}' is not allowed for client '${args.sourceClientId}'. grantProjectionClientIds is transitional metadata; prefer linking both clients to an authorization space.`,
+          };
+        }
       }
     }
 
@@ -109,6 +139,7 @@ export async function resolveRegistrationContextGrantTargets(
       modelName: getAuthorizationModelName(model.entityType),
       relation: grant.relation,
       ownerClientId,
+      authorizationSpaceId,
       isProjected: args.sourceClientId !== null && ownerClientId !== null && ownerClientId !== args.sourceClientId,
     });
   }

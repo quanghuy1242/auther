@@ -127,6 +127,20 @@
       "when": 1770000000000,
       "tag": "0018_grant_projection_client_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1770000001000,
+      "tag": "0019_authorization_spaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1770000002000,
+      "tag": "0020_client_space_link_unique",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { authorizationSpaces } from "./app-schema";
 
 export const accessTuples = sqliteTable(
   "access_tuples",
@@ -81,6 +82,12 @@ export const authorizationModels = sqliteTable(
     id: text("id").primaryKey(),
     // The entity type this model describes (e.g., "oauth_client", "invoice")
     entityType: text("entity_type").notNull().unique(),
+    // Nullable during R2 migration. New writes can attach ownership explicitly
+    // while existing client-bound models continue to work.
+    authorizationSpaceId: text("authorization_space_id").references(
+      () => authorizationSpaces.id,
+      { onDelete: "set null" }
+    ),
     // JSON definition of relations and permissions
     definition: text("definition", { mode: "json" }).notNull(),
 
@@ -93,5 +100,6 @@ export const authorizationModels = sqliteTable(
   },
   (table) => [
     index("authorization_models_entity_type_idx").on(table.entityType),
+    index("authorization_models_space_id_idx").on(table.authorizationSpaceId),
   ]
 );

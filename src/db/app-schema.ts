@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { user, oauthApplication } from "./auth-schema";
 
 // ========================================
@@ -124,6 +124,85 @@ export const oauthClientMetadata = sqliteTable(
   },
   (table) => [
     index("oauth_client_metadata_client_id_idx").on(table.clientId),
+  ]
+);
+
+// Resource Server - API/backend audience that consumes access tokens.
+// This is intentionally separate from OAuth clients.
+export const resourceServers = sqliteTable(
+  "resource_servers",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    audience: text("audience").notNull().unique(),
+    description: text("description"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("resource_servers_slug_idx").on(table.slug),
+    index("resource_servers_audience_idx").on(table.audience),
+  ]
+);
+
+// Authorization Space - first-class ownership boundary for models and grants.
+export const authorizationSpaces = sqliteTable(
+  "authorization_spaces",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    resourceServerId: text("resource_server_id").references(() => resourceServers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("authorization_spaces_slug_idx").on(table.slug),
+    index("authorization_spaces_resource_server_id_idx").on(table.resourceServerId),
+  ]
+);
+
+// OAuth Client to Authorization Space link. OAuth clients remain OAuth clients;
+// this table describes which authorization spaces they can participate in.
+export const oauthClientSpaceLinks = sqliteTable(
+  "oauth_client_space_links",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthApplication.clientId, { onDelete: "cascade" }),
+    authorizationSpaceId: text("authorization_space_id")
+      .notNull()
+      .references(() => authorizationSpaces.id, { onDelete: "cascade" }),
+    accessMode: text("access_mode").notNull().default("login_only"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("oauth_client_space_links_client_id_idx").on(table.clientId),
+    index("oauth_client_space_links_space_id_idx").on(table.authorizationSpaceId),
+    uniqueIndex("oauth_client_space_links_client_space_unique").on(
+      table.clientId,
+      table.authorizationSpaceId
+    ),
   ]
 );
 

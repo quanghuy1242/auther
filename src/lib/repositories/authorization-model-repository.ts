@@ -8,6 +8,7 @@ import { registrationContextRepo } from "./platform-access-repository";
 export interface AuthorizationModelEntity {
     id: string;
     entityType: string;
+    authorizationSpaceId: string | null;
     definition: AuthorizationModelDefinition;
     createdAt: Date;
     updatedAt: Date;
@@ -45,6 +46,7 @@ export class AuthorizationModelRepository {
             return {
                 id: record.id,
                 entityType: record.entityType,
+                authorizationSpaceId: record.authorizationSpaceId,
                 definition: record.definition as AuthorizationModelDefinition,
                 createdAt: record.createdAt,
                 updatedAt: record.updatedAt,
@@ -71,6 +73,7 @@ export class AuthorizationModelRepository {
             return {
                 id: record.id,
                 entityType: record.entityType,
+                authorizationSpaceId: record.authorizationSpaceId,
                 definition: record.definition as AuthorizationModelDefinition,
                 createdAt: record.createdAt,
                 updatedAt: record.updatedAt,
@@ -99,6 +102,7 @@ export class AuthorizationModelRepository {
             return records.map(record => ({
                 id: record.id,
                 entityType: record.entityType,
+                authorizationSpaceId: record.authorizationSpaceId,
                 definition: record.definition as AuthorizationModelDefinition,
                 createdAt: record.createdAt,
                 updatedAt: record.updatedAt,
@@ -142,19 +146,25 @@ export class AuthorizationModelRepository {
         id: string;
         name: string;
         relations: string[];
+        authorizationSpaceId: string | null;
     }>> {
         try {
             const prefix = `client_${clientId}:`;
             const records = await db.select().from(authorizationModels);
 
-            const result: Array<{ id: string; name: string; relations: string[] }> = [];
+            const result: Array<{ id: string; name: string; relations: string[]; authorizationSpaceId: string | null }> = [];
             for (const record of records) {
                 if (record.entityType.startsWith(prefix)) {
                     const name = record.entityType.slice(prefix.length);
                     const definition = record.definition as AuthorizationModelDefinition;
                     const relations = Object.keys(definition.relations || {}).sort();
                     if (relations.length > 0) {
-                        result.push({ id: record.id, name, relations });
+                        result.push({
+                            id: record.id,
+                            name,
+                            relations,
+                            authorizationSpaceId: record.authorizationSpaceId,
+                        });
                     }
                 }
             }
@@ -167,6 +177,51 @@ export class AuthorizationModelRepository {
         }
     }
 
+    async findAllForAuthorizationSpaceWithIds(authorizationSpaceId: string): Promise<Array<{
+        id: string;
+        entityType: string;
+        name: string;
+        relations: string[];
+        authorizationSpaceId: string;
+    }>> {
+        try {
+            const records = await db
+                .select()
+                .from(authorizationModels)
+                .where(eq(authorizationModels.authorizationSpaceId, authorizationSpaceId));
+
+            const result: Array<{
+                id: string;
+                entityType: string;
+                name: string;
+                relations: string[];
+                authorizationSpaceId: string;
+            }> = [];
+
+            for (const record of records) {
+                const definition = record.definition as AuthorizationModelDefinition;
+                const relations = Object.keys(definition.relations || {}).sort();
+                if (relations.length > 0 && record.authorizationSpaceId) {
+                    result.push({
+                        id: record.id,
+                        entityType: record.entityType,
+                        name: record.entityType.includes(":")
+                            ? record.entityType.slice(record.entityType.indexOf(":") + 1)
+                            : record.entityType,
+                        relations,
+                        authorizationSpaceId: record.authorizationSpaceId,
+                    });
+                }
+            }
+
+            result.sort((a, b) => a.name.localeCompare(b.name));
+            return result;
+        } catch (error) {
+            console.error("AuthorizationModelRepository.findAllForAuthorizationSpaceWithIds error:", error);
+            return [];
+        }
+    }
+
     /**
      * Upsert a specific entity type's model for a client.
      * Pattern: client_{clientId}:{entityType}
@@ -174,10 +229,15 @@ export class AuthorizationModelRepository {
     async upsertEntityTypeForClient(
         clientId: string,
         entityTypeName: string,
-        definition: AuthorizationModelDefinition
+        definition: AuthorizationModelDefinition,
+        authorizationSpaceId?: string | null
     ): Promise<void> {
         const fullEntityType = `client_${clientId}:${entityTypeName}`;
-        return this.upsert(fullEntityType, definition);
+        return this.upsert(
+            fullEntityType,
+            definition,
+            authorizationSpaceId === undefined ? undefined : { authorizationSpaceId }
+        );
     }
 
     /**
@@ -257,7 +317,11 @@ export class AuthorizationModelRepository {
     /**
      * Upsert an authorization model (create or update)
      */
-    async upsert(entityType: string, definition: AuthorizationModelDefinition): Promise<void> {
+    async upsert(
+        entityType: string,
+        definition: AuthorizationModelDefinition,
+        options?: { authorizationSpaceId?: string | null }
+    ): Promise<void> {
         try {
             // Validate against Zod schema
             const parsedDefinition = authorizationModelSchema.parse(definition);
@@ -275,6 +339,9 @@ export class AuthorizationModelRepository {
                     .update(authorizationModels)
                     .set({
                         definition: parsedDefinition,
+                        ...(options && "authorizationSpaceId" in options
+                            ? { authorizationSpaceId: options.authorizationSpaceId ?? null }
+                            : {}),
                         updatedAt: new Date(),
                     })
                     .where(eq(authorizationModels.entityType, entityType));
@@ -282,6 +349,7 @@ export class AuthorizationModelRepository {
                 await db.insert(authorizationModels).values({
                     id: crypto.randomUUID(),
                     entityType,
+                    authorizationSpaceId: options?.authorizationSpaceId ?? null,
                     definition: parsedDefinition,
                 });
             }
@@ -297,6 +365,26 @@ export class AuthorizationModelRepository {
     async upsertForClient(clientId: string, definition: AuthorizationModelDefinition): Promise<void> {
         const entityType = `client_${clientId}`;
         return this.upsert(entityType, definition);
+    }
+
+    async updateAuthorizationSpace(
+        id: string,
+        authorizationSpaceId: string | null
+    ): Promise<{ success: boolean; error?: string }> {
+        try {
+            await db
+                .update(authorizationModels)
+                .set({
+                    authorizationSpaceId,
+                    updatedAt: new Date(),
+                })
+                .where(eq(authorizationModels.id, id));
+
+            return { success: true };
+        } catch (error) {
+            console.error("AuthorizationModelRepository.updateAuthorizationSpace error:", error);
+            return { success: false, error: "Failed to update authorization space" };
+        }
     }
 
     /**

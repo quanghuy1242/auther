@@ -32,6 +32,7 @@ export interface AuthorizationModel {
     permissions?: string[];
     description: string | null;
     clientId: string | null;
+    authorizationSpaceId: string | null;
     isSystem: boolean;
     isOverridden?: boolean;
     createdAt: Date;
@@ -177,6 +178,7 @@ export async function getAuthorizationModels(): Promise<AuthorizationModel[]> {
             definition: def,
             description: isSystemOverride ? SYSTEM_MODELS.find(s => s.entityType === m.entityType)?.description || null : null,
             clientId: null,
+            authorizationSpaceId: m.authorizationSpaceId,
             isSystem: isSystemOverride, // It IS a system feature, but properly overridden
             isOverridden: isSystemOverride,
             createdAt: m.createdAt,
@@ -197,6 +199,7 @@ export async function getAuthorizationModels(): Promise<AuthorizationModel[]> {
             } as AuthorizationModelDefinition,
             description: m.description,
             clientId: null,
+            authorizationSpaceId: null,
             isSystem: true,
             isOverridden: false,
             createdAt: new Date(),

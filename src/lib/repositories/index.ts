@@ -24,6 +24,9 @@ import { UserGroupRepository } from "./user-group-repository";
 import { TupleRepository } from "./tuple-repository";
 import { AuthorizationModelRepository } from "./authorization-model-repository";
 import { MetricsRepository } from "./metrics-repository";
+import { ResourceServerRepository } from "./resource-server-repository";
+import { AuthorizationSpaceRepository } from "./authorization-space-repository";
+import { OAuthClientSpaceLinkRepository } from "./oauth-client-space-link-repository";
 
 // Export repository instances as singletons
 export const userRepository = new UserRepository();
@@ -37,6 +40,9 @@ export const userGroupRepository = new UserGroupRepository();
 export const tupleRepository = new TupleRepository();
 export const authorizationModelRepository = new AuthorizationModelRepository(tupleRepository);
 export const metricsRepository = new MetricsRepository();
+export const resourceServerRepository = new ResourceServerRepository();
+export const authorizationSpaceRepository = new AuthorizationSpaceRepository();
+export const oauthClientSpaceLinkRepository = new OAuthClientSpaceLinkRepository();
 
 // Export types
 export type { UserEntity, UserWithAccounts, UserStats } from "./user-repository";
@@ -50,6 +56,9 @@ export type { UserGroupEntity, CreateUserGroupData } from "./user-group-reposito
 export type { Tuple, CreateTupleParams } from "./tuple-repository";
 export type { AuthorizationModelEntity, ValidationResult } from "./authorization-model-repository";
 export type { FindMetricsOptions, AggregateResult } from "./metrics-repository";
+export type { ResourceServerEntity, SaveResourceServerData } from "./resource-server-repository";
+export type { AuthorizationSpaceEntity, SaveAuthorizationSpaceData } from "./authorization-space-repository";
+export type { OAuthClientSpaceLinkEntity, ClientSpaceAccessMode } from "./oauth-client-space-link-repository";
 export type { PaginatedResult } from "./base-repository";
 export { WebhookAwareRepository } from "./webhook-aware-repository";
 export type { WebhookAwareConfig, WebhookEventMapping } from "./webhook-aware-repository";
