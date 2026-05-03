@@ -6,7 +6,7 @@
  * remains client-based until R3.
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { loadEnvironment, exitWithError } from "./utils";
 
 loadEnvironment();
@@ -81,9 +81,14 @@ async function main() {
     const [existingLink] = await db
       .select()
       .from(oauthClientSpaceLinks)
-      .where(eq(oauthClientSpaceLinks.clientId, link.clientId));
+      .where(
+        and(
+          eq(oauthClientSpaceLinks.clientId, link.clientId),
+          eq(oauthClientSpaceLinks.authorizationSpaceId, authorizationSpaceId)
+        )
+      );
 
-    if (existingLink?.authorizationSpaceId === authorizationSpaceId) {
+    if (existingLink) {
       await db
         .update(oauthClientSpaceLinks)
         .set({ accessMode: link.accessMode, updatedAt: new Date() })

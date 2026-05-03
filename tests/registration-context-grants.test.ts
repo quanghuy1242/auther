@@ -151,3 +151,26 @@ test("resolveRegistrationContextGrantTargets rejects missing relations", async (
 
   assert.match(result.error, /Relation 'editor' is not defined/);
 });
+
+test("resolveRegistrationContextGrantTargets can reject disabled space targets for platform contexts", async () => {
+  const result = await resolveRegistrationContextGrantTargets({
+    sourceClientId: null,
+    allowedProjectionClientIds: [],
+    allowedAuthorizationSpaceIds: ["space_enabled"],
+    enforceAllowedAuthorizationSpaces: true,
+    grants: [{ entityTypeId: "book", relation: "viewer" }],
+    resolveModelById: async () =>
+      makeModel({
+        id: "book",
+        entityType: "client_payload:book",
+        authorizationSpaceId: "space_disabled",
+      }),
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) {
+    return;
+  }
+
+  assert.match(result.error, /not enabled/);
+});

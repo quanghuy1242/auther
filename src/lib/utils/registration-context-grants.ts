@@ -19,6 +19,7 @@ interface ResolveGrantTargetsArgs {
   sourceClientId: string | null;
   allowedProjectionClientIds: string[];
   allowedAuthorizationSpaceIds?: string[];
+  enforceAllowedAuthorizationSpaces?: boolean;
   grants: RegistrationContextGrantInput[];
   resolveModelById: (entityTypeId: string) => Promise<AuthorizationModelEntity | null>;
 }
@@ -103,33 +104,38 @@ export async function resolveRegistrationContextGrantTargets(
 
     const { ownerClientId, authorizationSpaceId } = resolveModelOwningClientOrSpace(model);
 
-    if (args.sourceClientId !== null) {
-      if (authorizationSpaceId) {
+    if (authorizationSpaceId) {
+      if (
+        args.sourceClientId !== null ||
+        args.enforceAllowedAuthorizationSpaces === true
+      ) {
         if (!allowedAuthorizationSpaceIds.has(authorizationSpaceId)) {
           return {
             ok: false,
-            error: `Authorization space '${authorizationSpaceId}' is not linked to client '${args.sourceClientId}' with context-trigger access.`,
+            error: args.sourceClientId === null
+              ? `Authorization space '${authorizationSpaceId}' is not enabled for registration-context grants.`
+              : `Authorization space '${authorizationSpaceId}' is not linked to client '${args.sourceClientId}' with context-trigger access.`,
           };
         }
-      } else {
-        // R2 transition compatibility: models without space ownership keep using
-        // the R1 client/projection validation path until backfill is complete.
-        if (!ownerClientId) {
-          return {
-            ok: false,
-            error: `Client-scoped registration contexts can only target client-owned models. '${model.entityType}' is not client-owned.`,
-          };
-        }
+      }
+    } else if (args.sourceClientId !== null) {
+      // R2 transition compatibility: models without space ownership keep using
+      // the R1 client/projection validation path until backfill is complete.
+      if (!ownerClientId) {
+        return {
+          ok: false,
+          error: `Client-scoped registration contexts can only target client-owned models. '${model.entityType}' is not client-owned.`,
+        };
+      }
 
-        const isSameClient = ownerClientId === args.sourceClientId;
-        const isAllowedProjection = allowedProjectionClientIds.has(ownerClientId);
+      const isSameClient = ownerClientId === args.sourceClientId;
+      const isAllowedProjection = allowedProjectionClientIds.has(ownerClientId);
 
-        if (!isSameClient && !isAllowedProjection) {
-          return {
-            ok: false,
-            error: `Target client '${ownerClientId}' is not allowed for client '${args.sourceClientId}'. grantProjectionClientIds is transitional metadata; prefer linking both clients to an authorization space.`,
-          };
-        }
+      if (!isSameClient && !isAllowedProjection) {
+        return {
+          ok: false,
+          error: `Target client '${ownerClientId}' is not allowed for client '${args.sourceClientId}'. grantProjectionClientIds is transitional metadata; prefer linking both clients to an authorization space.`,
+        };
       }
     }
 

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import {
     oauthClientMetadataRepository,
     oauthClientRepository,
-    authorizationModelRepository
+    authorizationModelRepository,
+    authorizationSpaceRepository
 } from "@/lib/repositories";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import {
@@ -440,6 +441,8 @@ export async function createPlatformContext(data: {
         const validation = await resolveRegistrationContextGrantTargets({
             sourceClientId: null,
             allowedProjectionClientIds: [],
+            allowedAuthorizationSpaceIds: await getEnabledAuthorizationSpaceIds(),
+            enforceAllowedAuthorizationSpaces: true,
             grants: data.grants,
             resolveModelById: (entityTypeId) => authorizationModelRepository.findById(entityTypeId),
         });
@@ -468,6 +471,11 @@ export async function createPlatformContext(data: {
             error: error instanceof Error ? error.message : "Failed to create context",
         };
     }
+}
+
+async function getEnabledAuthorizationSpaceIds(): Promise<string[]> {
+    const spaces = await authorizationSpaceRepository.findAll();
+    return spaces.filter((space) => space.enabled).map((space) => space.id);
 }
 
 export async function toggleContextEnabled(
