@@ -6,6 +6,7 @@ import { Card, CardContent, Button, Icon, Badge, UrlListBuilder, Checkbox, Copya
 import { FormWrapper, FormField, ControlledSelect, ControlledCheckbox, SubmitButton } from "@/components/forms";
 import { registerClient, type RegisterClientState } from "./actions";
 import { useRouter } from "next/navigation";
+import { useFormContext } from "react-hook-form";
 import {
   GRANT_TYPE_DETAILS,
   TOKEN_ENDPOINT_AUTH_METHOD_OPTIONS,
@@ -73,16 +74,45 @@ function GrantTypesSelector() {
   );
 }
 
+function RedirectUrisField({
+  urls,
+  onChange,
+}: {
+  urls: string[];
+  onChange: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const { register, setValue } = useFormContext<{ redirectURLs: string }>();
+  const redirectUrlsInput = React.useMemo(() => urls.join("\n"), [urls]);
+
+  React.useEffect(() => {
+    setValue("redirectURLs", redirectUrlsInput, { shouldDirty: true });
+  }, [redirectUrlsInput, setValue]);
+
+  return (
+    <div>
+      <UrlListBuilder
+        urls={urls}
+        onChange={onChange}
+        placeholder="https://example.com/callback"
+        label="Redirect URIs"
+        description="These are the allowed callback URLs after authentication."
+        minUrls={1}
+        validateUrl={true}
+      />
+      <input
+        type="hidden"
+        {...register("redirectURLs")}
+        value={redirectUrlsInput}
+        readOnly
+      />
+    </div>
+  );
+}
+
 export default function RegisterClientPage() {
   const router = useRouter();
   const [clientData, setClientData] = React.useState<{ clientId: string; clientSecret?: string } | null>(null);
   const [redirectUrls, setRedirectUrls] = React.useState<string[]>([]);
-  const [redirectUrlsInput, setRedirectUrlsInput] = React.useState("");
-
-  // Keep redirectURLs input in sync with the URL list
-  React.useEffect(() => {
-    setRedirectUrlsInput(redirectUrls.join("\n"));
-  }, [redirectUrls]);
 
   const handleSuccess = (data: unknown) => {
     const result = data as RegisterClientState["data"];
@@ -174,22 +204,10 @@ export default function RegisterClientPage() {
                 options={APPLICATION_TYPE_OPTIONS}
               />
 
-              <div>
-                <UrlListBuilder
-                  urls={redirectUrls}
-                  onChange={setRedirectUrls}
-                  placeholder="https://example.com/callback"
-                  label="Redirect URIs"
-                  description="These are the allowed callback URLs after authentication."
-                  minUrls={1}
-                  validateUrl={true}
-                />
-                <input
-                  type="hidden"
-                  name="redirectURLs"
-                  value={redirectUrlsInput}
-                />
-              </div>
+              <RedirectUrisField
+                urls={redirectUrls}
+                onChange={setRedirectUrls}
+              />
 
               <ControlledSelect
                 name="tokenEndpointAuthMethod"
