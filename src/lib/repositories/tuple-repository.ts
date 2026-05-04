@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { accessTuples } from "@/db/rebac-schema";
+import { accessTuples, authorizationModels } from "@/db/rebac-schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import {
@@ -12,6 +12,7 @@ export interface Tuple {
   id: string;
   entityType: string;
   entityTypeId?: string | null;  // FK to authorization_models.id - set for scoped perms, null for platform
+  authorizationSpaceId?: string | null;
   entityId: string;
   relation: string;
   subjectType: string;
@@ -31,6 +32,32 @@ function isGrantWebhookSubjectType(subjectType: string): subjectType is GrantWeb
 }
 
 export class TupleRepository {
+  private async resolveAuthorizationSpaceId(
+    params: Pick<CreateTupleParams, "entityTypeId" | "entityType" | "authorizationSpaceId">
+  ): Promise<string | null> {
+    if (params.authorizationSpaceId !== undefined) {
+      return params.authorizationSpaceId;
+    }
+
+    if (params.entityTypeId) {
+      const [model] = await db
+        .select({ authorizationSpaceId: authorizationModels.authorizationSpaceId })
+        .from(authorizationModels)
+        .where(eq(authorizationModels.id, params.entityTypeId))
+        .limit(1);
+
+      return model?.authorizationSpaceId ?? null;
+    }
+
+    const [model] = await db
+      .select({ authorizationSpaceId: authorizationModels.authorizationSpaceId })
+      .from(authorizationModels)
+      .where(eq(authorizationModels.entityType, params.entityType))
+      .limit(1);
+
+    return model?.authorizationSpaceId ?? null;
+  }
+
   private buildTupleId(params: CreateTupleParams): string {
     const hashInput = [
       params.entityType,
@@ -68,13 +95,14 @@ export class TupleRepository {
       return;
     }
 
-    void emitGrantCreatedEvent({
-      tupleId: tuple.id,
-      subjectType: tuple.subjectType,
-      subjectId: tuple.subjectId,
-      entityType: tuple.entityType,
-      entityId: tuple.entityId,
-      relation: tuple.relation,
+      void emitGrantCreatedEvent({
+        tupleId: tuple.id,
+        subjectType: tuple.subjectType,
+        subjectId: tuple.subjectId,
+        entityType: tuple.entityType,
+        authorizationSpaceId: tuple.authorizationSpaceId ?? null,
+        entityId: tuple.entityId,
+        relation: tuple.relation,
       hasCondition: !!tuple.condition,
     });
   }
@@ -84,13 +112,14 @@ export class TupleRepository {
       return;
     }
 
-    void emitGrantRevokedEvent({
-      tupleId: tuple.id,
-      subjectType: tuple.subjectType,
-      subjectId: tuple.subjectId,
-      entityType: tuple.entityType,
-      entityId: tuple.entityId,
-      relation: tuple.relation,
+      void emitGrantRevokedEvent({
+        tupleId: tuple.id,
+        subjectType: tuple.subjectType,
+        subjectId: tuple.subjectId,
+        entityType: tuple.entityType,
+        authorizationSpaceId: tuple.authorizationSpaceId ?? null,
+        entityId: tuple.entityId,
+        relation: tuple.relation,
       hasCondition: !!tuple.condition,
     });
   }
@@ -104,13 +133,14 @@ export class TupleRepository {
       return;
     }
 
-    void emitGrantConditionUpdatedEvent({
-      tupleId: tuple.id,
-      subjectType: tuple.subjectType,
-      subjectId: tuple.subjectId,
-      entityType: tuple.entityType,
-      entityId: tuple.entityId,
-      relation: tuple.relation,
+      void emitGrantConditionUpdatedEvent({
+        tupleId: tuple.id,
+        subjectType: tuple.subjectType,
+        subjectId: tuple.subjectId,
+        entityType: tuple.entityType,
+        authorizationSpaceId: tuple.authorizationSpaceId ?? null,
+        entityId: tuple.entityId,
+        relation: tuple.relation,
       previousHasCondition,
       hasCondition,
     });
@@ -122,11 +152,13 @@ export class TupleRepository {
   async create(params: CreateTupleParams): Promise<Tuple | null> {
     try {
       const id = this.buildTupleId(params);
+      const authorizationSpaceId = await this.resolveAuthorizationSpaceId(params);
       const [tuple] = await db
         .insert(accessTuples)
         .values({
           id,
           ...params,
+          authorizationSpaceId,
         })
         .onConflictDoNothing({ target: accessTuples.id })
         .returning();
@@ -414,6 +446,50 @@ export class TupleRepository {
   }
 
   /**
+   * Find tuples in an authorization space with cursor pagination.
+   * When entityType/entityId are provided, returns tuples only for that entity.
+   */
+  async findByAuthorizationSpacePaginated(params: {
+    authorizationSpaceId: string;
+    cursor?: string;
+    limit: number;
+    entityType?: string;
+    entityId?: string;
+  }): Promise<{ tuples: Tuple[]; nextCursor: string | null; hasMore: boolean }> {
+    try {
+      const pageSize = Math.max(1, params.limit);
+      const scopeCondition =
+        params.entityType && params.entityId
+          ? and(
+              eq(accessTuples.authorizationSpaceId, params.authorizationSpaceId),
+              eq(accessTuples.entityType, params.entityType),
+              eq(accessTuples.entityId, params.entityId)
+            )
+          : eq(accessTuples.authorizationSpaceId, params.authorizationSpaceId);
+
+      const whereCondition = params.cursor
+        ? and(scopeCondition, gt(accessTuples.id, params.cursor))
+        : scopeCondition;
+
+      const pagedTuples = await db
+        .select()
+        .from(accessTuples)
+        .where(whereCondition)
+        .orderBy(accessTuples.id)
+        .limit(pageSize + 1);
+
+      const hasMore = pagedTuples.length > pageSize;
+      const tuples = hasMore ? pagedTuples.slice(0, pageSize) : pagedTuples;
+      const nextCursor = hasMore ? tuples[tuples.length - 1]?.id ?? null : null;
+
+      return { tuples, nextCursor, hasMore };
+    } catch (error) {
+      console.error("TupleRepository.findByAuthorizationSpacePaginated error:", error);
+      return { tuples: [], nextCursor: null, hasMore: false };
+    }
+  }
+
+  /**
    * Find tuples matching specific entity and relation (e.g., "Who are the admins of client_123?")
    */
   async findByEntityAndRelation(entityType: string, entityId: string, relation: string): Promise<Tuple[]> {
@@ -605,6 +681,7 @@ export class TupleRepository {
           id: crypto.randomUUID(),
           entityType: params.entityType,
           entityTypeId: params.entityTypeId ?? null,
+          authorizationSpaceId: await this.resolveAuthorizationSpaceId(params),
           entityId: params.entityId,
           relation: params.relation,
           subjectType: params.subjectType,

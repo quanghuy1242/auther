@@ -9,6 +9,10 @@ export const accessTuples = sqliteTable(
     // Entity (The object being accessed)
     entityType: text("entity_type").notNull(), // e.g., 'client_xxx' or 'client_xxx:entity_1'
     entityTypeId: text("entity_type_id"), // FK to authorization_models.id - set for scoped perms, null for platform
+    authorizationSpaceId: text("authorization_space_id").references(
+      () => authorizationSpaces.id,
+      { onDelete: "set null" }
+    ),
     entityId: text("entity_id").notNull(), // Can be specific ID (e.g., 'client_123') or "*" for wildcard
 
     // Relation (The access level/role)
@@ -47,6 +51,7 @@ export const accessTuples = sqliteTable(
     index("access_tuples_entity_relation_idx").on(table.entityType, table.entityId, table.relation),
     // 4. Reverse lookup (often needed for graph traversal): "What entities does this subject have relation R on?"
     index("access_tuples_reverse_idx").on(table.subjectType, table.subjectId, table.relation),
+    index("access_tuples_authorization_space_idx").on(table.authorizationSpaceId),
   ]
 );
 

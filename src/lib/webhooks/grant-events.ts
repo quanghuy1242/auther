@@ -55,6 +55,7 @@ export interface GrantCreatedEventData {
   subjectType: GrantSubjectType;
   subjectId: string;
   entityType: string;
+  authorizationSpaceId?: string | null;
   entityId: string;
   relation: string;
   hasCondition: boolean;
@@ -65,6 +66,7 @@ export interface GrantRevokedEventData {
   subjectType: GrantSubjectType;
   subjectId: string;
   entityType: string;
+  authorizationSpaceId?: string | null;
   entityId: string;
   relation: string;
   hasCondition: boolean;
@@ -75,6 +77,7 @@ export interface GrantConditionUpdatedEventData {
   subjectType: GrantSubjectType;
   subjectId: string;
   entityType: string;
+  authorizationSpaceId?: string | null;
   entityId: string;
   relation: string;
   previousHasCondition: boolean;

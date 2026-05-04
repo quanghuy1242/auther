@@ -222,6 +222,40 @@ export class AuthorizationModelRepository {
         }
     }
 
+    async findBySpaceAndEntityTypeName(
+        authorizationSpaceId: string,
+        entityTypeName: string
+    ): Promise<AuthorizationModelEntity | null> {
+        try {
+            const records = await db
+                .select()
+                .from(authorizationModels)
+                .where(eq(authorizationModels.authorizationSpaceId, authorizationSpaceId));
+
+            const record = records.find((candidate) => {
+                const name = candidate.entityType.includes(":")
+                    ? candidate.entityType.slice(candidate.entityType.indexOf(":") + 1)
+                    : candidate.entityType;
+
+                return name === entityTypeName;
+            });
+
+            if (!record) return null;
+
+            return {
+                id: record.id,
+                entityType: record.entityType,
+                authorizationSpaceId: record.authorizationSpaceId,
+                definition: record.definition as AuthorizationModelDefinition,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt,
+            };
+        } catch (error) {
+            console.error("AuthorizationModelRepository.findBySpaceAndEntityTypeName error:", error);
+            return null;
+        }
+    }
+
     /**
      * Upsert a specific entity type's model for a client.
      * Pattern: client_{clientId}:{entityType}
