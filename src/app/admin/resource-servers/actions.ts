@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { guards } from "@/lib/auth/platform-guard";
 import { resourceServerRepository } from "@/lib/repositories";
 
@@ -20,8 +21,9 @@ function dataFromForm(formData: FormData) {
 
 export async function createResourceServer(formData: FormData): Promise<void> {
   await guards.platform.admin();
-  await resourceServerRepository.create(dataFromForm(formData));
+  const resourceServer = await resourceServerRepository.create(dataFromForm(formData));
   revalidatePath("/admin/resource-servers");
+  redirect(`/admin/resource-servers/${resourceServer.id}`);
 }
 
 export async function updateResourceServer(formData: FormData): Promise<void> {
@@ -29,6 +31,7 @@ export async function updateResourceServer(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   await resourceServerRepository.update(id, dataFromForm(formData));
   revalidatePath("/admin/resource-servers");
+  revalidatePath(`/admin/resource-servers/${id}`);
 }
 
 export async function deleteResourceServer(formData: FormData): Promise<void> {
@@ -36,4 +39,5 @@ export async function deleteResourceServer(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   await resourceServerRepository.delete(id);
   revalidatePath("/admin/resource-servers");
+  redirect("/admin/resource-servers");
 }
