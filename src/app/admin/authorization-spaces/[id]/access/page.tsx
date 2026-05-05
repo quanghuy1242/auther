@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PageContainer, PageHeading } from "@/components/layout";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, ResponsiveTable, Select } from "@/components/ui";
 import { guards } from "@/lib/auth/platform-guard";
 import {
   authorizationModelRepository,
@@ -90,6 +90,10 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
   const usersById = new Map(userOptions.map((user) => [user.id, user]));
   const groupsById = new Map(groupOptions.map((group) => [group.id, group]));
   const modelsByEntityType = new Map(assignedModels.map((model) => [model.entityType, model]));
+  const subjectSelectOptions = [
+    ...userOptions.map((user) => ({ value: `user|${user.id}`, label: `User: ${user.label}` })),
+    ...groupOptions.map((group) => ({ value: `group|${group.id}`, label: `Group: ${group.label}` })),
+  ];
 
   return (
     <PageContainer maxWidth="6xl">
@@ -113,26 +117,20 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
               <input type="hidden" name="authorizationSpaceId" value={space.id} />
               <input type="hidden" name="currentSpaceId" value={space.id} />
               <div className="space-y-2">
-                <label htmlFor="modelId" className="text-sm font-medium text-gray-200">
-                  Assign Model
-                </label>
-                <select
-                  id="modelId"
+                <Select
                   name="modelId"
-                  className="w-full rounded-md border border-gray-700 bg-input px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  label="Assign Model"
+                  defaultValue={availableModels[0]?.id ?? ""}
+                  options={
+                    availableModels.length === 0
+                      ? [{ value: "", label: "No available models", disabled: true }]
+                      : availableModels.map((model) => ({
+                          value: model.id,
+                          label: `${model.entityType}${model.authorizationSpaceId ? " (assigned elsewhere)" : ""}`,
+                        }))
+                  }
                   disabled={availableModels.length === 0}
-                >
-                  {availableModels.length === 0 ? (
-                    <option>No available models</option>
-                  ) : (
-                    availableModels.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.entityType}
-                        {model.authorizationSpaceId ? " (assigned elsewhere)" : ""}
-                      </option>
-                    ))
-                  )}
-                </select>
+                />
                 <p className="text-sm text-gray-400">
                   Assigning a model here may move it out of another space. Check integrations before moving live models.
                 </p>
@@ -142,7 +140,7 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
                 variant="secondary"
                 size="sm"
                 disabled={availableModels.length === 0}
-                className="md:mt-[1.75rem]"
+                className="w-full md:mt-[1.6rem] md:w-auto"
               >
                 Assign to Space
               </Button>
@@ -203,72 +201,55 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
           <CardContent className="space-y-6">
             <form action={grantSpacePermission} className="grid gap-4 lg:grid-cols-2">
               <input type="hidden" name="spaceId" value={space.id} />
-              <div className="space-y-2">
-                <label htmlFor="grant-model-relation" className="text-sm font-medium text-gray-200">
-                  Model And Relation
-                </label>
-                <select
-                  id="grant-model-relation"
+              <div>
+                <Select
                   name="modelRelation"
-                  className="w-full rounded-md border border-gray-700 bg-input px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  label="Model And Relation"
+                  defaultValue={modelRelationOptions[0]?.value ?? ""}
+                  options={
+                    modelRelationOptions.length === 0
+                      ? [{ value: "", label: "No grantable models", disabled: true }]
+                      : modelRelationOptions
+                  }
                   disabled={modelRelationOptions.length === 0}
-                >
-                  {modelRelationOptions.length === 0 ? (
-                    <option>No grantable models</option>
-                  ) : (
-                    modelRelationOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <p className="text-sm text-gray-400">
+                />
+                <p className="mt-2 text-sm text-gray-400">
                   Select the model/relation pair this grant should create.
                 </p>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="grant-entity-id" className="text-sm font-medium text-gray-200">
-                  Resource ID
-                </label>
-                <input
+              <div>
+                <Input
                   id="grant-entity-id"
                   name="entityId"
-                  placeholder="book_123"
-                  className="w-full rounded-md border border-gray-700 bg-input px-3 py-2 text-sm text-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  label="Resource ID"
+                  placeholder="*"
+                  defaultValue="*"
+                  helperText="Use * for all resources or a specific id such as a Payload book id."
                   disabled={modelRelationOptions.length === 0}
                 />
-                <p className="text-sm text-gray-400">Use the resource identifier from the consuming service, such as a Payload book id.</p>
               </div>
-              <div className="space-y-2">
-                <label htmlFor="grant-subject" className="text-sm font-medium text-gray-200">
-                  Subject
-                </label>
-                <select
-                  id="grant-subject"
+              <div>
+                <Select
                   name="subject"
-                  className="w-full rounded-md border border-gray-700 bg-input px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  label="Subject"
+                  defaultValue={subjectSelectOptions[0]?.value ?? ""}
+                  options={
+                    subjectSelectOptions.length === 0
+                      ? [{ value: "", label: "No users or groups", disabled: true }]
+                      : subjectSelectOptions
+                  }
                   disabled={modelRelationOptions.length === 0 || (userOptions.length === 0 && groupOptions.length === 0)}
-                >
-                  <optgroup label="Users">
-                    {userOptions.map((user) => (
-                      <option key={user.id} value={`user|${user.id}`}>
-                        {user.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Groups">
-                    {groupOptions.map((group) => (
-                      <option key={group.id} value={`group|${group.id}`}>
-                        {group.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-                <p className="text-sm text-gray-400">Choose the user or group receiving this resource grant.</p>
+                />
+                <p className="mt-2 text-sm text-gray-400">Choose the user or group receiving this resource grant.</p>
               </div>
               <div className="lg:col-span-2">
-                <Button type="submit" size="sm" variant="primary" leftIcon="add" disabled={modelRelationOptions.length === 0}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="primary"
+                  leftIcon="add"
+                  disabled={modelRelationOptions.length === 0 || subjectSelectOptions.length === 0}
+                >
                   Grant Access
                 </Button>
               </div>
@@ -287,45 +268,54 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-border-dark">
-                  <table className="min-w-full divide-y divide-border-dark text-sm">
-                    <thead className="bg-black/10 text-left text-xs uppercase text-gray-400">
-                      <tr>
-                        <th className="px-4 py-3">Resource</th>
-                        <th className="px-4 py-3">Relation</th>
-                        <th className="px-4 py-3">Subject</th>
-                        <th className="px-4 py-3 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-dark">
-                      {tuplesPage.tuples.map((tuple) => {
-                        const model = modelsByEntityType.get(tuple.entityType);
-                        return (
-                          <tr key={tuple.id} className="bg-card">
-                            <td className="px-4 py-3">
-                              <p className="font-mono text-gray-200">{model?.entityType ?? tuple.entityType}</p>
-                              <p className="text-xs text-gray-500">{tuple.entityId}</p>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge variant="default">{tuple.relation}</Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <p className="text-gray-200">{subjectLabel(tuple, usersById, groupsById)}</p>
-                              <p className="text-xs text-gray-500">{tuple.subjectType}</p>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <form action={revokeSpacePermission}>
-                                <input type="hidden" name="spaceId" value={space.id} />
-                                <input type="hidden" name="tupleId" value={tuple.id} />
-                                <Button type="submit" variant="ghost" size="sm">
-                                  Revoke
-                                </Button>
-                              </form>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  <ResponsiveTable
+                    data={tuplesPage.tuples}
+                    keyExtractor={(tuple) => tuple.id}
+                    columns={[
+                      {
+                        key: "resource",
+                        header: "Resource",
+                        render: (tuple) => (
+                          <div>
+                            <p className="font-mono text-sm text-gray-200">
+                              {modelsByEntityType.get(tuple.entityType)?.entityType ?? tuple.entityType}
+                            </p>
+                            <p className="text-xs text-gray-500">{tuple.entityId}</p>
+                          </div>
+                        ),
+                      },
+                      {
+                        key: "relation",
+                        header: "Relation",
+                        render: (tuple) => <Badge variant="default">{tuple.relation}</Badge>,
+                      },
+                      {
+                        key: "subject",
+                        header: "Subject",
+                        render: (tuple) => (
+                          <div>
+                            <p className="text-sm text-gray-200">{subjectLabel(tuple, usersById, groupsById)}</p>
+                            <p className="text-xs text-gray-500">{tuple.subjectType}</p>
+                          </div>
+                        ),
+                      },
+                      {
+                        key: "action",
+                        header: "",
+                        className: "text-right",
+                        render: (tuple) => (
+                          <form action={revokeSpacePermission}>
+                            <input type="hidden" name="spaceId" value={space.id} />
+                            <input type="hidden" name="tupleId" value={tuple.id} />
+                            <Button type="submit" variant="ghost" size="sm">
+                              Revoke
+                            </Button>
+                          </form>
+                        ),
+                      },
+                    ]}
+                    emptyMessage="No grants have been created in this space."
+                  />
                 </div>
               )}
             </div>

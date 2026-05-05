@@ -15,7 +15,7 @@ import {
 const grantSpacePermissionSchema = z.object({
   spaceId: z.string().min(1),
   modelRelation: z.string().min(1),
-  entityId: z.string().trim().min(1, "Object ID is required"),
+  entityId: z.string().trim().transform((value) => value || "*"),
   subject: z.string().min(1),
 });
 

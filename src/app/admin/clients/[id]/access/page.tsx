@@ -1,4 +1,13 @@
-import { redirect } from "next/navigation";
+import { AccessControl } from "@/components/admin/access-control/access-control";
+import {
+  getCurrentUserAccessLevel,
+  getClientMetadata,
+  getPlatformAccessList,
+  getAuthorizationModels,
+  getScopedPermissions,
+  getClientApiKeys,
+  getGrantProjectionClientOptions,
+} from "./actions";
 
 interface PageProps {
   params: Promise<{
@@ -9,5 +18,31 @@ interface PageProps {
 export default async function AccessControlPage({ params }: PageProps) {
   const { id } = await params;
 
-  redirect(`/admin/clients/${id}/spaces`);
+  const [accessLevel, metadata, accessList, modelsResult, scopedPerms, projectionClientOptions] = await Promise.all([
+    getCurrentUserAccessLevel(id),
+    getClientMetadata(id),
+    getPlatformAccessList(id),
+    getAuthorizationModels(id),
+    getScopedPermissions(id),
+    getGrantProjectionClientOptions(id),
+  ]);
+
+  let apiKeys: Awaited<ReturnType<typeof getClientApiKeys>> = [];
+  if (metadata.allowsApiKeys) {
+    apiKeys = await getClientApiKeys(id);
+  }
+
+  return (
+    <AccessControl
+      initialData={{
+        accessLevel,
+        metadata,
+        accessList,
+        models: modelsResult,
+        scopedPerms,
+        apiKeys,
+        projectionClientOptions,
+      }}
+    />
+  );
 }

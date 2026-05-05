@@ -59,6 +59,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
   // Edit mode state
   const [editName, setEditName] = React.useState(client.name || "");
   const [editRedirectUrls, setEditRedirectUrls] = React.useState<string[]>(client.redirectURLs);
+  const [editTrusted, setEditTrusted] = React.useState(client.metadata.trusted === true);
   const [editAuthMethod, setEditAuthMethod] = React.useState<AuthMethod>(resolveAuthMethod(client));
   const [editGrantTypes, setEditGrantTypes] = React.useState<string[]>(client.metadata.grantTypes || ["authorization_code"]);
 
@@ -140,6 +141,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     const formData = new FormData();
     formData.append("name", editName);
     formData.append("redirectURLs", editRedirectUrls.join("\n"));
+    formData.append("trusted", editTrusted ? "true" : "false");
     formData.append("authMethod", editAuthMethod);
     formData.append("grantTypes", JSON.stringify(editGrantTypes));
     updateAction(formData);
@@ -149,6 +151,7 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
     setIsEditing(false);
     setEditName(client.name || "");
     setEditRedirectUrls(client.redirectURLs);
+    setEditTrusted(client.metadata.trusted === true);
     setEditAuthMethod(resolveAuthMethod(client));
     setEditGrantTypes(client.metadata.grantTypes || ["authorization_code"]);
   };
@@ -260,6 +263,19 @@ export function ClientDetailClient({ client }: ClientDetailClientProps) {
                     />
                   ))}
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <Label className="text-sm font-medium text-[#93adc8]">Trust</Label>
+                <Checkbox
+                  checked={isEditing ? editTrusted : client.metadata.trusted === true}
+                  onChange={isEditing ? setEditTrusted : undefined}
+                  label="Trusted first-party client"
+                  readOnly={!isEditing}
+                />
+                <p className="text-sm text-[#93adc8]">
+                  Trusted clients skip OAuth consent for first-party apps. Turn this off for external clients that should ask the user for consent.
+                </p>
               </div>
               
               <div className="flex flex-col gap-3">

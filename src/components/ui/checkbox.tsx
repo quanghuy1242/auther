@@ -6,13 +6,16 @@ import { Icon } from "@/components/ui/icon"
 import { cn } from "@/lib/utils/cn"
 
 export interface CheckboxProps {
-  checked: boolean
+  checked?: boolean
+  defaultChecked?: boolean
   onChange?: (checked: boolean) => void
   label?: string
   disabled?: boolean
   readOnly?: boolean
   className?: string
   id?: string
+  name?: string
+  value?: string
 }
 
 /**
@@ -21,19 +24,31 @@ export interface CheckboxProps {
  */
 export function Checkbox({
   checked,
+  defaultChecked,
   onChange,
   label,
   disabled,
   readOnly,
   className,
   id,
+  name,
+  value,
 }: CheckboxProps) {
+  const [uncontrolledChecked, setUncontrolledChecked] = React.useState(defaultChecked ?? false)
+  const visualChecked = checked ?? uncontrolledChecked
+
   return (
     <div className={cn("flex items-center gap-3 text-sm text-white select-none", className)}>
       <CheckboxPrimitive.Root
         id={id}
         checked={checked}
+        defaultChecked={defaultChecked}
+        name={name}
+        value={value}
         onCheckedChange={(checked) => {
+          if (typeof checked === "boolean" && checked !== visualChecked) {
+            setUncontrolledChecked(checked)
+          }
           if (!disabled && !readOnly && onChange) {
             onChange(checked === true)
           }
@@ -42,12 +57,12 @@ export function Checkbox({
         className={cn(
           "relative flex items-center justify-center w-5 h-5 rounded border-2 transition-all",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#111921]",
-          checked
+          visualChecked
             ? "bg-primary border-primary"
             : "bg-[#243647] border-slate-600 hover:border-slate-500",
           disabled && "cursor-not-allowed opacity-50",
           readOnly && "cursor-default",
-          !disabled && !readOnly && !checked && "hover:bg-[#2a3f52]"
+          !disabled && !readOnly && !visualChecked && "hover:bg-[#2a3f52]"
         )}
       >
         <CheckboxPrimitive.Indicator

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from "@/components/ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Input, Textarea } from "@/components/ui";
 import type { ResourceServerEntity } from "@/lib/repositories";
 import { createResourceServer, updateResourceServer } from "./actions";
 
@@ -61,21 +61,19 @@ export function ResourceServerForm({ mode, resourceServer }: ResourceServerFormP
             helperText="Explain which API this audience protects and which clients are expected to request it."
           />
 
-          <label className="flex items-start gap-3 rounded-lg border border-border-dark bg-black/10 p-4 text-sm text-gray-300">
-            <input
+          <div className="rounded-lg border border-border-dark bg-black/10 p-4">
+            <Checkbox
               name="enabled"
-              type="checkbox"
+              value="on"
               defaultChecked={resourceServer?.enabled ?? true}
-              className="mt-0.5 h-4 w-4"
+              label="Enabled"
+              className="items-start font-medium"
             />
-            <span>
-              <span className="block font-medium text-white">Enabled</span>
-              <span className="mt-1 block text-gray-400">
-                Disabled resource servers should not be selected for new authorization spaces or accepted by
-                resource-token issuance.
-              </span>
-            </span>
-          </label>
+            <p className="mt-2 pl-8 text-sm text-gray-400">
+              Disabled resource servers should not be selected for new authorization spaces or accepted by
+              resource-token issuance.
+            </p>
+          </div>
 
           <div className="flex flex-wrap gap-3 border-t border-border-dark pt-5">
             <Link href="/admin/resource-servers">

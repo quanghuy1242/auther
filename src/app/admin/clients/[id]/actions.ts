@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { oauthApplication, oauthAccessToken } from "@/db/schema";
 import { eq, desc, count } from "drizzle-orm";
 import { guards } from "@/lib/auth/platform-guard";
+import { getSession } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { parseRedirectUrls, findInvalidUrl, serializeRedirectUrls } from "@/lib/client-utils";
@@ -127,7 +128,10 @@ export const getClientById = cache(async (clientId: string): Promise<ClientDetai
           userId: client.userId,
           createdAt: client.createdAt || new Date(),
           updatedAt: client.updatedAt || new Date(),
-          metadata,
+          metadata: {
+            ...metadata,
+            trusted: client.userId !== null || (metadata as Record<string, unknown>).trusted === true,
+          },
           lastUsed: tokens[0]?.createdAt || null,
           activeTokenCount: Number(activeTokensResult[0]?.value || 0),
         };
@@ -158,6 +162,7 @@ export async function updateClient(
     const rawData = {
       name: formData.get("name"),
       redirectURLs: formData.get("redirectURLs"),
+      trusted: formData.get("trusted") === "true",
       authMethod: formData.get("authMethod"),
       grantTypes: formData.get("grantTypes"),
     };
@@ -174,7 +179,7 @@ export async function updateClient(
       return { success: false, errors };
     }
 
-    const { name, redirectURLs, authMethod, grantTypes } = result.data;
+    const { name, redirectURLs, trusted, authMethod, grantTypes } = result.data;
 
     // Parse redirect URLs
     const redirectUrlsArray = parseRedirectUrls(redirectURLs);
@@ -219,6 +224,8 @@ export async function updateClient(
       };
     }
 
+    const session = trusted ? await getSession() : null;
+
     // Parse existing metadata
     let metadata: Record<string, unknown> = {};
     try {
@@ -255,6 +262,7 @@ export async function updateClient(
     const updatedMetadata = {
       ...sanitizedMetadata,
       tokenEndpointAuthMethod: nextAuthMethod,
+      trusted: trusted === true,
       ...(grantTypesArray.length > 0 && { grantTypes: grantTypesArray }),
     };
 
@@ -267,6 +275,7 @@ export async function updateClient(
       name,
       redirectURLs: serializeRedirectUrls(redirectUrlsArray),
       metadata: JSON.stringify(updatedMetadata),
+      userId: trusted ? session?.user.id ?? currentClient.userId : null,
       updatedAt: new Date(),
     };
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from "@/components/ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Input, Select, Textarea } from "@/components/ui";
 import type { AuthorizationSpaceEntity, ResourceServerEntity } from "@/lib/repositories";
 import { createAuthorizationSpace, updateAuthorizationSpace } from "./actions";
 
@@ -57,42 +57,35 @@ export function AuthorizationSpaceForm({
             helperText="Describe the resource boundary, for example Payload books, chapters, and comments."
           />
 
-          <div className="space-y-2">
-            <label htmlFor="resourceServerId" className="text-sm font-medium text-gray-200">
-              Resource Server
-            </label>
-            <select
-              id="resourceServerId"
-              name="resourceServerId"
-              defaultValue={authorizationSpace?.resourceServerId ?? ""}
-              className="w-full rounded-md border border-gray-700 bg-input px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            >
-              <option value="">None</option>
-              {resourceServers.map((server) => (
-                <option key={server.id} value={server.id}>
-                  {server.name} ({server.audience})
-                </option>
-              ))}
-            </select>
-            <p className="text-sm text-gray-400">
-              Select the API audience that should receive access tokens for this authorization boundary.
+          <Select
+            name="resourceServerId"
+            label="Resource Server"
+            defaultValue={authorizationSpace?.resourceServerId ?? ""}
+            options={[
+              { value: "", label: "None" },
+              ...resourceServers.map((server) => ({
+                value: server.id,
+                label: `${server.name} (${server.audience})`,
+              })),
+            ]}
+            placeholder="Select resource server"
+          />
+          <p className="-mt-4 text-sm text-gray-400">
+            Select the API audience that should receive access tokens for this authorization boundary.
+          </p>
+
+          <div className="rounded-lg border border-border-dark bg-black/10 p-4">
+            <Checkbox
+              name="enabled"
+              value="on"
+              defaultChecked={authorizationSpace?.enabled ?? true}
+              label="Enabled"
+              className="items-start font-medium"
+            />
+            <p className="mt-2 pl-8 text-sm text-gray-400">
+              Disabled spaces should not receive projected grants or resource-token issuance for linked clients.
             </p>
           </div>
-
-          <label className="flex items-start gap-3 rounded-lg border border-border-dark bg-black/10 p-4 text-sm text-gray-300">
-            <input
-              name="enabled"
-              type="checkbox"
-              defaultChecked={authorizationSpace?.enabled ?? true}
-              className="mt-0.5 h-4 w-4"
-            />
-            <span>
-              <span className="block font-medium text-white">Enabled</span>
-              <span className="mt-1 block text-gray-400">
-                Disabled spaces should not receive projected grants or resource-token issuance for linked clients.
-              </span>
-            </span>
-          </label>
 
           <div className="flex flex-wrap gap-3 border-t border-border-dark pt-5">
             <Link href="/admin/authorization-spaces">

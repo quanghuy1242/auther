@@ -2,9 +2,10 @@
  * OAuth client configuration and management utilities
  */
 
-import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { and, eq } from "drizzle-orm";
 
-import { oauthApplication } from "@/db/schema";
+import { oauthApplication, oauthConsent } from "@/db/schema";
 import { db } from "@/lib/db";
 import { parseRedirectUrls, serializeRedirectUrls } from "@/lib/client-utils";
 import { collectOrigins } from "@/lib/utils/url";
@@ -72,6 +73,79 @@ export async function registerPreviewRedirectForClient(
       updatedAt: new Date(),
     })
     .where(eq(oauthApplication.clientId, clientId));
+}
+
+export async function ensureTrustedOAuthClientConsent(
+  clientId: string | null,
+  userId: string | null | undefined,
+  scope: string | null
+): Promise<void> {
+  if (!clientId || !userId) {
+    return;
+  }
+
+  const [client] = await db
+    .select({
+      metadata: oauthApplication.metadata,
+      userId: oauthApplication.userId,
+      disabled: oauthApplication.disabled,
+    })
+    .from(oauthApplication)
+    .where(eq(oauthApplication.clientId, clientId))
+    .limit(1);
+
+  if (!client || client.disabled) {
+    return;
+  }
+
+  let metadataTrusted = false;
+  try {
+    const metadata = client.metadata ? JSON.parse(client.metadata) as { trusted?: unknown } : {};
+    metadataTrusted = metadata.trusted === true;
+  } catch {
+    metadataTrusted = false;
+  }
+
+  if (!metadataTrusted && client.userId === null) {
+    return;
+  }
+
+  const scopes = scope?.trim() || "openid profile email";
+  const [existingConsent] = await db
+    .select({
+      id: oauthConsent.id,
+      consentGiven: oauthConsent.consentGiven,
+      scopes: oauthConsent.scopes,
+    })
+    .from(oauthConsent)
+    .where(and(eq(oauthConsent.clientId, clientId), eq(oauthConsent.userId, userId)))
+    .limit(1);
+
+  if (existingConsent) {
+    if (existingConsent.consentGiven && existingConsent.scopes === scopes) {
+      return;
+    }
+
+    await db
+      .update(oauthConsent)
+      .set({
+        consentGiven: true,
+        scopes,
+        updatedAt: new Date(),
+      })
+      .where(eq(oauthConsent.id, existingConsent.id));
+    return;
+  }
+
+  await db.insert(oauthConsent).values({
+    id: randomUUID(),
+    clientId,
+    userId,
+    scopes,
+    consentGiven: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 }
 
 export async function isRegisteredOAuthClientOrigin(origin: string | null): Promise<boolean> {

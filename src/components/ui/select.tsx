@@ -15,7 +15,8 @@ export interface SelectOption {
 export interface SelectProps {
   options: SelectOption[]
   value?: string
-  onChange: (value: string) => void
+  defaultValue?: string
+  onChange?: (value: string) => void
   label?: string
   placeholder?: string
   error?: string
@@ -32,6 +33,7 @@ export interface SelectProps {
 export function Select({
   options,
   value,
+  defaultValue,
   onChange,
   label,
   placeholder = "Select an option",
@@ -44,13 +46,15 @@ export function Select({
 }: SelectProps & { triggerClassName?: string }) {
   const EMPTY_VALUE_SENTINEL = "__EMPTY__"
   const internalValue = value === "" ? EMPTY_VALUE_SENTINEL : value
+  const internalDefaultValue = defaultValue === "" ? EMPTY_VALUE_SENTINEL : defaultValue
 
   return (
     <div className={cn("rounded-md", label && "space-y-1", className)}>
       {label && <Label required={required}>{label}</Label>}
       <SelectPrimitive.Root
         value={internalValue}
-        onValueChange={(val) => onChange(val === EMPTY_VALUE_SENTINEL ? "" : val)}
+        defaultValue={internalDefaultValue}
+        onValueChange={(val) => onChange?.(val === EMPTY_VALUE_SENTINEL ? "" : val)}
         disabled={disabled}
         name={name}
       >

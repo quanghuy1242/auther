@@ -14,6 +14,7 @@ import { DEFAULT_LOCAL_BASE_URL, OAUTH_AUTHORIZE_PATH } from "@/lib/constants";
 import { createWildcardRegexes, partitionWildcardPatterns } from "@/lib/utils/wildcard";
 import { collectOrigins, resolveRelativePath } from "@/lib/utils/url";
 import {
+  ensureTrustedOAuthClientConsent,
   registerPreviewRedirectForClient,
 } from "@/lib/utils/oauth-client";
 import {
@@ -85,6 +86,8 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
     const userId = ctx.context.session?.user?.id;
 
     if (clientId && userId) {
+      await ensureTrustedOAuthClientConsent(clientId, userId, requestUrl.searchParams.get("scope"));
+
       const accessCheck = await checkOAuthClientAccess(userId, clientId);
 
       if (!accessCheck.allowed) {
@@ -234,6 +237,7 @@ export const auth = betterAuth({
     }),
     oidcProvider({
       loginPage: "/sign-in",
+      consentPage: "/oauth-consent",
       allowDynamicClientRegistration: true,
       useJWTPlugin: true,
       accessTokenExpiresIn: 2 * 24 * 60 * 60,

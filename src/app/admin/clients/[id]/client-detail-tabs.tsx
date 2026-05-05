@@ -14,6 +14,11 @@ export function ClientDetailTabs({ clientId }: ClientDetailTabsProps) {
       icon: "info",
     },
     {
+      label: "Access Control",
+      href: `/admin/clients/${clientId}/access`,
+      icon: "security",
+    },
+    {
       label: "Registration",
       href: `/admin/clients/${clientId}/registration`,
       icon: "person_add",
