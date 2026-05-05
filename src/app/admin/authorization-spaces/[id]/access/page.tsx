@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AccessControl } from "@/components/admin/access-control/access-control";
 import { PageContainer, PageHeading } from "@/components/layout";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, ResponsiveTable, Select } from "@/components/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select } from "@/components/ui";
 import { ClientProvider } from "@/app/admin/clients/[id]/client-context";
 import { getClientById } from "@/app/admin/clients/[id]/actions";
 import {
@@ -24,10 +24,11 @@ import {
   userGroupRepository,
   userRepository,
 } from "@/lib/repositories";
-import type { AuthorizationModelEntity, Tuple } from "@/lib/repositories";
+import type { AuthorizationModelEntity } from "@/lib/repositories";
 import { assignAuthorizationModelSpace } from "../../actions";
 import { SpaceDetailTabs } from "../space-detail-tabs";
-import { grantSpacePermission, revokeSpacePermission } from "./actions";
+import { grantSpacePermission } from "./actions";
+import { SpaceGrantsTable } from "./space-grants-table";
 
 type AuthorizationSpaceAccessPageProps = {
   params: Promise<{ id: string }>;
@@ -68,18 +69,6 @@ export const metadata: Metadata = {
 
 function relationNames(model: AuthorizationModelEntity): string[] {
   return Object.keys(model.definition.relations ?? {}).sort();
-}
-
-function subjectLabel(tuple: Tuple, usersById: Map<string, SubjectOption>, groupsById: Map<string, SubjectOption>): string {
-  if (tuple.subjectType === "user") {
-    return usersById.get(tuple.subjectId)?.label ?? tuple.subjectId;
-  }
-
-  if (tuple.subjectType === "group") {
-    return groupsById.get(tuple.subjectId)?.label ?? tuple.subjectId;
-  }
-
-  return tuple.subjectId;
 }
 
 export default async function AuthorizationSpaceAccessPage({ params }: AuthorizationSpaceAccessPageProps) {
@@ -311,53 +300,12 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-border-dark">
-                  <ResponsiveTable
-                    data={tuplesPage.tuples}
-                    keyExtractor={(tuple) => tuple.id}
-                    columns={[
-                      {
-                        key: "resource",
-                        header: "Resource",
-                        render: (tuple) => (
-                          <div>
-                            <p className="font-mono text-sm text-gray-200">
-                              {modelsByEntityType.get(tuple.entityType)?.entityType ?? tuple.entityType}
-                            </p>
-                            <p className="text-xs text-gray-500">{tuple.entityId}</p>
-                          </div>
-                        ),
-                      },
-                      {
-                        key: "relation",
-                        header: "Relation",
-                        render: (tuple) => <Badge variant="default">{tuple.relation}</Badge>,
-                      },
-                      {
-                        key: "subject",
-                        header: "Subject",
-                        render: (tuple) => (
-                          <div>
-                            <p className="text-sm text-gray-200">{subjectLabel(tuple, usersById, groupsById)}</p>
-                            <p className="text-xs text-gray-500">{tuple.subjectType}</p>
-                          </div>
-                        ),
-                      },
-                      {
-                        key: "action",
-                        header: "",
-                        className: "text-right",
-                        render: (tuple) => (
-                          <form action={revokeSpacePermission}>
-                            <input type="hidden" name="spaceId" value={space.id} />
-                            <input type="hidden" name="tupleId" value={tuple.id} />
-                            <Button type="submit" variant="ghost" size="sm">
-                              Revoke
-                            </Button>
-                          </form>
-                        ),
-                      },
-                    ]}
-                    emptyMessage="No grants have been created in this space."
+                  <SpaceGrantsTable
+                    tuples={tuplesPage.tuples}
+                    modelsByEntityType={Object.fromEntries(modelsByEntityType)}
+                    usersById={Object.fromEntries(usersById)}
+                    groupsById={Object.fromEntries(groupsById)}
+                    spaceId={space.id}
                   />
                 </div>
               )}
