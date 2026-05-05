@@ -9,6 +9,7 @@ import {
   handleCorsPreflightRequest
 } from "@/lib/utils/cors";
 import { metricsService } from "@/lib/services";
+import { mintPayloadResourceAccessToken } from "@/lib/auth/resource-access-token";
 
 const baseHandler = toNextJsHandler(auth.handler);
 
@@ -63,13 +64,65 @@ async function wrapWithMetrics(
   return response;
 }
 
+async function withResourceAccessTokenResponse(
+  request: NextRequest,
+  response: Response
+): Promise<Response> {
+  const pathname = new URL(request.url).pathname;
+
+  if (!pathname.includes("/oauth2/token") || !response.ok) {
+    return response;
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return response;
+  }
+
+  const tokenBody = (await response.clone().json().catch(() => null)) as {
+    access_token?: unknown;
+    expires_in?: unknown;
+    [key: string]: unknown;
+  } | null;
+
+  if (typeof tokenBody?.access_token !== "string" || tokenBody.access_token.trim().length === 0) {
+    return response;
+  }
+
+  const resourceToken = await mintPayloadResourceAccessToken(tokenBody.access_token);
+
+  if (!resourceToken) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+
+  return new Response(
+    JSON.stringify({
+      ...tokenBody,
+      access_token: resourceToken.accessToken,
+      expires_in: resourceToken.expiresIn,
+      resource: resourceToken.audience,
+    }),
+    {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    }
+  );
+}
+
 export async function GET(request: NextRequest) {
   const response = await wrapWithMetrics(request, () => baseHandler.GET(request));
   return applyCorsHeaders(request, response, corsContext);
 }
 
 export async function POST(request: NextRequest) {
-  const response = await wrapWithMetrics(request, () => baseHandler.POST(request));
+  const response = await wrapWithMetrics(request, async () => {
+    const baseResponse = await baseHandler.POST(request);
+    return withResourceAccessTokenResponse(request, baseResponse);
+  });
   return applyCorsHeaders(request, response, corsContext);
 }
 
