@@ -83,6 +83,15 @@ async function findPayloadResourceTokenSource(
 
 type JwtSigningKey = Parameters<SignJWT["sign"]>[0];
 
+function parseEncryptedPrivateKeyData(value: string): string {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "string" ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
 async function importLatestSigningKey(): Promise<{ key: JwtSigningKey; keyId: string; alg: string }> {
   await rotateJwksIfNeeded();
 
@@ -93,7 +102,7 @@ async function importLatestSigningKey(): Promise<{ key: JwtSigningKey; keyId: st
 
   const decryptedPrivateKey = await symmetricDecrypt({
     key: env.BETTER_AUTH_SECRET,
-    data: latestKey.privateKey,
+    data: parseEncryptedPrivateKeyData(latestKey.privateKey),
   });
 
   const trimmedKey = decryptedPrivateKey.trim();
