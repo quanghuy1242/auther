@@ -57,6 +57,10 @@ export interface AccessControlInitialData {
 
 interface AccessControlProps {
   initialData?: AccessControlInitialData;
+  authorizationSpaceId?: string;
+  title?: string;
+  description?: string;
+  showProjectionTargets?: boolean;
 }
 
 // --- Transformation Helpers ---
@@ -111,7 +115,13 @@ function transformAuthorizationModel(models: ClientAuthorizationModels): { dataM
   };
 }
 
-export function AccessControl({ initialData }: AccessControlProps) {
+export function AccessControl({
+  initialData,
+  authorizationSpaceId,
+  title = "Access Control",
+  description = "Manage platform access, fine-grained permissions, and API keys.",
+  showProjectionTargets = true,
+}: AccessControlProps) {
   const client = useClient();
   const clientId = client.clientId;
 
@@ -208,18 +218,18 @@ export function AccessControl({ initialData }: AccessControlProps) {
       setPlatformUsers(transformPlatformUsers(accessList));
 
       // Load authorization models (all entity types)
-      const { models } = await getAuthorizationModels(clientId);
+      const { models } = await getAuthorizationModels(clientId, authorizationSpaceId);
       const { dataModel, loadedEntityTypes } = transformAuthorizationModel(models);
       setDataModel(dataModel);
       loadedEntityTypesRef.current = loadedEntityTypes;
 
       // Load scoped permissions
-      const scopedPerms = await getScopedPermissions(clientId);
+      const scopedPerms = await getScopedPermissions(clientId, authorizationSpaceId);
       setPermissions(transformScopedPermissions(scopedPerms));
 
       // Load API keys
       if (metadata.allowsApiKeys) {
-        const keys = await getClientApiKeys(clientId);
+        const keys = await getClientApiKeys(clientId, authorizationSpaceId);
         setApiKeys(transformApiKeys(keys));
       } else {
         setApiKeys([]);
@@ -232,7 +242,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
       setIsLoading(false);
       setIsInitialLoading(false);
     }
-  }, [clientId]);
+  }, [authorizationSpaceId, clientId]);
 
   // Sync state with initialData when it updates (e.g. after router.refresh())
   React.useEffect(() => {
@@ -443,7 +453,12 @@ export function AccessControl({ initialData }: AccessControlProps) {
 
     if (submission.accessMode === "full_access") {
       const subjectType = submission.subject.type.toLowerCase() as "user" | "group" | "apikey";
-      const result = await grantClientWideAccess(clientId, subjectType, submission.subject.id);
+      const result = await grantClientWideAccess(
+        clientId,
+        subjectType,
+        submission.subject.id,
+        authorizationSpaceId
+      );
 
       if (!result.success) {
         setError(result.error || "Failed to grant full access");
@@ -488,7 +503,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
         pData.relation,
         pData.subject.type.toLowerCase() as "user" | "group" | "apikey",
         pData.subject.id,
-        pData.condition // Optional Lua script for per-grant ABAC
+        pData.condition, // Optional Lua script for per-grant ABAC
+        authorizationSpaceId
       );
 
       if (!result.success) {
@@ -588,7 +604,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
           clientId,
           typeName,
           def.relations || {},
-          def.permissions || {}
+          def.permissions || {},
+          authorizationSpaceId
         );
 
         if (!result.success) {
@@ -658,9 +675,9 @@ export function AccessControl({ initialData }: AccessControlProps) {
           )}
           <div className="mb-6 flex items-start justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white">Access Control</h2>
+              <h2 className="text-xl font-bold text-white">{title}</h2>
               <p className="text-sm text-gray-400 mt-1">
-                Manage platform access, fine-grained permissions, and API keys.
+                {description}
               </p>
             </div>
             <Button variant="ghost" size="sm" className="w-8 px-0" onClick={() => setIsGuideOpen(true)} title="Documentation & API Guide">
@@ -668,6 +685,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
             </Button>
           </div>
 
+          {showProjectionTargets && (
           <div className="mb-6 rounded-lg border border-[#243647] bg-[#111921] p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-2xl space-y-1">
@@ -707,6 +725,7 @@ export function AccessControl({ initialData }: AccessControlProps) {
               <p className="mt-4 text-sm text-gray-500">No other OAuth clients are available for projection.</p>
             )}
           </div>
+          )}
 
           <Tabs
             selectedIndex={activeTab}
@@ -736,6 +755,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
                     apiKeys={apiKeys}
                     clientId={clientId}
                     clientName={client.name || undefined}
+                    authorizationSpaceId={authorizationSpaceId}
+                    scopeLabel={authorizationSpaceId ? "authorization space" : "client"}
                     disabled={!canManageAccess}
                   />
                 )
@@ -756,6 +777,8 @@ export function AccessControl({ initialData }: AccessControlProps) {
                     disabled={!canManageAccess}
                     clientId={clientId}
                     clientName={client.name || undefined}
+                    authorizationSpaceId={authorizationSpaceId}
+                    scopeLabel={authorizationSpaceId ? "authorization space" : "client"}
                   />
                 )
               },

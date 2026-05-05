@@ -32,10 +32,18 @@ interface CreateApiKeyModalProps {
   onSave: (key: { name: string; expiresInDays?: number; permissions?: Record<string, string[]>; accessMode?: "scoped" | "full_access" }) => Promise<ApiKeyResult>;
   onAssignPermissions: (key: ApiKey) => void;
   clientId: string;
+  scopeLabel?: string;
   resourceConfig: Record<string, string[]>;
 }
 
-export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions, resourceConfig }: CreateApiKeyModalProps) {
+export function CreateApiKeyModal({
+  isOpen,
+  onClose,
+  onSave,
+  onAssignPermissions,
+  resourceConfig,
+  scopeLabel = "client",
+}: CreateApiKeyModalProps) {
   const [step, setStep] = React.useState<"form" | "result">("form");
   const [name, setName] = React.useState("");
   const [expiry, setExpiry] = React.useState("Never");
@@ -113,7 +121,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
       }
 
       if (accessMode === "full_access" && !fullAccessConfirmed) {
-        setError("Confirm full client access before creating the key.");
+        setError(`Confirm full ${scopeLabel} access before creating the key.`);
         setIsLoading(false);
         return;
       }
@@ -221,7 +229,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
               }}
               options={[
                 { label: "Fine-grained access", value: "scoped" },
-                { label: "Full client access", value: "full_access" },
+                    { label: `Full ${scopeLabel} access`, value: "full_access" },
               ]}
               disabled={isLoading}
               size="md"
@@ -231,13 +239,13 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
           {accessMode === "full_access" ? (
             <div className="space-y-3">
               <Alert variant="warning" title="High-Privilege Access">
-                Full client access grants this API key permission to perform any operation on any resource type within this client. This is intended for service accounts and automation. Use scoped permissions for least-privilege access.
+                Full {scopeLabel} access grants this API key permission to perform any operation on any resource type within this {scopeLabel}. This is intended for service accounts and automation. Use scoped permissions for least-privilege access.
               </Alert>
               <Checkbox
                 checked={fullAccessConfirmed}
                 onChange={setFullAccessConfirmed}
                 disabled={isLoading}
-                label="I understand this key will have full access to all resources in this client"
+                label={`I understand this key will have full access to all resources in this ${scopeLabel}`}
               />
             </div>
           ) : (
@@ -245,7 +253,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
               <p className="text-sm font-medium text-white">Scoped Permissions</p>
               {scopedResources.length === 0 ? (
                 <Alert variant="warning" title="No Resources Available">
-                  No scoped resources are configured for this client yet.
+                  No scoped resources are configured for this {scopeLabel} yet.
                 </Alert>
               ) : (
                 <div className="max-h-60 overflow-auto rounded-lg border border-slate-700 bg-[#111921] p-3 space-y-3">
@@ -273,7 +281,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSave, onAssignPermissions
           <Alert variant="info">
             {accessMode === "scoped"
               ? "Select at least one scoped permission for this key."
-              : "This key will bypass scoped checks for all resources in this client."}
+              : `This key will bypass scoped checks for all resources in this ${scopeLabel}.`}
           </Alert>
 
           {error && <Alert variant="error">{error}</Alert>}

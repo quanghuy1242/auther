@@ -116,6 +116,41 @@ export class PermissionService {
             return true;
           }
         }
+
+        const canLookupSpaceFullAccess =
+          typeof this.tupleRepo.findBySubjectAndEntityTypeAndRelation === "function";
+        const spaceFullAccessTuples = canLookupSpaceFullAccess
+          ? (
+              await Promise.all(
+                subjects.map((subject) =>
+                  this.tupleRepo.findBySubjectAndEntityTypeAndRelation(
+                    subject.type,
+                    subject.id,
+                    "authorization_space",
+                    "full_access"
+                  )
+                )
+              )
+            )
+              .flat()
+              .filter((tuple) => tuple.entityType === "authorization_space")
+          : [];
+
+        if (spaceFullAccessTuples.length > 0) {
+          const { AuthorizationModelRepository } = await import("@/lib/repositories/authorization-model-repository");
+          const modelRecord = await new AuthorizationModelRepository().findByEntityType(entityType);
+          const authorizationSpaceId = modelRecord?.authorizationSpaceId ?? null;
+
+          if (
+            authorizationSpaceId &&
+            spaceFullAccessTuples.some((tuple) => tuple.entityId === authorizationSpaceId)
+          ) {
+            const duration = performance.now() - checkStart;
+            void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
+            void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "authorization_space_full_access" });
+            return true;
+          }
+        }
       }
 
       // 1. Get Authorization Model

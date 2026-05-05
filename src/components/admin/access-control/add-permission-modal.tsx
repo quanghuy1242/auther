@@ -76,6 +76,7 @@ interface AddPermissionModalProps {
   };
   resourceConfig?: Record<string, string[]>;
   apiKeys?: ApiKey[];
+  scopeLabel?: string;
 }
 
 type ScopeType = "global" | "specific" | "script";
@@ -96,6 +97,7 @@ export function AddPermissionModal({
   fixedSubject,
   resourceConfig = {},
   apiKeys = [],
+  scopeLabel = "client",
 }: AddPermissionModalProps) {
   // --- State ---
   const [subjectType, setSubjectType] = React.useState<"User" | "Group" | "ApiKey">("User");
@@ -439,7 +441,7 @@ export function AddPermissionModal({
                   }}
                   options={[
                     { label: "Fine-grained access", value: "scoped" },
-                    { label: "Full client access", value: "full_access" },
+                    { label: `Full ${scopeLabel} access`, value: "full_access" },
                   ]}
                   size="md"
                 />
@@ -448,12 +450,12 @@ export function AddPermissionModal({
               {isFullAccessMode ? (
                 <div className="space-y-3">
                   <Alert variant="warning" title="High-Privilege Access">
-                    Full client access grants this subject permission to perform any operation on any resource type within this client. This is intended for service accounts and automation. Use scoped permissions for least-privilege access.
+                    Full {scopeLabel} access grants this subject permission to perform any operation on any resource type within this {scopeLabel}. This is intended for service accounts and automation. Use scoped permissions for least-privilege access.
                   </Alert>
                   <Checkbox
                     checked={fullAccessConfirmed}
                     onChange={setFullAccessConfirmed}
-                    label="I understand this subject will have full access to all resources in this client"
+                    label={`I understand this subject will have full access to all resources in this ${scopeLabel}`}
                   />
                 </div>
               ) : null}

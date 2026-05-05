@@ -33,6 +33,8 @@ interface ScopedPermissionsProps {
   apiKeys: ApiKey[];
   clientId: string;
   clientName?: string;
+  authorizationSpaceId?: string;
+  scopeLabel?: string;
   subjectFilter?: {
     id: string;
     name: string;
@@ -74,6 +76,8 @@ export function ScopedPermissions({
   apiKeys,
   clientId,
   clientName,
+  authorizationSpaceId,
+  scopeLabel = "client",
   subjectFilter,
   disabled,
 }: ScopedPermissionsProps) {
@@ -95,7 +99,7 @@ export function ScopedPermissions({
 
   const refreshClientWideAccess = React.useCallback(async () => {
     try {
-      const tuples = await listClientWideAccess(clientId);
+      const tuples = await listClientWideAccess(clientId, authorizationSpaceId);
       const next = new Map<string, string>();
 
       for (const tuple of tuples) {
@@ -109,7 +113,7 @@ export function ScopedPermissions({
       console.error("Failed to load client-wide access:", error);
       setFullAccessError("Failed to load full access grants.");
     }
-  }, [clientId]);
+  }, [authorizationSpaceId, clientId]);
 
   React.useEffect(() => {
     void refreshClientWideAccess();
@@ -233,7 +237,7 @@ export function ScopedPermissions({
     setFullAccessError(null);
 
     try {
-      const result = await grantClientWideAccess(clientId, subjectType, subject.id);
+      const result = await grantClientWideAccess(clientId, subjectType, subject.id, authorizationSpaceId);
       if (!result.success) {
         setFullAccessError(result.error || "Failed to grant full access.");
         return;
@@ -254,7 +258,7 @@ export function ScopedPermissions({
     setFullAccessError(null);
 
     try {
-      const result = await revokeClientWideAccess(clientId, subjectType, subject.id);
+      const result = await revokeClientWideAccess(clientId, subjectType, subject.id, authorizationSpaceId);
       if (!result.success) {
         setFullAccessError(result.error || "Failed to revoke full access.");
         return;
@@ -328,6 +332,7 @@ export function ScopedPermissions({
           resourceConfig={resourceConfig}
           apiKeys={apiKeys}
           fixedSubject={subjectFilter}
+          scopeLabel={scopeLabel}
         />
       </div>
     );
@@ -381,7 +386,7 @@ export function ScopedPermissions({
                               <Badge
                                 variant="info"
                                 className="bg-emerald-900/30 border-emerald-500/30 text-emerald-300"
-                                title="This actor has full access to all resources in this client. Scoped rules still apply for actors without full access."
+                                title={`This actor has full access to all resources in this ${scopeLabel}. Scoped rules still apply for actors without full access.`}
                               >
                                 Full Access Active
                               </Badge>
@@ -403,7 +408,7 @@ export function ScopedPermissions({
                           <Badge
                             variant="info"
                             className="bg-emerald-900/30 border-emerald-500/30 text-emerald-300"
-                            title="This actor has full access to all resources in this client. Scoped rules still apply for actors without full access."
+                            title={`This actor has full access to all resources in this ${scopeLabel}. Scoped rules still apply for actors without full access.`}
                           >
                             Full Access Active
                           </Badge>
@@ -472,7 +477,7 @@ export function ScopedPermissions({
                             disabled={disabled || isUpdatingFullAccess}
                             onClick={() => setGrantingSubject(group.subject)}
                           >
-                            Grant Full Client Access
+                            Grant Full {scopeLabel === "client" ? "Client" : "Space"} Access
                           </Button>
                         )
                       )}
@@ -546,6 +551,7 @@ export function ScopedPermissions({
         resourceConfig={resourceConfig}
         apiKeys={apiKeys}
         fixedSubject={subjectFilter}
+        scopeLabel={scopeLabel}
       />
 
       <ConfirmationModal
@@ -569,8 +575,8 @@ export function ScopedPermissions({
           await handleGrantClientWideAccess(grantingSubject);
           setGrantingSubject(null);
         }}
-        title="Grant Full Client Access"
-        description={`Grant full client access for ${grantingSubject?.name} in ${clientName ? `${clientName} (${clientId})` : clientId}?`}
+        title={`Grant Full ${scopeLabel === "client" ? "Client" : "Space"} Access`}
+        description={`Grant full ${scopeLabel} access for ${grantingSubject?.name} in ${clientName ? `${clientName} (${clientId})` : clientId}?`}
         confirmText="Grant Full Access"
         variant="warning"
         loading={!!grantingSubject && updatingSubjectKey === buildSubjectKey(getSubjectTypeForTuple(grantingSubject.type), grantingSubject.id)}

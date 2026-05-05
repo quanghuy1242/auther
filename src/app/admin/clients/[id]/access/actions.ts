@@ -15,6 +15,7 @@ import {
   authorizationModelRepository,
   oauthClientMetadataRepository,
   oauthClientRepository,
+  oauthClientSpaceLinkRepository,
   userGroupRepository,
 } from "@/lib/repositories";
 import { updateClientPolicySchema } from "@/schemas/clients";
@@ -53,6 +54,22 @@ type CreatedApiKeyResult = {
   name?: string | null;
   expiresAt?: Date | string | null;
 };
+
+async function validateClientLinkedToAuthorizationSpace(
+  clientId: string,
+  authorizationSpaceId?: string
+): Promise<string | null> {
+  if (!authorizationSpaceId) {
+    return null;
+  }
+
+  const link = await oauthClientSpaceLinkRepository.findByClientAndSpace(
+    clientId,
+    authorizationSpaceId
+  );
+
+  return link ? null : "OAuth client is not linked to this authorization space.";
+}
 
 // ============================================================================
 // Client Metadata & Access Policy
@@ -307,7 +324,7 @@ export async function checkResourceDependencies(
 /*
  * Get all API keys for a client, enriched with ReBAC permissions
  */
-export async function getClientApiKeys(clientId: string) {
+export async function getClientApiKeys(clientId: string, authorizationSpaceId?: string) {
   const runtimeDeps: {
     guardView: () => Promise<void>;
     getHeadersFn: () => Promise<HeadersValue>;
@@ -320,11 +337,17 @@ export async function getClientApiKeys(clientId: string) {
     findBySubjectFn: tupleRepository.findBySubject.bind(tupleRepository),
   };
 
-  return await getClientApiKeysWithDeps(clientId, runtimeDeps);
+  return await getClientApiKeysWithDeps(clientId, authorizationSpaceId, runtimeDeps);
 }
 
 export async function getClientApiKeysWithDeps(
   clientId: string,
+  authorizationSpaceIdOrDeps?: string | Partial<{
+    guardView: () => Promise<void>;
+    getHeadersFn: () => Promise<HeadersValue>;
+    listApiKeysFn: (input: { headers: HeadersValue }) => Promise<unknown>;
+    findBySubjectFn: typeof tupleRepository.findBySubject;
+  }>,
   deps?: Partial<{
     guardView: () => Promise<void>;
     getHeadersFn: () => Promise<HeadersValue>;
@@ -332,6 +355,10 @@ export async function getClientApiKeysWithDeps(
     findBySubjectFn: typeof tupleRepository.findBySubject;
   }>
 ) {
+  const authorizationSpaceId =
+    typeof authorizationSpaceIdOrDeps === "string" ? authorizationSpaceIdOrDeps : undefined;
+  const dependencyOverrides =
+    typeof authorizationSpaceIdOrDeps === "string" ? deps : authorizationSpaceIdOrDeps;
   const runtimeDeps: {
     guardView: () => Promise<void>;
     getHeadersFn: () => Promise<HeadersValue>;
@@ -342,7 +369,7 @@ export async function getClientApiKeysWithDeps(
     getHeadersFn: headers,
     listApiKeysFn: auth.api.listApiKeys,
     findBySubjectFn: tupleRepository.findBySubject.bind(tupleRepository),
-    ...deps,
+    ...dependencyOverrides,
   };
 
   try {
@@ -362,9 +389,15 @@ export async function getClientApiKeysWithDeps(
       return [];
     }
 
-    // 2. Filter for this client
+    // 2. Filter for this backing client. When called from an authorization space,
+    // prefer keys explicitly tagged with that space while keeping legacy keys
+    // from the canonical model-owner client visible during migration.
     const clientKeys = allKeys.filter(
-      (key) => key.metadata?.oauth_client_id === clientId
+      (key) =>
+        key.metadata?.oauth_client_id === clientId &&
+        (!authorizationSpaceId ||
+          key.metadata?.authorization_space_id === authorizationSpaceId ||
+          key.metadata?.authorization_space_id === undefined)
     );
 
     // 3. Enrich with permissions from Tuples (Subject: apikey:{id})
@@ -374,12 +407,17 @@ export async function getClientApiKeysWithDeps(
         // We look for Tuples (Entity, Relation, Subject) -> (client_clientId:resource, action, apikey:keyId)
         const tuples = await runtimeDeps.findBySubjectFn("apikey", key.id);
 
-        const directFullAccessTuple = tuples.find(
-          (tuple) =>
-            tuple.entityType === "oauth_client" &&
-            tuple.entityId === clientId &&
-            tuple.relation === "full_access"
-        );
+        const directFullAccessTuple = tuples.find((tuple) => {
+          if (tuple.relation !== "full_access") {
+            return false;
+          }
+
+          if (authorizationSpaceId) {
+            return tuple.entityType === "authorization_space" && tuple.entityId === authorizationSpaceId;
+          }
+
+          return tuple.entityType === "oauth_client" && tuple.entityId === clientId;
+        });
 
         if (directFullAccessTuple) {
           return {
@@ -396,7 +434,12 @@ export async function getClientApiKeysWithDeps(
         const prefix = `client_${clientId}:`;
 
         for (const tuple of tuples) {
-          if (tuple.entityType.startsWith(prefix)) {
+          if (
+            tuple.entityType.startsWith(prefix) &&
+            (!authorizationSpaceId ||
+              tuple.authorizationSpaceId === authorizationSpaceId ||
+              tuple.authorizationSpaceId === null)
+          ) {
             const resource = tuple.entityType.substring(prefix.length);
             // If resource is empty (e.g. wildcards), handle appropriately, but usually it's "invoice"
             if (resource) {
@@ -428,6 +471,7 @@ export async function getClientApiKeysWithDeps(
  */
 const createApiKeySchema = z.object({
   clientId: z.string().min(1, "Client ID is required"),
+  authorizationSpaceId: z.string().min(1).optional(),
   name: z.string().min(2, "Name must be at least 2 characters"),
   accessMode: z.enum(["scoped", "full_access"]).default("scoped"),
   permissions: z.record(z.string(), z.array(z.string())).optional(),
@@ -499,6 +543,14 @@ export async function createClientApiKey(
       };
     }
 
+    const linkError = await validateClientLinkedToAuthorizationSpace(
+      validated.clientId,
+      validated.authorizationSpaceId
+    );
+    if (linkError) {
+      return { success: false, error: linkError };
+    }
+
     const preparedGrants: Array<{
       entityType: string;
       entityTypeId: string;
@@ -507,8 +559,13 @@ export async function createClientApiKey(
 
     if (accessMode === "scoped") {
       for (const [resource, actions] of Object.entries(validated.permissions ?? {})) {
-        const entityType = `client_${validated.clientId}:${resource}`;
-        const model = await runtimeDeps.findAuthorizationModelFn(entityType);
+        const fallbackEntityType = `client_${validated.clientId}:${resource}`;
+        const model = validated.authorizationSpaceId
+          ? await authorizationModelRepository.findBySpaceAndEntityTypeName(
+              validated.authorizationSpaceId,
+              resource
+            )
+          : await runtimeDeps.findAuthorizationModelFn(fallbackEntityType);
 
         if (!model) {
           return {
@@ -527,7 +584,7 @@ export async function createClientApiKey(
           }
 
           preparedGrants.push({
-            entityType,
+            entityType: model.entityType,
             entityTypeId: model.id,
             relation: action,
           });
@@ -550,6 +607,9 @@ export async function createClientApiKey(
         userId: session.user.id,
         metadata: {
           oauth_client_id: validated.clientId,
+          ...(validated.authorizationSpaceId
+            ? { authorization_space_id: validated.authorizationSpaceId }
+            : {}),
           access_level: level,
         },
       },
@@ -566,13 +626,14 @@ export async function createClientApiKey(
     try {
       if (accessMode === "full_access") {
         await runtimeDeps.createTupleIfNotExistsFn({
-          entityType: "oauth_client",
+          entityType: validated.authorizationSpaceId ? "authorization_space" : "oauth_client",
           entityTypeId: null,
-          entityId: validated.clientId,
+          entityId: validated.authorizationSpaceId ?? validated.clientId,
           relation: "full_access",
           subjectType: "apikey",
           subjectId: result.id,
           condition: null,
+          authorizationSpaceId: validated.authorizationSpaceId ?? null,
         });
 
         await emitClientWideAccessGrantCount(validated.clientId);
@@ -585,6 +646,7 @@ export async function createClientApiKey(
             relation: grant.relation,
             subjectType: "apikey",
             subjectId: result.id,
+            authorizationSpaceId: validated.authorizationSpaceId,
           });
         }
       }
@@ -1184,7 +1246,8 @@ async function validateApiKeyBelongsToClient(
 export async function grantClientWideAccess(
   clientId: string,
   subjectType: ClientWideAccessSubjectType,
-  subjectId: string
+  subjectId: string,
+  authorizationSpaceId?: string
 ): Promise<AssignUserResult> {
   try {
     await guards.clients.view();
@@ -1195,6 +1258,11 @@ export async function grantClientWideAccess(
         success: false,
         error: "Permission denied: You must be an admin or owner to grant full access",
       };
+    }
+
+    const linkError = await validateClientLinkedToAuthorizationSpace(clientId, authorizationSpaceId);
+    if (linkError) {
+      return { success: false, error: linkError };
     }
 
     if (subjectType === "apikey") {
@@ -1208,13 +1276,14 @@ export async function grantClientWideAccess(
     }
 
     await tupleRepository.createIfNotExists({
-      entityType: "oauth_client",
+      entityType: authorizationSpaceId ? "authorization_space" : "oauth_client",
       entityTypeId: null,
-      entityId: clientId,
+      entityId: authorizationSpaceId ?? clientId,
       relation: "full_access",
       subjectType,
       subjectId,
       condition: null,
+      authorizationSpaceId: authorizationSpaceId ?? null,
     });
 
     await emitClientWideAccessGrantCount(clientId);
@@ -1235,7 +1304,8 @@ export async function grantClientWideAccess(
 export async function revokeClientWideAccess(
   clientId: string,
   subjectType: ClientWideAccessSubjectType,
-  subjectId: string
+  subjectId: string,
+  authorizationSpaceId?: string
 ): Promise<AssignUserResult> {
   try {
     await guards.clients.view();
@@ -1248,9 +1318,14 @@ export async function revokeClientWideAccess(
       };
     }
 
+    const linkError = await validateClientLinkedToAuthorizationSpace(clientId, authorizationSpaceId);
+    if (linkError) {
+      return { success: false, error: linkError };
+    }
+
     const deleted = await tupleRepository.delete({
-      entityType: "oauth_client",
-      entityId: clientId,
+      entityType: authorizationSpaceId ? "authorization_space" : "oauth_client",
+      entityId: authorizationSpaceId ?? clientId,
       relation: "full_access",
       subjectType,
       subjectId,
@@ -1279,12 +1354,16 @@ export async function revokeClientWideAccess(
  * List all client-wide full access grants for a client.
  */
 export async function listClientWideAccess(
-  clientId: string
+  clientId: string,
+  authorizationSpaceId?: string
 ): Promise<Array<Tuple & { subjectName: string }>> {
   try {
     await guards.clients.view();
 
-    const tuples = await tupleRepository.findByEntity("oauth_client", clientId);
+    const tuples = await tupleRepository.findByEntity(
+      authorizationSpaceId ? "authorization_space" : "oauth_client",
+      authorizationSpaceId ?? clientId
+    );
     const fullAccessTuples = tuples.filter((tuple) => tuple.relation === "full_access");
 
     const userIds = Array.from(
@@ -1335,14 +1414,15 @@ export async function listClientWideAccess(
 export async function checkClientWideAccess(
   clientId: string,
   subjectType: ClientWideAccessSubjectType,
-  subjectId: string
+  subjectId: string,
+  authorizationSpaceId?: string
 ): Promise<boolean> {
   try {
     await guards.clients.view();
 
     const tuple = await tupleRepository.findExact({
-      entityType: "oauth_client",
-      entityId: clientId,
+      entityType: authorizationSpaceId ? "authorization_space" : "oauth_client",
+      entityId: authorizationSpaceId ?? clientId,
       relation: "full_access",
       subjectType,
       subjectId,
@@ -1376,12 +1456,23 @@ export interface ClientAuthorizationModels {
  * Returns wrapped format for DataModelEditor compatibility.
  */
 export async function getAuthorizationModels(
-  clientId: string
+  clientId: string,
+  authorizationSpaceId?: string
 ): Promise<{ models: ClientAuthorizationModels; error?: string }> {
   try {
     await guards.clients.view();
 
-    const entityTypes = await authorizationModelRepository.findAllForClient(clientId);
+    const entityTypes = authorizationSpaceId
+      ? Object.fromEntries(
+          (await authorizationModelRepository.findAll())
+            .filter((model) => model.authorizationSpaceId === authorizationSpaceId)
+            .filter((model) => model.entityType.startsWith(`client_${clientId}:`))
+            .map((model) => [
+              model.entityType.slice(model.entityType.indexOf(":") + 1),
+              model.definition,
+            ])
+        )
+      : await authorizationModelRepository.findAllForClient(clientId);
 
     // Wrap into UI-compatible format
     const types: ClientAuthorizationModels["types"] = {};
@@ -1426,7 +1517,8 @@ export async function updateEntityTypeModel(
   clientId: string,
   entityTypeName: string,
   relations: Record<string, unknown>,
-  permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>
+  permissions: Record<string, { relation: string; policyEngine?: "lua"; policy?: string }>,
+  authorizationSpaceId?: string
 ): Promise<AssignUserResult & { warnings?: string[] }> {
   try {
     await guards.clients.view();
@@ -1438,6 +1530,11 @@ export async function updateEntityTypeModel(
         success: false,
         error: "Permission denied: You must be an admin or owner to update the authorization model",
       };
+    }
+
+    const linkError = await validateClientLinkedToAuthorizationSpace(clientId, authorizationSpaceId);
+    if (linkError) {
+      return { success: false, error: linkError };
     }
 
     // Convert UI format (strings, arrays, or { union, subjectParams }) to DB format
@@ -1529,7 +1626,8 @@ export async function updateEntityTypeModel(
     await authorizationModelRepository.upsertEntityTypeForClient(
       clientId,
       entityTypeName,
-      definition
+      definition,
+      authorizationSpaceId
     );
 
     // Save policy versions for tracking
@@ -1741,7 +1839,10 @@ interface ScopedPermissionEntry {
  * These are permissions within the client's application (Layer B)
  * Uses JOIN to get real-time entity type names from authorization_models
  */
-export async function getScopedPermissions(clientId: string): Promise<ScopedPermissionEntry[]> {
+export async function getScopedPermissions(
+  clientId: string,
+  authorizationSpaceId?: string
+): Promise<ScopedPermissionEntry[]> {
   try {
     await guards.clients.view();
 
@@ -1768,10 +1869,21 @@ export async function getScopedPermissions(clientId: string): Promise<ScopedPerm
         eq(accessTuples.entityTypeId, authorizationModels.id)
       )
       .where(
-        sql`(
-          ${authorizationModels.entityType} LIKE ${scopedEntityTypePrefix + '%'}
-          OR ${accessTuples.entityType} LIKE ${scopedEntityTypePrefix + '%'}
-        )`
+        authorizationSpaceId
+          ? sql`(
+              (
+                ${authorizationModels.entityType} LIKE ${scopedEntityTypePrefix + '%'}
+                OR ${accessTuples.entityType} LIKE ${scopedEntityTypePrefix + '%'}
+              )
+              AND (
+                ${authorizationModels.authorizationSpaceId} = ${authorizationSpaceId}
+                OR ${accessTuples.authorizationSpaceId} = ${authorizationSpaceId}
+              )
+            )`
+          : sql`(
+              ${authorizationModels.entityType} LIKE ${scopedEntityTypePrefix + '%'}
+              OR ${accessTuples.entityType} LIKE ${scopedEntityTypePrefix + '%'}
+            )`
       );
 
     // Collect user and group IDs for lookup
@@ -1857,7 +1969,8 @@ export async function grantScopedPermission(
   relation: string,
   subjectType: "user" | "group" | "apikey",
   subjectId: string,
-  condition?: string // Optional Lua script for per-grant ABAC
+  condition?: string, // Optional Lua script for per-grant ABAC
+  authorizationSpaceId?: string
 ): Promise<AssignUserResult> {
   try {
     await guards.clients.view();
@@ -1871,10 +1984,20 @@ export async function grantScopedPermission(
       };
     }
 
+    const linkError = await validateClientLinkedToAuthorizationSpace(clientId, authorizationSpaceId);
+    if (linkError) {
+      return { success: false, error: linkError };
+    }
+
     // C3: Verify relation exists in authorization model
     // We need to check the specific entity type's model
     const fullEntityType = `client_${clientId}:${entityTypeName}`;
-    const model = await authorizationModelRepository.findByEntityType(fullEntityType);
+    const model = authorizationSpaceId
+      ? await authorizationModelRepository.findBySpaceAndEntityTypeName(
+          authorizationSpaceId,
+          entityTypeName
+        )
+      : await authorizationModelRepository.findByEntityType(fullEntityType);
 
     if (model) {
       const validRelations = Object.keys(model.definition.relations);
@@ -1904,21 +2027,23 @@ export async function grantScopedPermission(
     }
 
     const { created, tuple } = await tupleRepository.createIfNotExists({
-      entityType: fullEntityType,
+      entityType: model.entityType,
       entityTypeId: model.id,  // FK to authorization_models for rename support
       entityId,
       relation,
       subjectType,
       subjectId,
       condition: condition || undefined,
+      authorizationSpaceId: authorizationSpaceId ?? undefined,
     });
 
     if (!created) {
-      if (!tuple.entityTypeId) {
+      if (!tuple.entityTypeId || (authorizationSpaceId && !tuple.authorizationSpaceId)) {
         const [backfilled] = await db
           .update(accessTuples)
           .set({
             entityTypeId: model.id,
+            authorizationSpaceId: authorizationSpaceId ?? tuple.authorizationSpaceId,
             updatedAt: new Date(),
           })
           .where(eq(accessTuples.id, tuple.id))
@@ -1959,7 +2084,7 @@ export async function grantScopedPermission(
         if (normalizedRequestedCondition) {
           const { abacRepository } = await import("@/lib/repositories/abac-repository");
           abacRepository.savePolicyVersion({
-            entityType: fullEntityType,
+            entityType: model.entityType,
             permissionName: relation,
             policyLevel: "tuple",
             tupleId: tuple.id,
@@ -1981,7 +2106,7 @@ export async function grantScopedPermission(
     if (condition && tuple) {
       const { abacRepository } = await import("@/lib/repositories/abac-repository");
       abacRepository.savePolicyVersion({
-        entityType: fullEntityType,
+        entityType: model.entityType,
         permissionName: relation,
         policyLevel: "tuple",
         tupleId: tuple.id,

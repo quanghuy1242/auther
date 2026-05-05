@@ -34,6 +34,8 @@ export interface ApiKeyManagementProps {
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
   disabled?: boolean;
+  authorizationSpaceId?: string;
+  scopeLabel?: string;
 }
 
 export function ApiKeyManagement({
@@ -48,6 +50,8 @@ export function ApiKeyManagement({
   disabled = false,
   clientId,
   clientName,
+  authorizationSpaceId,
+  scopeLabel = "client",
 }: ApiKeyManagementProps & { clientId: string; clientName?: string }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = React.useState(false);
   const [managingKey, setManagingKey] = React.useState<ApiKey | null>(null);
@@ -59,7 +63,7 @@ export function ApiKeyManagement({
   // Helper to refresh keys without full page reload
   const refreshKeys = async () => {
     try {
-      const keys = await getClientApiKeys(clientId);
+      const keys = await getClientApiKeys(clientId, authorizationSpaceId);
       const transformedKeys: ApiKey[] = keys.map(k => ({
         id: k.id,
         keyId: (k.prefix && k.start) ? `${k.prefix}...${k.start}` : (k.name || k.id.substring(0, 8)),
@@ -84,6 +88,7 @@ export function ApiKeyManagement({
       expiresInDays: newKey.expiresInDays,
       accessMode: newKey.accessMode,
       permissions: newKey.permissions || {},
+      authorizationSpaceId,
     });
 
     if (result.success) {
@@ -128,7 +133,7 @@ export function ApiKeyManagement({
           checked={enabled}
           onChange={onToggle}
           label="Enable API Keys"
-          description="Allow API keys to authenticate against this client."
+          description={`Allow API keys to authenticate against this ${scopeLabel}.`}
           disabled={disabled}
         />
       </div>
@@ -155,7 +160,7 @@ export function ApiKeyManagement({
             <EmptyState
               icon="vpn_key"
               title="No API Keys"
-              description="Generate an API key to allow external services to access your application."
+              description={`Generate an API key to allow external services to access this ${scopeLabel}.`}
               action={
                 <Button
                   onClick={() => setIsCreateModalOpen(true)}
@@ -243,6 +248,7 @@ export function ApiKeyManagement({
         onSave={handleCreateKey}
         onAssignPermissions={(key) => setManagingKey(key)}
         clientId={clientId}
+        scopeLabel={scopeLabel}
         resourceConfig={resourceConfig}
       />
 
@@ -293,6 +299,8 @@ export function ApiKeyManagement({
                     apiKeys={apiKeys}
                     clientId={clientId}
                     clientName={clientName}
+                    authorizationSpaceId={authorizationSpaceId}
+                    scopeLabel={scopeLabel}
                     subjectFilter={{
                       id: managingKey.id,
                       name: managingKey.owner,

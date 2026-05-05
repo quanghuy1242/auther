@@ -347,6 +347,31 @@ export class ApiKeyPermissionResolver {
             for (const tuple of tuples) {
                 clientIds.add(tuple.entityId);
             }
+
+            const spaceTuples = (
+                await tupleRepository.findBySubjectAndEntityTypeAndRelation(
+                    subject.type,
+                    subject.id,
+                    "authorization_space",
+                    "full_access"
+                )
+            ).filter((tuple) => tuple.entityType === "authorization_space");
+
+            if (spaceTuples.length > 0) {
+                const models = await authorizationModelRepository.findAll();
+                for (const tuple of spaceTuples) {
+                    for (const model of models) {
+                        if (model.authorizationSpaceId !== tuple.entityId) {
+                            continue;
+                        }
+
+                        const match = model.entityType.match(/^client_([^:]+):/);
+                        if (match?.[1]) {
+                            clientIds.add(match[1]);
+                        }
+                    }
+                }
+            }
         }
 
         return Array.from(clientIds);
@@ -433,4 +458,3 @@ export class ApiKeyPermissionResolver {
 
 // Singleton instance for convenience
 export const apiKeyPermissionResolver = new ApiKeyPermissionResolver();
-

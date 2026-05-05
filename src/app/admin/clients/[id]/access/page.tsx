@@ -1,13 +1,7 @@
-import { AccessControl } from "@/components/admin/access-control/access-control";
-import {
-  getCurrentUserAccessLevel,
-  getClientMetadata,
-  getPlatformAccessList,
-  getAuthorizationModels,
-  getScopedPermissions,
-  getClientApiKeys,
-  getGrantProjectionClientOptions,
-} from "./actions";
+import { redirect } from "next/navigation";
+
+import { guards } from "@/lib/auth/platform-guard";
+import { oauthClientSpaceLinkRepository } from "@/lib/repositories";
 
 interface PageProps {
   params: Promise<{
@@ -16,33 +10,14 @@ interface PageProps {
 }
 
 export default async function AccessControlPage({ params }: PageProps) {
+  await guards.clients.view();
   const { id } = await params;
+  const links = await oauthClientSpaceLinkRepository.listByClientId(id);
+  const firstSpaceId = links[0]?.authorizationSpaceId;
 
-  const [accessLevel, metadata, accessList, modelsResult, scopedPerms, projectionClientOptions] = await Promise.all([
-    getCurrentUserAccessLevel(id),
-    getClientMetadata(id),
-    getPlatformAccessList(id),
-    getAuthorizationModels(id),
-    getScopedPermissions(id),
-    getGrantProjectionClientOptions(id),
-  ]);
-
-  let apiKeys: Awaited<ReturnType<typeof getClientApiKeys>> = [];
-  if (metadata.allowsApiKeys) {
-    apiKeys = await getClientApiKeys(id);
+  if (firstSpaceId) {
+    redirect(`/admin/authorization-spaces/${firstSpaceId}/access`);
   }
 
-  return (
-    <AccessControl
-      initialData={{
-        accessLevel,
-        metadata,
-        accessList,
-        models: modelsResult,
-        scopedPerms,
-        apiKeys,
-        projectionClientOptions,
-      }}
-    />
-  );
+  redirect(`/admin/clients/${id}/spaces`);
 }

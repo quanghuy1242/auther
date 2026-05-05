@@ -1,9 +1,22 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { AccessControl } from "@/components/admin/access-control/access-control";
 import { PageContainer, PageHeading } from "@/components/layout";
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, ResponsiveTable, Select } from "@/components/ui";
+import { ClientProvider } from "@/app/admin/clients/[id]/client-context";
+import { getClientById } from "@/app/admin/clients/[id]/actions";
+import {
+  getAuthorizationModels,
+  getClientApiKeys,
+  getClientMetadata,
+  getCurrentUserAccessLevel,
+  getGrantProjectionClientOptions,
+  getPlatformAccessList,
+  getScopedPermissions,
+} from "@/app/admin/clients/[id]/access/actions";
 import { guards } from "@/lib/auth/platform-guard";
+import { resolveAuthorizationSpaceAccessClient } from "@/lib/auth/authorization-space-access-client";
 import {
   authorizationModelRepository,
   authorizationSpaceRepository,
@@ -24,6 +37,29 @@ type SubjectOption = {
   id: string;
   label: string;
 };
+
+async function getClientAccessInitialData(clientId: string, authorizationSpaceId: string) {
+  const [accessLevel, metadata, accessList, modelsResult, scopedPerms, projectionClientOptions] = await Promise.all([
+    getCurrentUserAccessLevel(clientId),
+    getClientMetadata(clientId),
+    getPlatformAccessList(clientId),
+    getAuthorizationModels(clientId, authorizationSpaceId),
+    getScopedPermissions(clientId, authorizationSpaceId),
+    getGrantProjectionClientOptions(clientId),
+  ]);
+
+  const apiKeys = metadata.allowsApiKeys ? await getClientApiKeys(clientId, authorizationSpaceId) : [];
+
+  return {
+    accessLevel,
+    metadata,
+    accessList,
+    models: modelsResult,
+    scopedPerms,
+    apiKeys,
+    projectionClientOptions,
+  };
+}
 
 export const metadata: Metadata = {
   title: "Authorization Space Access",
@@ -49,12 +85,13 @@ function subjectLabel(tuple: Tuple, usersById: Map<string, SubjectOption>, group
 export default async function AuthorizationSpaceAccessPage({ params }: AuthorizationSpaceAccessPageProps) {
   await guards.platform.admin();
   const { id } = await params;
-  const [space, models, tuplesPage, usersPage, groups] = await Promise.all([
+  const [space, models, tuplesPage, usersPage, groups, accessClientResolution] = await Promise.all([
     authorizationSpaceRepository.findById(id),
     authorizationModelRepository.findAll(),
     tupleRepository.findByAuthorizationSpacePaginated({ authorizationSpaceId: id, limit: 200 }),
     userRepository.findManyWithAccounts(1, 500),
     userGroupRepository.findAll(),
+    resolveAuthorizationSpaceAccessClient(id),
   ]);
 
   if (!space) {
@@ -94,6 +131,12 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
     ...userOptions.map((user) => ({ value: `user|${user.id}`, label: `User: ${user.label}` })),
     ...groupOptions.map((group) => ({ value: `group|${group.id}`, label: `Group: ${group.label}` })),
   ];
+  const accessClient = accessClientResolution
+    ? await getClientById(accessClientResolution.clientId)
+    : null;
+  const accessClientInitialData = accessClient
+    ? await getClientAccessInitialData(accessClient.clientId, space.id)
+    : null;
 
   return (
     <PageContainer maxWidth="6xl">
@@ -319,6 +362,50 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
                 </div>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Access Control</CardTitle>
+            <CardDescription>
+              Manage this authorization space from one panel. API keys are stored through the canonical backing
+              client that owns the space models, but grants and models remain scoped to this authorization space.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {!accessClient || !accessClientInitialData ? (
+              <div className="rounded-lg border border-border-dark bg-black/10 p-4 text-sm text-gray-400">
+                No OAuth client is linked to this space yet. Link the model-owning client before managing API keys,
+                scoped grants, or the data model here.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border-dark bg-black/10 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-white">Canonical Backing Client</h3>
+                      <p className="mt-1 text-sm text-gray-400">
+                        {accessClient.name || accessClient.clientId}
+                      </p>
+                      <p className="mt-1 font-mono text-xs text-gray-500">{accessClient.clientId}</p>
+                    </div>
+                    <Badge variant={accessClientResolution?.link.accessMode === "full" ? "success" : "default"}>
+                      {accessClientResolution?.reason === "model_owner" ? "model owner" : accessClientResolution?.link.accessMode}
+                    </Badge>
+                  </div>
+                </div>
+                <ClientProvider client={accessClient}>
+                  <AccessControl
+                    initialData={accessClientInitialData}
+                    authorizationSpaceId={space.id}
+                    title="Authorization Space Access Control"
+                    description="Manage API keys, scoped grants, and the data model for this authorization space."
+                    showProjectionTargets={false}
+                  />
+                </ClientProvider>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

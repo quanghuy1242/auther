@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label } from "@/components/ui";
 import { guards } from "@/lib/auth/platform-guard";
 import {
@@ -91,15 +93,25 @@ export default async function ClientSpacesPage({ params }: ClientSpacesPageProps
             {links.map((link) => {
               const space = spaces.find((candidate) => candidate.id === link.authorizationSpaceId);
               return (
-                <div key={link.id} className="flex items-center justify-between gap-4 rounded-lg border border-border-dark p-4">
+                <div
+                  key={link.id}
+                  className="flex flex-col gap-4 rounded-lg border border-border-dark p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
                     <p className="font-medium text-white">{space?.name ?? link.authorizationSpaceId}</p>
                     <p className="text-sm text-gray-400">{ACCESS_MODE_LABELS[link.accessMode]}</p>
                   </div>
-                  <form action={deleteForClient}>
-                    <input type="hidden" name="id" value={link.id} />
-                    <Button type="submit" size="sm" variant="danger">Remove</Button>
-                  </form>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild type="button" size="sm" variant="secondary">
+                      <Link href={`/admin/authorization-spaces/${link.authorizationSpaceId}/access`}>
+                        Open Access Control
+                      </Link>
+                    </Button>
+                    <form action={deleteForClient}>
+                      <input type="hidden" name="id" value={link.id} />
+                      <Button type="submit" size="sm" variant="danger">Remove</Button>
+                    </form>
+                  </div>
                 </div>
               );
             })}
