@@ -1,4 +1,4 @@
-import { Button, Card, CardContent, CardHeader, CardTitle, Label } from "@/components/ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label } from "@/components/ui";
 import { guards } from "@/lib/auth/platform-guard";
 import {
   authorizationSpaceRepository,
@@ -35,6 +35,10 @@ export default async function ClientSpacesPage({ params }: ClientSpacesPageProps
       <Card>
         <CardHeader>
           <CardTitle>Link Authorization Space</CardTitle>
+          <CardDescription>
+            OAuth clients link to authorization spaces so they can request login flows and resource tokens.
+            Manage models and grants from the authorization-space detail pages.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={createForClient} className="space-y-4">
@@ -78,6 +82,9 @@ export default async function ClientSpacesPage({ params }: ClientSpacesPageProps
       <Card>
         <CardHeader>
           <CardTitle>Linked Spaces</CardTitle>
+          <CardDescription>
+            These links describe which resource domains this client can interact with. They are not user or object grants.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">

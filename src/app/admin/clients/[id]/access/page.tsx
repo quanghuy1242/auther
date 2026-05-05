@@ -1,13 +1,4 @@
-import { AccessControl } from "@/components/admin/access-control/access-control";
-import {
-  getCurrentUserAccessLevel,
-  getClientMetadata,
-  getPlatformAccessList,
-  getAuthorizationModels,
-  getScopedPermissions,
-  getClientApiKeys,
-  getGrantProjectionClientOptions,
-} from "./actions";
+import { redirect } from "next/navigation";
 
 interface PageProps {
   params: Promise<{
@@ -18,31 +9,5 @@ interface PageProps {
 export default async function AccessControlPage({ params }: PageProps) {
   const { id } = await params;
 
-  // Parallel fetch for core data
-  const [accessLevel, metadata, accessList, modelsResult, scopedPerms, projectionClientOptions] = await Promise.all([
-    getCurrentUserAccessLevel(id),
-    getClientMetadata(id),
-    getPlatformAccessList(id),
-    getAuthorizationModels(id),
-    getScopedPermissions(id),
-    getGrantProjectionClientOptions(id),
-  ]);
-
-  // Conditional fetch for API keys
-  let apiKeys: Awaited<ReturnType<typeof getClientApiKeys>> = [];
-  if (metadata.allowsApiKeys) {
-    apiKeys = await getClientApiKeys(id);
-  }
-
-  const initialData = {
-    accessLevel,
-    metadata,
-    accessList,
-    models: modelsResult,
-    scopedPerms,
-    apiKeys,
-    projectionClientOptions,
-  };
-
-  return <AccessControl initialData={initialData} />;
+  redirect(`/admin/clients/${id}/spaces`);
 }
