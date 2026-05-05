@@ -1,4 +1,4 @@
-export const CLIENT_TYPES = ["web", "spa", "native"] as const;
+export const CLIENT_TYPES = ["web", "public", "native"] as const;
 export type ClientType = typeof CLIENT_TYPES[number];
 
 export const AUTH_METHODS = ["client_secret_basic", "client_secret_post", "private_key_jwt", "none"] as const;
@@ -23,6 +23,6 @@ export const GRANT_TYPE_DETAILS = [
 
 export const APPLICATION_TYPE_OPTIONS = [
   { value: "web", label: "Web Application - Server-side app with client secret" },
-  { value: "spa", label: "Single Page App - Browser-based app without secret" },
+  { value: "public", label: "Public Client (PKCE) - Browser/Native app without secret" },
   { value: "native", label: "Native App - Mobile or desktop application" },
 ];

@@ -11,7 +11,7 @@ export const updateClientPolicySchema = z.object({
 
 export const registerClientSchema = z.object({
   name: z.string().min(2, "Client name must be at least 2 characters"),
-  type: z.enum(["web", "spa", "native"], "Please select a client type"),
+  type: z.enum(["web", "public", "native"], "Please select a client type"),
   redirectURLs: z.string().min(1, "At least one redirect URL is required"),
   trusted: z.boolean().optional(),
   grantTypes: z.string().optional(),
