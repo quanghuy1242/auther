@@ -9,7 +9,6 @@ export const accessTuples = sqliteTable(
     // Entity (The object being accessed)
     entityType: text("entity_type").notNull(), // e.g., 'client_xxx' or 'client_xxx:entity_1'
     entityTypeId: text("entity_type_id"), // FK to authorization_models.id - set for scoped perms, null for platform
-    authorizationSpaceId: text("authorization_space_id"),
     entityId: text("entity_id").notNull(), // Can be specific ID (e.g., 'client_123') or "*" for wildcard
 
     // Relation (The access level/role)
@@ -31,6 +30,8 @@ export const accessTuples = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
+
+    authorizationSpaceId: text("authorization_space_id"),
   },
   (table) => [
     // Optimize for common lookups:
