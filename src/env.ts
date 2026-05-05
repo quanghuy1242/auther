@@ -22,6 +22,8 @@ const serverSchema = z.object({
   PAYLOAD_CLIENT_ID: z.string().min(1, "PAYLOAD_CLIENT_ID is required"),
   PAYLOAD_CLIENT_SECRET: z.string().min(1, "PAYLOAD_CLIENT_SECRET is required"),
   PAYLOAD_REDIRECT_URI: z.string().url("PAYLOAD_REDIRECT_URI must be a valid URL"),
+  PAYLOAD_RESOURCE_TOKEN_SPACE_SLUG: z.string().min(1).optional(),
+  PAYLOAD_RESOURCE_TOKEN_RESOURCE_SERVER_SLUG: z.string().min(1).optional(),
   PAYLOAD_SPA_CLIENT_ID: z.string().min(1, "PAYLOAD_SPA_CLIENT_ID is required"),
   PAYLOAD_SPA_REDIRECT_URIS: z
     .string()

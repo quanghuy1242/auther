@@ -17,6 +17,11 @@ The Payload content API is modeled as a first-class resource server:
 - resource server audience: `payload-content-api`
 - authorization space slug: `payload-content`
 
+The default slugs can be overridden without changing code:
+
+- `PAYLOAD_RESOURCE_TOKEN_SPACE_SLUG`
+- `PAYLOAD_RESOURCE_TOKEN_RESOURCE_SERVER_SLUG`
+
 The R2 seed script creates this topology:
 
 ```sh
@@ -27,7 +32,7 @@ pnpm auth:r2:seed-payload-space
 
 Better Auth's built-in OIDC access token is opaque. During R4, Auther wraps successful OAuth token responses for clients linked to the `payload-content` authorization space with `can_trigger_contexts` or `full` access.
 
-For those clients, the returned `access_token` is replaced with a JWKS-signed JWT whose important claims are:
+For clients linked to the configured authorization space, the returned `access_token` is replaced with a JWKS-signed JWT whose important claims are:
 
 - `iss = JWT_ISSUER`
 - `aud = payload-content-api`
@@ -49,4 +54,3 @@ Payload must validate:
 - audience `payload-content-api`
 
 `PAYLOAD_ACCEPT_CLIENT_AUDIENCES=true` is a temporary rollback switch in Payload only. It should remain disabled once R4 is deployed.
-

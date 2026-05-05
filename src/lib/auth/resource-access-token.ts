@@ -45,6 +45,10 @@ const getTimestampSeconds = (value: Date | number | null | undefined): number | 
 async function findPayloadResourceTokenSource(
   opaqueAccessToken: string,
 ): Promise<ResourceTokenSource | null> {
+  const authorizationSpaceSlug = env.PAYLOAD_RESOURCE_TOKEN_SPACE_SLUG ?? PAYLOAD_CONTENT_SPACE_SLUG;
+  const resourceServerSlug =
+    env.PAYLOAD_RESOURCE_TOKEN_RESOURCE_SERVER_SLUG ?? PAYLOAD_CONTENT_RESOURCE_SERVER_SLUG;
+
   const [row] = await db
     .select({
       accessTokenExpiresAt: oauthAccessToken.accessTokenExpiresAt,
@@ -66,9 +70,9 @@ async function findPayloadResourceTokenSource(
     .where(
       and(
         eq(oauthAccessToken.accessToken, opaqueAccessToken),
-        eq(authorizationSpaces.slug, PAYLOAD_CONTENT_SPACE_SLUG),
+        eq(authorizationSpaces.slug, authorizationSpaceSlug),
         eq(authorizationSpaces.enabled, true),
-        eq(resourceServers.slug, PAYLOAD_CONTENT_RESOURCE_SERVER_SLUG),
+        eq(resourceServers.slug, resourceServerSlug),
         eq(resourceServers.enabled, true),
         inArray(oauthClientSpaceLinks.accessMode, ["can_trigger_contexts", "full"]),
       ),
