@@ -6,8 +6,10 @@ import { DEFAULT_CORS_HEADERS, DEFAULT_CORS_METHODS } from "@/lib/constants";
 import {
   applyCorsHeaders,
   createCorsContext,
-  handleCorsPreflightRequest
+  handleCorsPreflightRequest,
+  resolveAllowedOrigin
 } from "@/lib/utils/cors";
+import { isRegisteredOAuthClientOrigin } from "@/lib/utils/oauth-client";
 import { metricsService } from "@/lib/services";
 import { mintPayloadResourceAccessToken } from "@/lib/auth/resource-access-token";
 
@@ -113,9 +115,57 @@ async function withResourceAccessTokenResponse(
   );
 }
 
+function setCorsHeaders(response: Response, origin: string): Response {
+  response.headers.set("Access-Control-Allow-Origin", origin);
+  response.headers.set("Access-Control-Allow-Methods", DEFAULT_CORS_METHODS.join(","));
+  response.headers.set("Access-Control-Allow-Headers", DEFAULT_CORS_HEADERS.join(", "));
+  response.headers.set("Access-Control-Allow-Credentials", "true");
+  response.headers.set("Vary", "Origin");
+  return response;
+}
+
+async function applyAuthCorsHeaders(request: NextRequest, response: Response): Promise<Response> {
+  const staticOrigin = resolveAllowedOrigin(request, corsContext);
+  if (staticOrigin) {
+    return applyCorsHeaders(request, response, corsContext);
+  }
+
+  const origin = request.headers.get("origin");
+  if (await isRegisteredOAuthClientOrigin(origin)) {
+    return setCorsHeaders(response, origin!);
+  }
+
+  return response;
+}
+
+async function handleAuthCorsPreflightRequest(request: NextRequest): Promise<Response> {
+  const staticOrigin = resolveAllowedOrigin(request, corsContext);
+  if (staticOrigin) {
+    return handleCorsPreflightRequest(request, corsContext);
+  }
+
+  const origin = request.headers.get("origin");
+  if (!(await isRegisteredOAuthClientOrigin(origin))) {
+    return new Response(null, { status: 403 });
+  }
+
+  const response = new Response(null, { status: 204 });
+  const allowedMethods = request.headers.get("access-control-request-method") ?? DEFAULT_CORS_METHODS.join(",");
+  const allowedHeaders = request.headers.get("access-control-request-headers") ?? DEFAULT_CORS_HEADERS.join(", ");
+
+  response.headers.set("Access-Control-Allow-Origin", origin!);
+  response.headers.set("Access-Control-Allow-Methods", allowedMethods);
+  response.headers.set("Access-Control-Allow-Headers", allowedHeaders);
+  response.headers.set("Access-Control-Allow-Credentials", "true");
+  response.headers.set("Access-Control-Max-Age", "86400");
+  response.headers.set("Vary", "Origin");
+
+  return response;
+}
+
 export async function GET(request: NextRequest) {
   const response = await wrapWithMetrics(request, () => baseHandler.GET(request));
-  return applyCorsHeaders(request, response, corsContext);
+  return applyAuthCorsHeaders(request, response);
 }
 
 export async function POST(request: NextRequest) {
@@ -123,9 +173,9 @@ export async function POST(request: NextRequest) {
     const baseResponse = await baseHandler.POST(request);
     return withResourceAccessTokenResponse(request, baseResponse);
   });
-  return applyCorsHeaders(request, response, corsContext);
+  return applyAuthCorsHeaders(request, response);
 }
 
 export async function OPTIONS(request: NextRequest) {
-  return handleCorsPreflightRequest(request, corsContext);
+  return handleAuthCorsPreflightRequest(request);
 }

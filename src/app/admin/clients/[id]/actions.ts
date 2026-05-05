@@ -8,7 +8,7 @@ import { eq, desc, count } from "drizzle-orm";
 import { guards } from "@/lib/auth/platform-guard";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
-import { parseRedirectUrls, findInvalidUrl } from "@/lib/client-utils";
+import { parseRedirectUrls, findInvalidUrl, serializeRedirectUrls } from "@/lib/client-utils";
 import { updateClientSchema } from "@/schemas/clients";
 
 export interface ClientDetail {
@@ -265,7 +265,7 @@ export async function updateClient(
 
     const updatePayload: Partial<typeof oauthApplication.$inferInsert> = {
       name,
-      redirectURLs: JSON.stringify(redirectUrlsArray),
+      redirectURLs: serializeRedirectUrls(redirectUrlsArray),
       metadata: JSON.stringify(updatedMetadata),
       updatedAt: new Date(),
     };

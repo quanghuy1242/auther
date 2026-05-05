@@ -66,7 +66,7 @@ async function registerClient(
 async function main() {
   try {
     validateEnvVars({
-      PAYLOAD_CLIENT_SECRET: process.env.PAYLOAD_CLIENT_SECRET,
+      INTERNAL_SIGNUP_SECRET: process.env.INTERNAL_SIGNUP_SECRET || process.env.PAYLOAD_CLIENT_SECRET,
       PAYLOAD_REDIRECT_URI: process.env.PAYLOAD_REDIRECT_URI,
       PAYLOAD_SPA_REDIRECT_URIS: process.env.PAYLOAD_SPA_REDIRECT_URIS,
     });
@@ -74,7 +74,7 @@ async function main() {
     exitWithError("Environment validation failed", error);
   }
 
-  const guardSecret = process.env.PAYLOAD_CLIENT_SECRET!;
+  const guardSecret = process.env.INTERNAL_SIGNUP_SECRET || process.env.PAYLOAD_CLIENT_SECRET!;
   const adminRedirect = process.env.PAYLOAD_REDIRECT_URI!;
   const spaRedirects = parseCommaSeparated(process.env.PAYLOAD_SPA_REDIRECT_URIS);
 
@@ -127,11 +127,10 @@ async function main() {
   }
 
   console.log(
-    "\n✅ Client registration complete. Paste the printed values into your .env files and redeploy."
+    "\n✅ Client registration complete. Auther reads OAuth clients from the database; configure the consuming apps with the printed values as needed."
   );
 }
 
 main().catch((error) => {
   exitWithError("Unexpected error during client registration", error);
 });
-

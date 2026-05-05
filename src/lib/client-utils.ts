@@ -21,6 +21,14 @@ export function parseRedirectUrls(input: string | undefined | null): string[] {
 }
 
 /**
+ * Better Auth's OIDC provider reads oauthApplication.redirectURLs as comma-separated text.
+ * Keep writes in that shape while preserving JSON-array read compatibility above for older rows.
+ */
+export function serializeRedirectUrls(urls: string[]): string {
+  return urls.join(",");
+}
+
+/**
  * Validates an array of URLs. Returns the first invalid URL found, or null if all are valid.
  */
 export function findInvalidUrl(urls: string[]): string | null {

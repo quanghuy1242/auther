@@ -6,6 +6,7 @@
 
 import { db } from "../src/lib/db";
 import { oauthApplication } from "../src/db/auth-schema";
+import { serializeRedirectUrls } from "../src/lib/client-utils";
 
 async function main() {
   const payloadClientId = process.env.PAYLOAD_CLIENT_ID;
@@ -29,7 +30,7 @@ async function main() {
       clientId: payloadClientId,
       clientSecret: payloadClientSecret,
       name: 'Payload Admin',
-      redirectURLs: JSON.stringify([payloadRedirectUri]),
+      redirectURLs: serializeRedirectUrls([payloadRedirectUri]),
       type: 'web',
       disabled: false,
       userId: null,
@@ -52,7 +53,7 @@ async function main() {
         clientId: payloadSpaClientId,
         clientSecret: null,
         name: 'Payload SPA',
-        redirectURLs: JSON.stringify(redirectUris),
+        redirectURLs: serializeRedirectUrls(redirectUris),
         type: 'public',
         disabled: false,
         userId: null,
@@ -77,7 +78,7 @@ async function main() {
         clientId: blogClientId,
         clientSecret: null,
         name: "Next Blog",
-        redirectURLs: JSON.stringify([blogRedirectUri]),
+        redirectURLs: serializeRedirectUrls([blogRedirectUri]),
         type: "public",
         disabled: false,
         userId: null,

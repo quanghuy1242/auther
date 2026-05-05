@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session";
 import { db } from "@/lib/db";
 import { oauthApplication } from "@/db/schema";
 import { randomBytes } from "crypto";
-import { parseRedirectUrls, findInvalidUrl, parseGrantTypes } from "@/lib/client-utils";
+import { parseRedirectUrls, findInvalidUrl, parseGrantTypes, serializeRedirectUrls } from "@/lib/client-utils";
 import { registerClientSchema } from "@/schemas/clients";
 
 export type RegisterClientState = {
@@ -109,7 +109,7 @@ export async function registerClient(
       clientId,
       clientSecret,
       name,
-      redirectURLs: JSON.stringify(redirectUrlsArray),
+      redirectURLs: serializeRedirectUrls(redirectUrlsArray),
       metadata: JSON.stringify(metadata),
       type,
       userId: trusted ? session.user.id : null, // Use owning admin to mark trusted clients

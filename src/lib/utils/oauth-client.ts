@@ -2,28 +2,12 @@
  * OAuth client configuration and management utilities
  */
 
-export type TrustedClientConfig = {
-  redirectSet: Set<string>;
-  client: {
-    redirectURLs: string[];
-    metadata?: Record<string, unknown> | null;
-  };
-};
+import { eq } from "drizzle-orm";
 
-/**
- * Adds a redirect URI to a client configuration if not already present
- */
-export function addRedirectToClient(
-  config: TrustedClientConfig,
-  redirectURI: string
-): void {
-  if (config.redirectSet.has(redirectURI)) {
-    return;
-  }
-  
-  config.redirectSet.add(redirectURI);
-  config.client.redirectURLs.push(redirectURI);
-}
+import { oauthApplication } from "@/db/schema";
+import { db } from "@/lib/db";
+import { parseRedirectUrls, serializeRedirectUrls } from "@/lib/client-utils";
+import { collectOrigins } from "@/lib/utils/url";
 
 /**
  * Checks if a redirect URI matches preview origin patterns
@@ -48,23 +32,88 @@ export function isPreviewRedirect(
   }
 }
 
-/**
- * Registers a preview redirect URI for a client if applicable
- */
-export function registerPreviewRedirect(
+export async function registerPreviewRedirectForClient(
   clientId: string | null,
   redirectURI: string | null,
-  dynamicRedirectConfig: Map<string, TrustedClientConfig>,
   previewOriginMatchers: RegExp[]
-): void {
-  if (!clientId || !redirectURI || !isPreviewRedirect(redirectURI, previewOriginMatchers)) {
+): Promise<void> {
+  if (!clientId) {
     return;
   }
 
-  const config = dynamicRedirectConfig.get(clientId);
-  if (!config) {
+  const [client] = await db
+    .select({
+      redirectURLs: oauthApplication.redirectURLs,
+    })
+    .from(oauthApplication)
+    .where(eq(oauthApplication.clientId, clientId))
+    .limit(1);
+
+  if (!client) {
     return;
   }
 
-  addRedirectToClient(config, redirectURI);
+  const redirects = parseRedirectUrls(client.redirectURLs);
+  const shouldAddPreviewRedirect =
+    redirectURI !== null &&
+    isPreviewRedirect(redirectURI, previewOriginMatchers) &&
+    !redirects.includes(redirectURI);
+  const nextRedirects = shouldAddPreviewRedirect ? [...redirects, redirectURI] : redirects;
+  const serializedRedirects = serializeRedirectUrls(nextRedirects);
+
+  if (client.redirectURLs === serializedRedirects) {
+    return;
+  }
+
+  await db
+    .update(oauthApplication)
+    .set({
+      redirectURLs: serializedRedirects,
+      updatedAt: new Date(),
+    })
+    .where(eq(oauthApplication.clientId, clientId));
+}
+
+export async function isRegisteredOAuthClientOrigin(origin: string | null): Promise<boolean> {
+  if (!origin) {
+    return false;
+  }
+
+  const clients = await db
+    .select({
+      redirectURLs: oauthApplication.redirectURLs,
+      metadata: oauthApplication.metadata,
+      disabled: oauthApplication.disabled,
+    })
+    .from(oauthApplication);
+
+  for (const client of clients) {
+    if (client.disabled) {
+      continue;
+    }
+
+    const redirectOrigins = collectOrigins(parseRedirectUrls(client.redirectURLs));
+    if (redirectOrigins.has(origin)) {
+      return true;
+    }
+
+    if (!client.metadata) {
+      continue;
+    }
+
+    try {
+      const metadata = JSON.parse(client.metadata) as { postLogoutRedirectUris?: unknown };
+      const logoutUris = Array.isArray(metadata.postLogoutRedirectUris)
+        ? metadata.postLogoutRedirectUris.filter((value): value is string => typeof value === "string")
+        : [];
+
+      if (collectOrigins(logoutUris).has(origin)) {
+        return true;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return false;
 }

@@ -19,21 +19,27 @@ const serverSchema = z.object({
     .string()
     .min(1, "JWT_AUDIENCE must include at least one audience value")
     .transform(parseCommaSeparatedList),
-  PAYLOAD_CLIENT_ID: z.string().min(1, "PAYLOAD_CLIENT_ID is required"),
-  PAYLOAD_CLIENT_SECRET: z.string().min(1, "PAYLOAD_CLIENT_SECRET is required"),
-  PAYLOAD_REDIRECT_URI: z.string().url("PAYLOAD_REDIRECT_URI must be a valid URL"),
+  INTERNAL_SIGNUP_SECRET: z.string().min(1).optional(),
+  AUTH_TRUSTED_ORIGINS: z
+    .string()
+    .transform(parseCommaSeparatedList)
+    .optional(),
+  PAYLOAD_CLIENT_ID: z.string().min(1).optional(),
+  PAYLOAD_CLIENT_SECRET: z.string().min(1).optional(),
+  PAYLOAD_REDIRECT_URI: z.string().url("PAYLOAD_REDIRECT_URI must be a valid URL").optional(),
   PAYLOAD_RESOURCE_TOKEN_SPACE_SLUG: z.string().min(1).optional(),
   PAYLOAD_RESOURCE_TOKEN_RESOURCE_SERVER_SLUG: z.string().min(1).optional(),
-  PAYLOAD_SPA_CLIENT_ID: z.string().min(1, "PAYLOAD_SPA_CLIENT_ID is required"),
+  PAYLOAD_SPA_CLIENT_ID: z.string().min(1).optional(),
   PAYLOAD_SPA_REDIRECT_URIS: z
     .string()
-    .transform(parseCommaSeparatedList),
+    .transform(parseCommaSeparatedList)
+    .optional(),
   PAYLOAD_SPA_LOGOUT_URIS: z
     .string()
     .transform(parseCommaSeparatedList)
     .optional(),
-  BLOG_CLIENT_ID: z.string().min(1, "BLOG_CLIENT_ID is required"),
-  BLOG_REDIRECT_URI: z.string().url("BLOG_REDIRECT_URI must be a valid URL"),
+  BLOG_CLIENT_ID: z.string().min(1).optional(),
+  BLOG_REDIRECT_URI: z.string().url("BLOG_REDIRECT_URI must be a valid URL").optional(),
   BLOG_LOGOUT_REDIRECT_URIS: z
     .string()
     .transform(parseCommaSeparatedList)
@@ -98,6 +104,8 @@ const clientEnv = parseEnv(clientSchema, {
 
 export const env: ServerEnv & ClientEnv & {
   JWT_AUDIENCE: string[];
+  INTERNAL_SIGNUP_SECRET: string;
+  AUTH_TRUSTED_ORIGINS: string[];
   PAYLOAD_SPA_REDIRECT_URIS: string[];
   PAYLOAD_SPA_LOGOUT_URIS?: string[];
   BLOG_LOGOUT_REDIRECT_URIS?: string[];
@@ -105,5 +113,8 @@ export const env: ServerEnv & ClientEnv & {
 } = {
   ...serverEnv,
   ...clientEnv,
+  INTERNAL_SIGNUP_SECRET: serverEnv.INTERNAL_SIGNUP_SECRET ?? serverEnv.PAYLOAD_CLIENT_SECRET ?? serverEnv.BETTER_AUTH_SECRET,
+  AUTH_TRUSTED_ORIGINS: serverEnv.AUTH_TRUSTED_ORIGINS ?? [],
+  PAYLOAD_SPA_REDIRECT_URIS: serverEnv.PAYLOAD_SPA_REDIRECT_URIS ?? [],
   PAYLOAD_PREVIEW_ORIGIN_PATTERNS: serverEnv.PAYLOAD_PREVIEW_ORIGIN_PATTERNS ?? [],
 };

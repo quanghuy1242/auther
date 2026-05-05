@@ -71,7 +71,7 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
 
         if (["/sign-up/email", "/oauth2/register"].includes(relativePath)) {
           const headerSecret = request.headers.get("x-internal-signup-secret");
-          if (headerSecret !== process.env.PAYLOAD_CLIENT_SECRET) {
+          if (headerSecret !== process.env.INTERNAL_SIGNUP_SECRET) {
             throw new Response("Forbidden", { status: 403 });
           }
         }
@@ -92,33 +92,6 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
         metadata: {
           issuer: process.env.JWT_ISSUER!,
         },
-        trustedClients: [
-          {
-            clientId: process.env.PAYLOAD_CLIENT_ID!,
-            clientSecret: process.env.PAYLOAD_CLIENT_SECRET!,
-            type: "web",
-            name: "Payload Admin (Confidential)",
-            redirectURLs: [process.env.PAYLOAD_REDIRECT_URI!],
-            metadata: {
-              tokenEndpointAuthMethod: "client_secret_basic",
-              grantTypes: ["authorization_code"],
-            },
-            skipConsent: true,
-          },
-          {
-            clientId: process.env.PAYLOAD_SPA_CLIENT_ID!,
-            type: "public",
-            name: "Payload SPA (PKCE)",
-            redirectURLs: process.env.PAYLOAD_SPA_REDIRECT_URIS!.split(","),
-            metadata: {
-              tokenEndpointAuthMethod: "none",
-              grantTypes: ["authorization_code"],
-              postLogoutRedirectUris:
-                process.env.PAYLOAD_SPA_LOGOUT_URIS?.split(",") ?? [],
-            },
-            skipConsent: true,
-          },
-        ],
       }),
       oAuthProxy({
         productionURL: process.env.PRODUCTION_URL,
@@ -128,15 +101,16 @@ Browser ↔ Payload Admin (Next.js) ↔ Better Auth (Next.js) ↔ Postgres (auth
     ],
   });
   ```
-- Provide comma-delimited env vars for SPA redirect/logout URIs to avoid secret leakage in the browser (`PAYLOAD_SPA_REDIRECT_URIS`, `PAYLOAD_SPA_LOGOUT_URIS`). The SPA client omits a secret and enforces PKCE.
+- OAuth clients are database-managed through the Auther admin UI. Do not add new clients to `lib/auth.ts` or require an Auther redeploy for client creation, redirect URI changes, or logout URI changes.
+- Add client redirect origins to the client record. Auther reflects CORS for registered client origins on auth endpoints; `AUTH_TRUSTED_ORIGINS` is only an operational escape hatch for non-client origins.
 - Two client applications are required:
-  - **Payload Admin (confidential client)** — server-side OAuth exchange for the Next.js/Payload admin UI. Requires `PAYLOAD_CLIENT_ID`, `PAYLOAD_CLIENT_SECRET`, and `PAYLOAD_REDIRECT_URI`. Uses `client_secret_basic` at the token endpoint.
-  - **Payload SPA (public PKCE client)** — browser-based PKCE flow for front-end apps. Requires `PAYLOAD_SPA_CLIENT_ID` and `PAYLOAD_SPA_REDIRECT_URIS`. No secret is issued; PKCE verifier is required.
-- Use the seeding helper to register clients via Better Auth’s official API once the service is deployed:
+  - **Payload Admin (confidential client)** — server-side OAuth exchange for the Next.js/Payload admin UI. Uses `client_secret_basic` at the token endpoint.
+  - **Payload SPA (public PKCE client)** — browser-based PKCE flow for front-end apps. No secret is issued; PKCE verifier is required.
+- Use the admin UI for normal client creation. The seeding helper is a legacy/bootstrap path that registers clients via Better Auth’s official API:
   ```bash
   pnpm clients:seed
   ```
-  Copy the printed `client_id`/`client_secret` values into `.env.local` (and Vercel) so the trusted client configuration matches runtime credentials.
+  Configure the consuming app with the printed `client_id`/`client_secret` values as needed. Auther itself reads OAuth clients from the database.
 - Expose handler via `app/api/auth/[...betterAuth]/route.ts`.
 - Implement the login UI at `/sign-in`, ensure OIDC endpoints (`/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`, `/jwks`) are reachable, and wire up optional account-linking flows if required.
 - Add webhook endpoints for login events to trigger audit logging or user provisioning if needed.

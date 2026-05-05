@@ -26,7 +26,8 @@ async function main() {
         displayUsername,
       },
       headers: {
-        "x-internal-signup-secret": process.env.PAYLOAD_CLIENT_SECRET || "",
+        "x-internal-signup-secret":
+          process.env.INTERNAL_SIGNUP_SECRET || process.env.PAYLOAD_CLIENT_SECRET || "",
       },
     });
 
@@ -47,4 +48,3 @@ async function main() {
 }
 
 main();
-
