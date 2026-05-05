@@ -1,28 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { importJWK, importPKCS8, SignJWT, type JWK } from "jose";
-import { symmetricDecrypt } from "better-auth/crypto";
+import { SignJWT } from "jose";
 
-import { authorizationSpaces, oauthAccessToken, oauthClientSpaceLinks, resourceServers, user } from "@/db/schema";
 import { env } from "@/env";
-import { db } from "@/lib/db";
-import { jwksRepository } from "@/lib/repositories";
-import { rotateJwksIfNeeded } from "@/lib/jwks-rotation";
+import { importLatestJwtSigningKey } from "@/lib/auth/jwt-signing-key";
+import { resourceAccessTokenRepository } from "@/lib/repositories";
 
 const PAYLOAD_CONTENT_SPACE_SLUG = "payload-content";
 const PAYLOAD_CONTENT_RESOURCE_SERVER_SLUG = "payload-content-api";
-
-type ResourceTokenSource = {
-  accessTokenExpiresAt: Date | null;
-  clientId: string;
-  scope: string | null;
-  userEmail: string;
-  userId: string;
-  userName: string;
-  userRole: string | null;
-  resourceServerAudience: string;
-  resourceServerId: string;
-  authorizationSpaceId: string;
-};
+const PAYLOAD_RESOURCE_TOKEN_ACCESS_MODES = ["can_trigger_contexts", "full"] as const;
 
 export type ResourceAccessTokenResult = {
   accessToken: string;
@@ -42,97 +26,25 @@ const getTimestampSeconds = (value: Date | number | null | undefined): number | 
   return Math.floor(value / 1000);
 };
 
-async function findPayloadResourceTokenSource(
-  opaqueAccessToken: string,
-): Promise<ResourceTokenSource | null> {
+function getPayloadResourceTokenConfig() {
   const authorizationSpaceSlug = env.PAYLOAD_RESOURCE_TOKEN_SPACE_SLUG ?? PAYLOAD_CONTENT_SPACE_SLUG;
   const resourceServerSlug =
     env.PAYLOAD_RESOURCE_TOKEN_RESOURCE_SERVER_SLUG ?? PAYLOAD_CONTENT_RESOURCE_SERVER_SLUG;
 
-  const [row] = await db
-    .select({
-      accessTokenExpiresAt: oauthAccessToken.accessTokenExpiresAt,
-      clientId: oauthAccessToken.clientId,
-      scope: oauthAccessToken.scopes,
-      userId: user.id,
-      userEmail: user.email,
-      userName: user.name,
-      userRole: user.role,
-      resourceServerAudience: resourceServers.audience,
-      resourceServerId: resourceServers.id,
-      authorizationSpaceId: authorizationSpaces.id,
-    })
-    .from(oauthAccessToken)
-    .innerJoin(user, eq(oauthAccessToken.userId, user.id))
-    .innerJoin(oauthClientSpaceLinks, eq(oauthAccessToken.clientId, oauthClientSpaceLinks.clientId))
-    .innerJoin(authorizationSpaces, eq(oauthClientSpaceLinks.authorizationSpaceId, authorizationSpaces.id))
-    .innerJoin(resourceServers, eq(authorizationSpaces.resourceServerId, resourceServers.id))
-    .where(
-      and(
-        eq(oauthAccessToken.accessToken, opaqueAccessToken),
-        eq(authorizationSpaces.slug, authorizationSpaceSlug),
-        eq(authorizationSpaces.enabled, true),
-        eq(resourceServers.slug, resourceServerSlug),
-        eq(resourceServers.enabled, true),
-        inArray(oauthClientSpaceLinks.accessMode, ["can_trigger_contexts", "full"]),
-      ),
-    );
-
-  if (!row?.clientId) {
-    return null;
-  }
-
-  return row as ResourceTokenSource;
-}
-
-type JwtSigningKey = Parameters<SignJWT["sign"]>[0];
-
-function parseEncryptedPrivateKeyData(value: string): string {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return typeof parsed === "string" ? parsed : value;
-  } catch {
-    return value;
-  }
-}
-
-async function importLatestSigningKey(): Promise<{ key: JwtSigningKey; keyId: string; alg: string }> {
-  await rotateJwksIfNeeded();
-
-  const latestKey = await jwksRepository.findLatest();
-  if (!latestKey) {
-    throw new Error("No JWKS signing key is available.");
-  }
-
-  const decryptedPrivateKey = await symmetricDecrypt({
-    key: env.BETTER_AUTH_SECRET,
-    data: parseEncryptedPrivateKeyData(latestKey.privateKey),
-  });
-
-  const trimmedKey = decryptedPrivateKey.trim();
-
-  if (trimmedKey.startsWith("{")) {
-    const jwk = JSON.parse(trimmedKey) as JWK;
-    const alg = typeof jwk.alg === "string" ? jwk.alg : jwk.kty === "OKP" ? "EdDSA" : "RS256";
-
-    return {
-      key: await importJWK(jwk, alg),
-      keyId: latestKey.id,
-      alg,
-    };
-  }
-
   return {
-    key: await importPKCS8(trimmedKey, "RS256"),
-    keyId: latestKey.id,
-    alg: "RS256",
+    authorizationSpaceSlug,
+    resourceServerSlug,
   };
 }
 
 export async function mintPayloadResourceAccessToken(
   opaqueAccessToken: string,
 ): Promise<ResourceAccessTokenResult | null> {
-  const source = await findPayloadResourceTokenSource(opaqueAccessToken);
+  const source = await resourceAccessTokenRepository.findSourceByOpaqueAccessToken({
+    opaqueAccessToken,
+    ...getPayloadResourceTokenConfig(),
+    accessModes: [...PAYLOAD_RESOURCE_TOKEN_ACCESS_MODES],
+  });
 
   if (!source) {
     return null;
@@ -141,7 +53,11 @@ export async function mintPayloadResourceAccessToken(
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = getTimestampSeconds(source.accessTokenExpiresAt) ?? now + 2 * 24 * 60 * 60;
   const expiresIn = Math.max(1, expiresAt - now);
-  const signingKey = await importLatestSigningKey();
+  const signingKey = await importLatestJwtSigningKey({ rotateBeforeLoad: true });
+
+  if (!signingKey) {
+    throw new Error("No JWKS signing key is available.");
+  }
 
   const token = await new SignJWT({
     token_use: "access",

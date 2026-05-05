@@ -27,6 +27,7 @@ import { MetricsRepository } from "./metrics-repository";
 import { ResourceServerRepository } from "./resource-server-repository";
 import { AuthorizationSpaceRepository } from "./authorization-space-repository";
 import { OAuthClientSpaceLinkRepository } from "./oauth-client-space-link-repository";
+import { ResourceAccessTokenRepository } from "./resource-access-token-repository";
 
 // Export repository instances as singletons
 export const userRepository = new UserRepository();
@@ -43,6 +44,7 @@ export const metricsRepository = new MetricsRepository();
 export const resourceServerRepository = new ResourceServerRepository();
 export const authorizationSpaceRepository = new AuthorizationSpaceRepository();
 export const oauthClientSpaceLinkRepository = new OAuthClientSpaceLinkRepository();
+export const resourceAccessTokenRepository = new ResourceAccessTokenRepository();
 
 // Export types
 export type { UserEntity, UserWithAccounts, UserStats } from "./user-repository";
@@ -59,6 +61,7 @@ export type { FindMetricsOptions, AggregateResult } from "./metrics-repository";
 export type { ResourceServerEntity, SaveResourceServerData } from "./resource-server-repository";
 export type { AuthorizationSpaceEntity, SaveAuthorizationSpaceData } from "./authorization-space-repository";
 export type { OAuthClientSpaceLinkEntity, ClientSpaceAccessMode } from "./oauth-client-space-link-repository";
+export type { ResourceTokenSource, FindResourceTokenSourceParams } from "./resource-access-token-repository";
 export type { PaginatedResult } from "./base-repository";
 export { WebhookAwareRepository } from "./webhook-aware-repository";
 export type { WebhookAwareConfig, WebhookEventMapping } from "./webhook-aware-repository";

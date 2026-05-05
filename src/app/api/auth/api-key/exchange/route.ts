@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SignJWT, importPKCS8 } from "jose";
-import { symmetricDecrypt } from "better-auth/crypto";
+import { SignJWT } from "jose";
 
 import { auth } from "@/lib/auth";
 import { env } from "@/env";
-import { jwksRepository } from "@/lib/repositories";
 import { apiKeyPermissionResolver } from "@/lib/services";
 import { metricsService } from "@/lib/services/metrics-service";
+import { importLatestJwtSigningKey } from "@/lib/auth/jwt-signing-key";
 
 /**
  * JWT expiration time in seconds (15 minutes)
@@ -238,10 +237,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       );
     }
 
-    // Step 3: Fetch latest JWKS key from database
-    const latestKey = await jwksRepository.findLatest();
+    // Step 3: Load the latest JWKS signing key from Better Auth's key store.
+    let signingKey: Awaited<ReturnType<typeof importLatestJwtSigningKey>>;
+    try {
+      signingKey = await importLatestJwtSigningKey();
+    } catch (error) {
+      console.error("[api-key-exchange] Failed to load signing key", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return NextResponse.json(
+        {
+          error: "internal_error",
+          message: "Failed to process signing key",
+        },
+        { status: 500 }
+      );
+    }
 
-    if (!latestKey) {
+    if (!signingKey) {
       console.error("[api-key-exchange] No JWKS key found in database");
       return NextResponse.json(
         {
@@ -252,46 +265,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       );
     }
 
-    // Step 3: Decrypt private key using BETTER_AUTH_SECRET
-    let decryptedPrivateKey: string;
-    try {
-      decryptedPrivateKey = await symmetricDecrypt({
-        key: env.BETTER_AUTH_SECRET,
-        data: latestKey.privateKey,
-      });
-    } catch (error) {
-      console.error("[api-key-exchange] Failed to decrypt private key", {
-        error: error instanceof Error ? error.message : String(error),
-        keyId: latestKey.id,
-      });
-      return NextResponse.json(
-        {
-          error: "internal_error",
-          message: "Failed to process signing key",
-        },
-        { status: 500 }
-      );
-    }
-
-    // Step 4: Import the private key for signing
-    let privateKey: CryptoKey;
-    try {
-      privateKey = await importPKCS8(decryptedPrivateKey, "RS256");
-    } catch (error) {
-      console.error("[api-key-exchange] Failed to import private key", {
-        error: error instanceof Error ? error.message : String(error),
-        keyId: latestKey.id,
-      });
-      return NextResponse.json(
-        {
-          error: "internal_error",
-          message: "Failed to process signing key",
-        },
-        { status: 500 }
-      );
-    }
-
-    // Step 5: Create and sign JWT
+    // Step 4: Create and sign JWT
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = now + JWT_EXPIRATION_SECONDS;
 
@@ -308,8 +282,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
         apiKeyId: apiKeyRecord?.id,
       })
         .setProtectedHeader({
-          alg: "RS256",
-          kid: latestKey.id,
+          alg: signingKey.alg,
+          kid: signingKey.keyId,
           typ: "JWT",
         })
         .setIssuer(env.JWT_ISSUER)
@@ -317,7 +291,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
         .setSubject(userId)
         .setIssuedAt(now)
         .setExpirationTime(expiresAt)
-        .sign(privateKey);
+        .sign(signingKey.key);
 
       // Log successful exchange for audit trail
       console.info("[api-key-exchange] Successful token exchange", {
@@ -341,7 +315,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       console.error("[api-key-exchange] Failed to sign JWT", {
         error: error instanceof Error ? error.message : String(error),
         userId,
-        keyId: latestKey.id,
+        keyId: signingKey.keyId,
       });
       return NextResponse.json(
         {
