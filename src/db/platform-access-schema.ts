@@ -16,7 +16,10 @@ export const registrationContexts = sqliteTable(
     "registration_contexts",
     {
         id: text("id").primaryKey(),
-        slug: text("slug").notNull().unique(), // e.g., "blog-commenter", "platform-admin"
+        // Enforced by scripts/ensure-sqlite-indexes.ts. Keeping this unique
+        // index out of drizzle-kit push avoids repeat deploy failures when a
+        // partially applied push already created registration_contexts_slug_unique.
+        slug: text("slug").notNull(), // e.g., "blog-commenter", "platform-admin"
         name: text("name").notNull(),
         description: text("description"),
 
@@ -53,7 +56,6 @@ export const registrationContexts = sqliteTable(
             .default(sql`(unixepoch())`),
     },
     (table) => [
-        index("registration_contexts_slug_idx").on(table.slug),
         index("registration_contexts_client_id_idx").on(table.clientId),
         index("registration_contexts_trigger_idx").on(table.triggerKind, table.triggerClientId),
         index("registration_contexts_target_idx").on(table.targetKind, table.targetId),
