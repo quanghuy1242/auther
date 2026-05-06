@@ -19,7 +19,8 @@ import { assignAuthorizationModelSpace } from "../../actions";
 import { SpaceDetailTabs } from "../space-detail-tabs";
 import { grantSpacePermission } from "./actions";
 import { ServiceAccountsPanel } from "./service-accounts-panel";
-import { buildSpaceModelEditorJson, SpaceModelEditor } from "./space-model-editor";
+import { buildSpaceModelEditorJson } from "./model-editor-utils";
+import { SpaceModelEditor } from "./space-model-editor";
 import { SpaceGrantsTable } from "./space-grants-table";
 
 type AuthorizationSpaceAccessPageProps = {
