@@ -19,6 +19,7 @@ import { assignAuthorizationModelSpace } from "../../actions";
 import { SpaceDetailTabs } from "../space-detail-tabs";
 import { grantSpacePermission } from "./actions";
 import { ServiceAccountsPanel } from "./service-accounts-panel";
+import { buildSpaceModelEditorJson, SpaceModelEditor } from "./space-model-editor";
 import { SpaceGrantsTable } from "./space-grants-table";
 
 type AuthorizationSpaceAccessPageProps = {
@@ -61,6 +62,7 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
   const assignedModels = models
     .filter((model) => model.authorizationSpaceId === space.id)
     .sort((a, b) => a.entityType.localeCompare(b.entityType));
+  const modelEditorJson = buildSpaceModelEditorJson(assignedModels);
   const availableModels = models
     .filter((model) => model.authorizationSpaceId !== space.id)
     .sort((a, b) => a.entityType.localeCompare(b.entityType));
@@ -110,6 +112,11 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
       <SpaceDetailTabs spaceId={space.id} />
 
       <div className="space-y-6">
+        <SpaceModelEditor
+          spaceId={space.id}
+          initialModelJson={modelEditorJson}
+        />
+
         <Card>
           <CardHeader>
             <CardTitle>Model Ownership</CardTitle>

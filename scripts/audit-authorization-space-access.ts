@@ -1,7 +1,5 @@
-import { sql } from "drizzle-orm";
-import { authorizationModelAliases, authorizationModels, accessTuples } from "@/db/rebac-schema";
-import { oauthClientSpaceLinks } from "@/db/app-schema";
-import { db } from "@/lib/db";
+import { notInArray, sql } from "drizzle-orm";
+import { loadEnvironment } from "./utils";
 
 async function count(query: PromiseLike<unknown[]>): Promise<number> {
   const rows = await query;
@@ -9,20 +7,33 @@ async function count(query: PromiseLike<unknown[]>): Promise<number> {
 }
 
 async function main() {
+  loadEnvironment();
+
+  const { authorizationModelAliases, authorizationModels, accessTuples } = await import("@/db/rebac-schema");
+  const { oauthClientSpaceLinks } = await import("@/db/app-schema");
+  const { SYSTEM_MODELS } = await import("@/lib/auth/system-models");
+  const { db } = await import("@/lib/db");
+  const clientPrefixPattern = "client\\_%";
+  const systemEntityTypes = SYSTEM_MODELS.map((model) => model.entityType);
+
   const [
     spaceModels,
     clientPrefixedModels,
     modelsWithoutSpace,
     clientPrefixedTuples,
-    tuplesWithoutSpace,
+    nonSystemTuplesWithoutSpace,
     oauthClientSpaceLinkCount,
     activeAliases,
   ] = await Promise.all([
     count(db.select({ id: authorizationModels.id }).from(authorizationModels).where(sql`${authorizationModels.authorizationSpaceId} IS NOT NULL`)),
-    count(db.select({ id: authorizationModels.id }).from(authorizationModels).where(sql`${authorizationModels.entityType} LIKE 'client_%'`)),
+    count(db.select({ id: authorizationModels.id }).from(authorizationModels).where(sql`${authorizationModels.entityType} LIKE ${clientPrefixPattern} ESCAPE '\\'`)),
     count(db.select({ id: authorizationModels.id }).from(authorizationModels).where(sql`${authorizationModels.authorizationSpaceId} IS NULL`)),
-    count(db.select({ id: accessTuples.id }).from(accessTuples).where(sql`${accessTuples.entityType} LIKE 'client_%'`)),
-    count(db.select({ id: accessTuples.id }).from(accessTuples).where(sql`${accessTuples.authorizationSpaceId} IS NULL`)),
+    count(db.select({ id: accessTuples.id }).from(accessTuples).where(sql`${accessTuples.entityType} LIKE ${clientPrefixPattern} ESCAPE '\\'`)),
+    count(
+      db.select({ id: accessTuples.id })
+        .from(accessTuples)
+        .where(sql`${accessTuples.authorizationSpaceId} IS NULL AND ${notInArray(accessTuples.entityType, systemEntityTypes)}`)
+    ),
     count(db.select({ id: oauthClientSpaceLinks.id }).from(oauthClientSpaceLinks)),
     count(db.select({ id: authorizationModelAliases.id }).from(authorizationModelAliases).where(sql`${authorizationModelAliases.retiredAt} IS NULL`)),
   ]);
@@ -34,7 +45,7 @@ async function main() {
       authorizationSpaceId: authorizationModels.authorizationSpaceId,
     })
     .from(authorizationModels)
-    .where(sql`${authorizationModels.entityType} LIKE 'client_%' AND ${authorizationModels.authorizationSpaceId} IS NULL`);
+    .where(sql`${authorizationModels.entityType} LIKE ${clientPrefixPattern} ESCAPE '\\' AND ${authorizationModels.authorizationSpaceId} IS NULL`);
 
   const tupleSamples = await db
     .select({
@@ -46,7 +57,7 @@ async function main() {
       authorizationSpaceId: accessTuples.authorizationSpaceId,
     })
     .from(accessTuples)
-    .where(sql`${accessTuples.entityType} LIKE 'client_%' OR ${accessTuples.authorizationSpaceId} IS NULL`)
+    .where(sql`${accessTuples.entityType} LIKE ${clientPrefixPattern} ESCAPE '\\' OR (${accessTuples.authorizationSpaceId} IS NULL AND ${notInArray(accessTuples.entityType, systemEntityTypes)})`)
     .limit(25);
 
   console.log(JSON.stringify({
@@ -56,7 +67,7 @@ async function main() {
       clientPrefixedModels,
       modelsWithoutSpace,
       clientPrefixedTuples,
-      tuplesWithoutSpace,
+      nonSystemTuplesWithoutSpace,
       oauthClientSpaceLinkCount,
       activeAliases,
     },

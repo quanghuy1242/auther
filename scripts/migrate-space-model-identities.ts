@@ -1,8 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { authorizationModels } from "@/db/rebac-schema";
-import { db } from "@/lib/db";
-import { AuthorizationModelRepository } from "@/lib/repositories/authorization-model-repository";
-import { TupleRepository } from "@/lib/repositories/tuple-repository";
+import { loadEnvironment } from "./utils";
 
 function modelKeyFromEntityType(entityType: string): string {
   return entityType.includes(":")
@@ -11,6 +8,13 @@ function modelKeyFromEntityType(entityType: string): string {
 }
 
 async function main() {
+  loadEnvironment();
+
+  const { authorizationModels } = await import("@/db/rebac-schema");
+  const { db } = await import("@/lib/db");
+  const { AuthorizationModelRepository } = await import("@/lib/repositories/authorization-model-repository");
+  const { TupleRepository } = await import("@/lib/repositories/tuple-repository");
+
   const apply = process.argv.includes("--apply");
   const repo = new AuthorizationModelRepository();
   const tupleRepo = new TupleRepository();

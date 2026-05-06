@@ -1,13 +1,5 @@
 import { sql } from "drizzle-orm";
-import { oauthClientMetadata, userClientAccess, groupClientAccess } from "@/db/app-schema";
-import { accessTuples } from "@/db/rebac-schema";
-import {
-  platformInvites,
-  permissionRequests,
-  permissionRules,
-  registrationContexts,
-} from "@/db/platform-access-schema";
-import { db } from "@/lib/db";
+import { loadEnvironment } from "./utils";
 
 async function count(query: PromiseLike<unknown[]>): Promise<number> {
   const rows = await query;
@@ -15,6 +7,18 @@ async function count(query: PromiseLike<unknown[]>): Promise<number> {
 }
 
 async function main() {
+  loadEnvironment();
+
+  const { oauthClientMetadata, userClientAccess, groupClientAccess } = await import("@/db/app-schema");
+  const { accessTuples } = await import("@/db/rebac-schema");
+  const {
+    platformInvites,
+    permissionRequests,
+    permissionRules,
+    registrationContexts,
+  } = await import("@/db/platform-access-schema");
+  const { db } = await import("@/lib/db");
+
   const [
     legacyOAuthClientAccessTuples,
     contextsWithClientId,

@@ -8,8 +8,8 @@ import { config as loadEnv } from "dotenv";
  * Loads environment variables from .env files
  */
 export function loadEnvironment(): void {
-  loadEnv({ path: ".env.local", override: true });
-  loadEnv({ path: ".env", override: false });
+  loadEnv({ path: ".env.local", override: true, quiet: true });
+  loadEnv({ path: ".env", override: false, quiet: true });
 }
 
 /**
