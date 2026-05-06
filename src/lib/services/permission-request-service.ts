@@ -32,6 +32,24 @@ export interface RequestContext {
     };
 }
 
+function buildRequestTarget(clientId: string | null) {
+    if (clientId) {
+        return {
+            clientId: null,
+            requestKind: "oauth_client_login",
+            targetKind: "oauth_client_login",
+            targetId: clientId,
+        };
+    }
+
+    return {
+        clientId: null,
+        requestKind: "platform",
+        targetKind: "platform",
+        targetId: "*",
+    };
+}
+
 /**
  * Service for managing permission requests and evaluating rules.
  */
@@ -86,8 +104,8 @@ export class PermissionRequestService {
                 if (shouldReject) {
                     // Create request and immediately reject
                     const request = await permissionRequestRepo.create({
+                        ...buildRequestTarget(clientId),
                         userId,
-                        clientId,
                         relation,
                         reason,
                         status: "rejected",
@@ -111,8 +129,8 @@ export class PermissionRequestService {
                 if (shouldApprove) {
                     // Create request and immediately approve
                     const request = await permissionRequestRepo.create({
+                        ...buildRequestTarget(clientId),
                         userId,
-                        clientId,
                         relation,
                         reason,
                         status: "approved",
@@ -134,8 +152,8 @@ export class PermissionRequestService {
         const defaultAction = rule?.defaultAction || "require_approval";
         if (defaultAction === "auto_approve") {
             const request = await permissionRequestRepo.create({
+                ...buildRequestTarget(clientId),
                 userId,
-                clientId,
                 relation,
                 reason,
                 status: "approved",
@@ -148,8 +166,8 @@ export class PermissionRequestService {
 
         if (defaultAction === "auto_reject") {
             const request = await permissionRequestRepo.create({
+                ...buildRequestTarget(clientId),
                 userId,
-                clientId,
                 relation,
                 reason,
                 status: "rejected",
@@ -161,8 +179,8 @@ export class PermissionRequestService {
 
         // Default: require approval, create pending request
         const request = await permissionRequestRepo.create({
+            ...buildRequestTarget(clientId),
             userId,
-            clientId,
             relation,
             reason,
             status: "pending",

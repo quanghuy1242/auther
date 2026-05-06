@@ -25,6 +25,12 @@ export const registrationContexts = sqliteTable(
         clientId: text("client_id").references(() => oauthApplication.clientId, {
             onDelete: "cascade",
         }),
+        triggerKind: text("trigger_kind").default("platform"),
+        triggerClientId: text("trigger_client_id").references(() => oauthApplication.clientId, {
+            onDelete: "set null",
+        }),
+        targetKind: text("target_kind").default("platform"),
+        targetId: text("target_id").default("*"),
 
         // Source restrictions for open registration
         allowedOrigins: text("allowed_origins", { mode: "json" }).$type<string[]>(), // ["https://blog.example.com"]
@@ -49,6 +55,8 @@ export const registrationContexts = sqliteTable(
     (table) => [
         index("registration_contexts_slug_idx").on(table.slug),
         index("registration_contexts_client_id_idx").on(table.clientId),
+        index("registration_contexts_trigger_idx").on(table.triggerKind, table.triggerClientId),
+        index("registration_contexts_target_idx").on(table.targetKind, table.targetId),
     ]
 );
 
@@ -102,6 +110,46 @@ export const platformInvites = sqliteTable(
 );
 
 // ========================================
+// Pending Registration Context Applications
+// ========================================
+
+export const pendingRegistrationContextApplications = sqliteTable(
+    "pending_registration_context_applications",
+    {
+        id: text("id").primaryKey(),
+        email: text("email").notNull(),
+        userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+        contextSlug: text("context_slug")
+            .notNull()
+            .references(() => registrationContexts.slug),
+        inviteId: text("invite_id").references(() => platformInvites.id, {
+            onDelete: "set null",
+        }),
+        triggerKind: text("trigger_kind").notNull().default("manual"),
+        triggerClientId: text("trigger_client_id").references(() => oauthApplication.clientId, {
+            onDelete: "set null",
+        }),
+        status: text("status").notNull().default("pending"),
+        attempts: integer("attempts").notNull().default(0),
+        lastError: text("last_error"),
+        idempotencyKey: text("idempotency_key").notNull().unique(),
+        createdAt: integer("created_at", { mode: "timestamp" })
+            .notNull()
+            .default(sql`(unixepoch())`),
+        updatedAt: integer("updated_at", { mode: "timestamp" })
+            .notNull()
+            .default(sql`(unixepoch())`),
+        appliedAt: integer("applied_at", { mode: "timestamp" }),
+    },
+    (table) => [
+        index("pending_context_applications_email_idx").on(table.email),
+        index("pending_context_applications_user_id_idx").on(table.userId),
+        index("pending_context_applications_status_idx").on(table.status),
+        index("pending_context_applications_context_slug_idx").on(table.contextSlug),
+    ]
+);
+
+// ========================================
 // Permission Requests
 // ========================================
 
@@ -124,6 +172,11 @@ export const permissionRequests = sqliteTable(
         clientId: text("client_id").references(() => oauthApplication.clientId, {
             onDelete: "cascade",
         }),
+        requestKind: text("request_kind").default("platform"),
+        targetKind: text("target_kind").default("platform"),
+        targetId: text("target_id").default("*"),
+        targetEntityTypeId: text("target_entity_type_id"),
+        targetEntityId: text("target_entity_id"),
         relation: text("relation").notNull(), // The relation they want
 
         // Request details
@@ -143,6 +196,7 @@ export const permissionRequests = sqliteTable(
         index("permission_requests_user_id_idx").on(table.userId),
         index("permission_requests_client_id_idx").on(table.clientId),
         index("permission_requests_status_idx").on(table.status),
+        index("permission_requests_target_idx").on(table.targetKind, table.targetId),
     ]
 );
 
@@ -164,6 +218,12 @@ export const permissionRules = sqliteTable(
         clientId: text("client_id").references(() => oauthApplication.clientId, {
             onDelete: "cascade",
         }),
+        triggerKind: text("trigger_kind").default("platform"),
+        triggerClientId: text("trigger_client_id").references(() => oauthApplication.clientId, {
+            onDelete: "set null",
+        }),
+        targetKind: text("target_kind").default("platform"),
+        targetId: text("target_id").default("*"),
 
         // Which relation this rule applies to
         relation: text("relation").notNull(),
@@ -199,6 +259,8 @@ export const permissionRules = sqliteTable(
     (table) => [
         index("permission_rules_client_id_idx").on(table.clientId),
         index("permission_rules_relation_idx").on(table.relation),
+        index("permission_rules_trigger_idx").on(table.triggerKind, table.triggerClientId),
+        index("permission_rules_target_idx").on(table.targetKind, table.targetId),
     ]
 );
 

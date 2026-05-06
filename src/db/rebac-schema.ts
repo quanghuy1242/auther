@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { authorizationSpaces } from "./app-schema";
 
 export const accessTuples = sqliteTable(
@@ -104,5 +104,33 @@ export const authorizationModels = sqliteTable(
   (table) => [
     index("authorization_models_entity_type_idx").on(table.entityType),
     index("authorization_models_space_id_idx").on(table.authorizationSpaceId),
+  ]
+);
+
+export const authorizationModelAliases = sqliteTable(
+  "authorization_model_aliases",
+  {
+    id: text("id").primaryKey(),
+    authorizationModelId: text("authorization_model_id")
+      .notNull()
+      .references(() => authorizationModels.id, { onDelete: "cascade" }),
+    authorizationSpaceId: text("authorization_space_id")
+      .notNull()
+      .references(() => authorizationSpaces.id, { onDelete: "cascade" }),
+    aliasEntityType: text("alias_entity_type").notNull(),
+    canonicalEntityType: text("canonical_entity_type").notNull(),
+    source: text("source").notNull().default("legacy_client_prefix"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    retiredAt: integer("retired_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    index("authorization_model_aliases_model_idx").on(table.authorizationModelId),
+    index("authorization_model_aliases_space_idx").on(table.authorizationSpaceId),
+    uniqueIndex("authorization_model_aliases_space_alias_unique").on(
+      table.authorizationSpaceId,
+      table.aliasEntityType
+    ),
   ]
 );

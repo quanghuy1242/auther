@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
-import { accessTuples, authorizationModels } from "@/db/rebac-schema";
+import { accessTuples, authorizationModelAliases, authorizationModels } from "@/db/rebac-schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
+import { assertNoOAuthClientPlatformAccessWrite } from "@/lib/auth/legacy-write-guard";
 import {
   emitGrantConditionUpdatedEvent,
   emitGrantCreatedEvent,
@@ -55,7 +56,27 @@ export class TupleRepository {
       .where(eq(authorizationModels.entityType, params.entityType))
       .limit(1);
 
-    return model?.authorizationSpaceId ?? null;
+    if (model?.authorizationSpaceId) {
+      return model.authorizationSpaceId;
+    }
+
+    if (params.authorizationSpaceId === undefined) {
+      return null;
+    }
+
+    const [alias] = await db
+      .select({ authorizationSpaceId: authorizationModelAliases.authorizationSpaceId })
+      .from(authorizationModelAliases)
+      .where(
+        and(
+          eq(authorizationModelAliases.authorizationSpaceId, params.authorizationSpaceId),
+          eq(authorizationModelAliases.aliasEntityType, params.entityType),
+          sql`${authorizationModelAliases.retiredAt} IS NULL`
+        )
+      )
+      .limit(1);
+
+    return alias?.authorizationSpaceId ?? null;
   }
 
   private buildTupleId(params: CreateTupleParams): string {
@@ -151,6 +172,17 @@ export class TupleRepository {
    */
   async create(params: CreateTupleParams): Promise<Tuple | null> {
     try {
+      assertNoOAuthClientPlatformAccessWrite({
+        entityType: params.entityType,
+        relation: params.relation,
+        operation: "TupleRepository.create",
+        payload: {
+          entityId: params.entityId,
+          subjectType: params.subjectType,
+          subjectId: params.subjectId,
+        },
+      });
+
       const id = this.buildTupleId(params);
       const authorizationSpaceId = await this.resolveAuthorizationSpaceId(params);
       const [tuple] = await db
@@ -633,6 +665,17 @@ export class TupleRepository {
     entityTypeId?: string | null;
     condition?: string | null;
   }): Promise<{ created: boolean; removedCount: number }> {
+    assertNoOAuthClientPlatformAccessWrite({
+      entityType: params.entityType,
+      relation: params.relation,
+      operation: "TupleRepository.replaceSubjectRelationAtomic",
+      payload: {
+        entityId: params.entityId,
+        subjectType: params.subjectType,
+        subjectId: params.subjectId,
+      },
+    });
+
     const relationCondition = params.subjectRelation
       ? eq(accessTuples.subjectRelation, params.subjectRelation)
       : sql`${accessTuples.subjectRelation} IS NULL`;

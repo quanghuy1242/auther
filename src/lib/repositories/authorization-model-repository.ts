@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
-import { authorizationModels } from "@/db/rebac-schema";
-import { eq } from "drizzle-orm";
+import { authorizationModelAliases, authorizationModels } from "@/db/rebac-schema";
+import { and, eq, isNull } from "drizzle-orm";
 import { authorizationModelSchema, AuthorizationModelDefinition } from "@/schemas/rebac";
 import { TupleRepository } from "./tuple-repository";
 import { registrationContextRepo } from "./platform-access-repository";
+import { assertNoClientPrefixedModelWrite } from "@/lib/auth/legacy-write-guard";
 
 export interface AuthorizationModelEntity {
     id: string;
@@ -12,6 +13,17 @@ export interface AuthorizationModelEntity {
     definition: AuthorizationModelDefinition;
     createdAt: Date;
     updatedAt: Date;
+}
+
+export interface AuthorizationModelAliasEntity {
+    id: string;
+    authorizationModelId: string;
+    authorizationSpaceId: string;
+    aliasEntityType: string;
+    canonicalEntityType: string;
+    source: string;
+    createdAt: Date;
+    retiredAt: Date | null;
 }
 
 export interface ValidationResult {
@@ -55,6 +67,118 @@ export class AuthorizationModelRepository {
             console.error("AuthorizationModelRepository.findByEntityType error:", error);
             return null;
         }
+    }
+
+    async findByEntityTypeOrAlias(
+        entityType: string,
+        authorizationSpaceId?: string | null
+    ): Promise<AuthorizationModelEntity | null> {
+        const direct = await this.findByEntityType(entityType);
+        if (direct) return direct;
+
+        if (!authorizationSpaceId) return null;
+
+        const alias = await this.findActiveAlias(authorizationSpaceId, entityType);
+        if (!alias) return null;
+
+        return this.findById(alias.authorizationModelId);
+    }
+
+    async findActiveAlias(
+        authorizationSpaceId: string,
+        aliasEntityType: string
+    ): Promise<AuthorizationModelAliasEntity | null> {
+        try {
+            const [record] = await db
+                .select()
+                .from(authorizationModelAliases)
+                .where(
+                    and(
+                        eq(authorizationModelAliases.authorizationSpaceId, authorizationSpaceId),
+                        eq(authorizationModelAliases.aliasEntityType, aliasEntityType),
+                        isNull(authorizationModelAliases.retiredAt)
+                    )
+                )
+                .limit(1);
+
+            return record ?? null;
+        } catch (error) {
+            console.error("AuthorizationModelRepository.findActiveAlias error:", error);
+            return null;
+        }
+    }
+
+    async findActiveAliasesForModel(
+        authorizationModelId: string
+    ): Promise<AuthorizationModelAliasEntity[]> {
+        try {
+            return await db
+                .select()
+                .from(authorizationModelAliases)
+                .where(
+                    and(
+                        eq(authorizationModelAliases.authorizationModelId, authorizationModelId),
+                        isNull(authorizationModelAliases.retiredAt)
+                    )
+                );
+        } catch (error) {
+            console.error("AuthorizationModelRepository.findActiveAliasesForModel error:", error);
+            return [];
+        }
+    }
+
+    async createAlias(params: {
+        authorizationModelId: string;
+        authorizationSpaceId: string;
+        aliasEntityType: string;
+        canonicalEntityType: string;
+        source?: string;
+    }): Promise<AuthorizationModelAliasEntity> {
+        const id = crypto.randomUUID();
+        await db
+            .insert(authorizationModelAliases)
+            .values({
+                id,
+                authorizationModelId: params.authorizationModelId,
+                authorizationSpaceId: params.authorizationSpaceId,
+                aliasEntityType: params.aliasEntityType,
+                canonicalEntityType: params.canonicalEntityType,
+                source: params.source ?? "legacy_client_prefix",
+            })
+            .onConflictDoUpdate({
+                target: [
+                    authorizationModelAliases.authorizationSpaceId,
+                    authorizationModelAliases.aliasEntityType,
+                ],
+                set: {
+                    authorizationModelId: params.authorizationModelId,
+                    canonicalEntityType: params.canonicalEntityType,
+                    source: params.source ?? "legacy_client_prefix",
+                    retiredAt: null,
+                },
+            });
+
+        const alias = await this.findActiveAlias(params.authorizationSpaceId, params.aliasEntityType);
+        if (!alias) {
+            throw new Error("Failed to create authorization model alias");
+        }
+        return alias;
+    }
+
+    async retireAlias(authorizationSpaceId: string, aliasEntityType: string): Promise<boolean> {
+        const result = await db
+            .update(authorizationModelAliases)
+            .set({ retiredAt: new Date() })
+            .where(
+                and(
+                    eq(authorizationModelAliases.authorizationSpaceId, authorizationSpaceId),
+                    eq(authorizationModelAliases.aliasEntityType, aliasEntityType),
+                    isNull(authorizationModelAliases.retiredAt)
+                )
+            )
+            .returning({ id: authorizationModelAliases.id });
+
+        return result.length > 0;
     }
 
     /**
@@ -357,6 +481,12 @@ export class AuthorizationModelRepository {
         options?: { authorizationSpaceId?: string | null }
     ): Promise<void> {
         try {
+            assertNoClientPrefixedModelWrite({
+                entityType,
+                operation: "AuthorizationModelRepository.upsert",
+                payload: { authorizationSpaceId: options?.authorizationSpaceId ?? null },
+            });
+
             // Validate against Zod schema
             const parsedDefinition = authorizationModelSchema.parse(definition);
 
@@ -399,6 +529,18 @@ export class AuthorizationModelRepository {
     async upsertForClient(clientId: string, definition: AuthorizationModelDefinition): Promise<void> {
         const entityType = `client_${clientId}`;
         return this.upsert(entityType, definition);
+    }
+
+    async upsertForAuthorizationSpace(params: {
+        authorizationSpaceId: string;
+        modelKey: string;
+        definition: AuthorizationModelDefinition;
+        entityType?: string;
+    }): Promise<void> {
+        const entityType = params.entityType ?? `space_${params.authorizationSpaceId}:${params.modelKey}`;
+        return this.upsert(entityType, params.definition, {
+            authorizationSpaceId: params.authorizationSpaceId,
+        });
     }
 
     async updateAuthorizationSpace(
@@ -471,6 +613,12 @@ export class AuthorizationModelRepository {
      */
     async updateEntityType(id: string, newEntityType: string): Promise<{ success: boolean; error?: string }> {
         try {
+            assertNoClientPrefixedModelWrite({
+                entityType: newEntityType,
+                operation: "AuthorizationModelRepository.updateEntityType",
+                payload: { id },
+            });
+
             await db
                 .update(authorizationModels)
                 .set({

@@ -3,10 +3,12 @@ import { db } from "@/lib/db";
 import {
     registrationContexts,
     platformInvites,
+    pendingRegistrationContextApplications,
     permissionRequests,
     permissionRules,
     policyTemplates,
 } from "@/db/schema";
+import { assertLegacyWriteAllowed } from "@/lib/auth/legacy-write-guard";
 
 // ========================================
 // Types
@@ -17,6 +19,11 @@ export type NewRegistrationContext = typeof registrationContexts.$inferInsert;
 
 export type PlatformInvite = typeof platformInvites.$inferSelect;
 export type NewPlatformInvite = typeof platformInvites.$inferInsert;
+
+export type PendingRegistrationContextApplication =
+    typeof pendingRegistrationContextApplications.$inferSelect;
+export type NewPendingRegistrationContextApplication =
+    typeof pendingRegistrationContextApplications.$inferInsert;
 
 export type PermissionRequest = typeof permissionRequests.$inferSelect;
 export type NewPermissionRequest = typeof permissionRequests.$inferInsert;
@@ -65,8 +72,34 @@ export class RegistrationContextRepository {
     async create(
         data: Omit<NewRegistrationContext, "id">
     ): Promise<RegistrationContext> {
+        if (!data.triggerKind || !data.targetKind) {
+            assertLegacyWriteAllowed({
+                category: "nullable_client_registration_context",
+                operation: "RegistrationContextRepository.create",
+                payload: { slug: data.slug, clientId: data.clientId ?? null },
+            });
+        }
+
         const id = crypto.randomUUID();
         await db.insert(registrationContexts).values({ ...data, id });
+        return this.findBySlug(data.slug) as Promise<RegistrationContext>;
+    }
+
+    async createTargeted(
+        data: Omit<NewRegistrationContext, "id" | "clientId"> & {
+            triggerKind: string;
+            triggerClientId?: string | null;
+            targetKind: string;
+            targetId: string;
+        }
+    ): Promise<RegistrationContext> {
+        const id = crypto.randomUUID();
+        await db.insert(registrationContexts).values({
+            ...data,
+            id,
+            clientId: null,
+            triggerClientId: data.triggerClientId ?? null,
+        });
         return this.findBySlug(data.slug) as Promise<RegistrationContext>;
     }
 
@@ -134,6 +167,88 @@ export class RegistrationContextRepository {
         }
 
         return count;
+    }
+}
+
+// ========================================
+// Pending Registration Context Application Repository
+// ========================================
+
+export class PendingRegistrationContextApplicationRepository {
+    async findById(id: string): Promise<PendingRegistrationContextApplication | null> {
+        const results = await db
+            .select()
+            .from(pendingRegistrationContextApplications)
+            .where(eq(pendingRegistrationContextApplications.id, id))
+            .limit(1);
+        return results[0] || null;
+    }
+
+    async findPendingByEmail(email: string): Promise<PendingRegistrationContextApplication[]> {
+        return db
+            .select()
+            .from(pendingRegistrationContextApplications)
+            .where(
+                and(
+                    eq(pendingRegistrationContextApplications.email, email.toLowerCase()),
+                    eq(pendingRegistrationContextApplications.status, "pending")
+                )
+            );
+    }
+
+    async create(
+        data: Omit<NewPendingRegistrationContextApplication, "id" | "email">
+            & { email: string }
+    ): Promise<PendingRegistrationContextApplication> {
+        const id = crypto.randomUUID();
+        await db
+            .insert(pendingRegistrationContextApplications)
+            .values({
+                ...data,
+                id,
+                email: data.email.toLowerCase(),
+            })
+            .onConflictDoNothing({
+                target: pendingRegistrationContextApplications.idempotencyKey,
+            });
+
+        const existing = await db
+            .select()
+            .from(pendingRegistrationContextApplications)
+            .where(eq(pendingRegistrationContextApplications.idempotencyKey, data.idempotencyKey))
+            .limit(1);
+
+        if (!existing[0]) {
+            throw new Error("Failed to create pending registration context application");
+        }
+        return existing[0];
+    }
+
+    async markApplied(id: string, userId: string): Promise<boolean> {
+        const result = await db
+            .update(pendingRegistrationContextApplications)
+            .set({
+                userId,
+                status: "applied",
+                appliedAt: new Date(),
+                updatedAt: new Date(),
+                lastError: null,
+            })
+            .where(eq(pendingRegistrationContextApplications.id, id));
+        return result.rowsAffected > 0;
+    }
+
+    async markFailed(id: string, error: string): Promise<boolean> {
+        const result = await db
+            .update(pendingRegistrationContextApplications)
+            .set({
+                status: "failed",
+                attempts: sql`${pendingRegistrationContextApplications.attempts} + 1`,
+                lastError: error,
+                updatedAt: new Date(),
+            })
+            .where(eq(pendingRegistrationContextApplications.id, id));
+        return result.rowsAffected > 0;
     }
 }
 
@@ -285,8 +400,32 @@ export class PermissionRequestRepository {
     async create(
         data: Omit<NewPermissionRequest, "id">
     ): Promise<PermissionRequest> {
+        if (!data.requestKind || !data.targetKind) {
+            assertLegacyWriteAllowed({
+                category: "nullable_client_permission_request",
+                operation: "PermissionRequestRepository.create",
+                payload: {
+                    userId: data.userId,
+                    clientId: data.clientId ?? null,
+                    relation: data.relation,
+                },
+            });
+        }
+
         const id = crypto.randomUUID();
         await db.insert(permissionRequests).values({ ...data, id });
+        return this.findById(id) as Promise<PermissionRequest>;
+    }
+
+    async createTargeted(
+        data: Omit<NewPermissionRequest, "id" | "clientId"> & {
+            requestKind: string;
+            targetKind: string;
+            targetId: string;
+        }
+    ): Promise<PermissionRequest> {
+        const id = crypto.randomUUID();
+        await db.insert(permissionRequests).values({ ...data, id, clientId: null });
         return this.findById(id) as Promise<PermissionRequest>;
     }
 
@@ -319,9 +458,21 @@ export class PermissionRequestRepository {
             eq(permissionRequests.status, "pending"),
         ];
         if (clientId === null) {
-            conditions.push(sql`${permissionRequests.clientId} IS NULL`);
+            conditions.push(sql`(
+                ${permissionRequests.clientId} IS NULL
+                AND (
+                    ${permissionRequests.targetKind} IS NULL
+                    OR (${permissionRequests.targetKind} = 'platform' AND ${permissionRequests.targetId} = '*')
+                )
+            )`);
         } else {
-            conditions.push(eq(permissionRequests.clientId, clientId));
+            conditions.push(sql`(
+                ${permissionRequests.clientId} = ${clientId}
+                OR (
+                    ${permissionRequests.targetKind} = 'oauth_client_login'
+                    AND ${permissionRequests.targetId} = ${clientId}
+                )
+            )`);
         }
         const results = await db
             .select()
@@ -378,8 +529,34 @@ export class PermissionRuleRepository {
     }
 
     async create(data: Omit<NewPermissionRule, "id">): Promise<PermissionRule> {
+        if (!data.triggerKind || !data.targetKind) {
+            assertLegacyWriteAllowed({
+                category: "nullable_client_permission_rule",
+                operation: "PermissionRuleRepository.create",
+                payload: { clientId: data.clientId ?? null, relation: data.relation },
+            });
+        }
+
         const id = crypto.randomUUID();
         await db.insert(permissionRules).values({ ...data, id });
+        return this.findById(id) as Promise<PermissionRule>;
+    }
+
+    async createTargeted(
+        data: Omit<NewPermissionRule, "id" | "clientId"> & {
+            triggerKind: string;
+            triggerClientId?: string | null;
+            targetKind: string;
+            targetId: string;
+        }
+    ): Promise<PermissionRule> {
+        const id = crypto.randomUUID();
+        await db.insert(permissionRules).values({
+            ...data,
+            id,
+            clientId: null,
+            triggerClientId: data.triggerClientId ?? null,
+        });
         return this.findById(id) as Promise<PermissionRule>;
     }
 
@@ -481,6 +658,8 @@ export class PolicyTemplateRepository {
 
 export const registrationContextRepo = new RegistrationContextRepository();
 export const platformInviteRepo = new PlatformInviteRepository();
+export const pendingRegistrationContextApplicationRepo =
+    new PendingRegistrationContextApplicationRepository();
 export const permissionRequestRepo = new PermissionRequestRepository();
 export const permissionRuleRepo = new PermissionRuleRepository();
 export const policyTemplateRepo = new PolicyTemplateRepository();

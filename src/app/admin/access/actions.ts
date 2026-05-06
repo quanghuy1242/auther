@@ -456,6 +456,10 @@ export async function createPlatformContext(data: {
             name: data.name,
             description: data.description,
             clientId: null, // Platform context
+            triggerKind: "platform",
+            triggerClientId: null,
+            targetKind: "platform",
+            targetId: "*",
             allowedOrigins: data.allowedOrigins || null,
             allowedDomains: null,
             grants: data.grants, // Now uses entityTypeId

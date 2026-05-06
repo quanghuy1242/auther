@@ -198,6 +198,10 @@ export async function createAutomationRule(data: {
 
         const rule = await permissionRuleRepo.create({
             clientId: null, // Platform rule
+            triggerKind: "platform",
+            triggerClientId: null,
+            targetKind: "platform",
+            targetId: "*",
             relation: data.relation,
             selfRequestable: data.selfRequestable,
             autoApproveCondition: data.autoApproveCondition,

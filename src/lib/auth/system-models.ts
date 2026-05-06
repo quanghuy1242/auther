@@ -71,6 +71,81 @@ export const SYSTEM_MODELS: SystemModelDefinition[] = [
         }
     },
     {
+        entityType: "authorization_spaces",
+        description: "Authorization space management",
+        isSystem: true,
+        relations: {
+            "admin": { union: ["viewer"] },
+            "viewer": []
+        },
+        permissions: {
+            "view": { relation: "viewer" },
+            "create": { relation: "admin" },
+            "update": { relation: "admin" },
+            "delete": { relation: "admin" },
+            "manage_access": { relation: "admin" },
+            "manage_models": { relation: "admin" }
+        }
+    },
+    {
+        entityType: "registration_contexts",
+        description: "Registration context and invite flow management",
+        isSystem: true,
+        relations: {
+            "admin": { union: ["viewer"] },
+            "viewer": []
+        },
+        permissions: {
+            "view": { relation: "viewer" },
+            "create": { relation: "admin" },
+            "update": { relation: "admin" },
+            "delete": { relation: "admin" },
+            "issue_invite": { relation: "admin" }
+        }
+    },
+    {
+        entityType: "permission_requests",
+        description: "Permission request review and approval",
+        isSystem: true,
+        relations: {
+            "admin": { union: ["viewer"] },
+            "viewer": []
+        },
+        permissions: {
+            "view": { relation: "viewer" },
+            "approve": { relation: "admin" },
+            "reject": { relation: "admin" },
+            "manage_rules": { relation: "admin" }
+        }
+    },
+    {
+        entityType: "policy_templates",
+        description: "Policy template management",
+        isSystem: true,
+        relations: {
+            "admin": { union: ["viewer"] },
+            "viewer": []
+        },
+        permissions: {
+            "view": { relation: "viewer" },
+            "create": { relation: "admin" },
+            "update": { relation: "admin" },
+            "delete": { relation: "admin" },
+            "apply": { relation: "admin" }
+        }
+    },
+    {
+        entityType: "oauth_client_login",
+        description: "OAuth client login eligibility",
+        isSystem: true,
+        relations: {
+            "allowed": []
+        },
+        permissions: {
+            "login": { relation: "allowed" }
+        }
+    },
+    {
         entityType: "webhooks",
         description: "Webhook configuration and testing",
         isSystem: true,
