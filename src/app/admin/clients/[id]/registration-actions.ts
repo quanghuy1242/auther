@@ -192,7 +192,11 @@ export async function createClientContext(
             slug: data.slug,
             name: data.name,
             description: data.description,
-            clientId, // Client-owned context
+            clientId: null,
+            triggerKind: "oauth_client",
+            triggerClientId: clientId,
+            targetKind: "authorization_space",
+            targetId: await getPrimaryContextTargetId(data.grants),
             allowedOrigins: data.allowedOrigins || null,
             allowedDomains: null,
             grants: data.grants.map(g => ({ entityTypeId: g.entityTypeId, relation: g.relation })),
@@ -208,6 +212,22 @@ export async function createClientContext(
             error: error instanceof Error ? error.message : "Failed to create context",
         };
     }
+}
+
+async function getPrimaryContextTargetId(
+    grants: Array<{ entityTypeId: string; relation: string }>
+): Promise<string> {
+    const models = await Promise.all(
+        grants.map((grant) => authorizationModelRepository.findById(grant.entityTypeId))
+    );
+    const spaceIds = Array.from(
+        new Set(
+            models
+                .map((model) => model?.authorizationSpaceId)
+                .filter((spaceId): spaceId is string => Boolean(spaceId))
+        )
+    );
+    return spaceIds.length === 1 ? spaceIds[0] : "*";
 }
 
 async function getContextTriggerSpaceIds(clientId: string): Promise<string[]> {
@@ -291,8 +311,8 @@ export async function approveClientRequest(
             return { success: false, error: "Request not found" };
         }
 
-        // Verify request belongs to this client
-        if (request.clientId !== clientId) {
+        // Verify request belongs to this client/login target
+        if (request.clientId !== clientId && request.targetId !== clientId) {
             return { success: false, error: "Request does not belong to this client" };
         }
 
@@ -300,11 +320,11 @@ export async function approveClientRequest(
             return { success: false, error: "Request is not pending" };
         }
 
-        // Create the tuple grant (client-scoped)
+        // Create the tuple grant as OAuth-client login eligibility.
         const tupleRepo = new TupleRepository();
         await tupleRepo.create({
-            entityType: `client_${clientId}`,
-            entityId: "*",
+            entityType: "oauth_client_login",
+            entityId: clientId,
             relation: request.relation,
             subjectType: "user",
             subjectId: request.userId,
@@ -343,8 +363,8 @@ export async function rejectClientRequest(
             return { success: false, error: "Request not found" };
         }
 
-        // Verify request belongs to this client
-        if (request.clientId !== clientId) {
+        // Verify request belongs to this client/login target
+        if (request.clientId !== clientId && request.targetId !== clientId) {
             return { success: false, error: "Request does not belong to this client" };
         }
 

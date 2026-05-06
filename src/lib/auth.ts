@@ -23,7 +23,7 @@ import {
 } from "@/lib/utils/auth-middleware";
 import { checkOAuthClientAccess } from "@/lib/utils/oauth-authorization";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
-import { createPipelineDatabaseHooks, applyClientContextGrants } from "@/lib/pipelines";
+import { createPipelineDatabaseHooks } from "@/lib/pipelines";
 import { metricsService } from "@/lib/services";
 
 const vercelPreviewURL = env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined;
@@ -113,14 +113,8 @@ const beforeHook = createAuthMiddleware(async (ctx) => {
         });
       }
 
-      // Apply registration context grants for this client (idempotent)
-      // This ensures existing users get the client's registration context permissions
-      try {
-        await applyClientContextGrants(clientId, userId);
-      } catch (err) {
-        console.error("Failed to apply client context grants:", err);
-        // Non-blocking: don't fail the authorization if grant application fails
-      }
+      // Registration context grants are applied through explicit registration
+      // triggers. Do not mutate permissions as a side effect of OAuth authorize.
     }
   }
 });

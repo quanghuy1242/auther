@@ -9,7 +9,7 @@ import {
     type PlatformInvite,
     type RegistrationContext,
 } from "@/lib/repositories/platform-access-repository";
-import crypto from "crypto";
+import { registrationContextService } from "@/lib/services/registration-context-service";
 
 // Re-export types
 export type { PlatformInvite, RegistrationContext };
@@ -72,28 +72,21 @@ export async function createInvite(data: {
             return { success: false, error: "Registration context not found" };
         }
 
-        // Generate token
-        const token = crypto.randomBytes(32).toString("hex");
-        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-
-        // Calculate expiry
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + (data.expiresInDays || 7));
-
-        const invite = await platformInviteRepo.create({
+        const signedInvite = await registrationContextService.createSignedInvite(
+            data.contextSlug,
+            session.user.id,
+            {
             email: data.email,
-            contextSlug: data.contextSlug,
-            tokenHash,
-            expiresAt,
-            invitedBy: session.user.id,
-        });
-
-        // Build invite URL
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const inviteUrl = `${baseUrl}/auth/register?invite=${token}`;
+                expiresInDays: data.expiresInDays || 7,
+            }
+        );
+        const invite = await platformInviteRepo.findById(signedInvite.inviteId);
+        if (!invite) {
+            return { success: false, error: "Invite was created but could not be loaded" };
+        }
 
         revalidatePath("/admin/users");
-        return { success: true, invite, inviteUrl };
+        return { success: true, invite, inviteUrl: signedInvite.url };
     } catch (error) {
         console.error("createInvite error:", error);
         return {

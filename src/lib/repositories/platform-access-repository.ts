@@ -52,7 +52,9 @@ export class RegistrationContextRepository {
         return db
             .select()
             .from(registrationContexts)
-            .where(eq(registrationContexts.clientId, clientId));
+            .where(
+                sql`${registrationContexts.clientId} = ${clientId} OR ${registrationContexts.triggerClientId} = ${clientId}`
+            );
     }
 
     async findPlatformContexts(): Promise<RegistrationContext[]> {
@@ -369,7 +371,7 @@ export class PermissionRequestRepository {
             .from(permissionRequests)
             .where(
                 and(
-                    eq(permissionRequests.clientId, clientId),
+                    sql`${permissionRequests.clientId} = ${clientId} OR ${permissionRequests.targetId} = ${clientId}`,
                     eq(permissionRequests.status, "pending")
                 )
             );
@@ -393,7 +395,7 @@ export class PermissionRequestRepository {
         return db
             .select()
             .from(permissionRequests)
-            .where(eq(permissionRequests.clientId, clientId))
+            .where(sql`${permissionRequests.clientId} = ${clientId} OR ${permissionRequests.targetId} = ${clientId}`)
             .orderBy(sql`${permissionRequests.requestedAt} DESC`);
     }
 
@@ -507,7 +509,9 @@ export class PermissionRuleRepository {
         return db
             .select()
             .from(permissionRules)
-            .where(eq(permissionRules.clientId, clientId));
+            .where(
+                sql`${permissionRules.clientId} = ${clientId} OR ${permissionRules.triggerClientId} = ${clientId} OR ${permissionRules.targetId} = ${clientId}`
+            );
     }
 
     async findByRelation(
@@ -518,7 +522,9 @@ export class PermissionRuleRepository {
         if (clientId === null) {
             conditions.push(sql`${permissionRules.clientId} IS NULL`);
         } else {
-            conditions.push(eq(permissionRules.clientId, clientId));
+            conditions.push(
+                sql`${permissionRules.clientId} = ${clientId} OR ${permissionRules.targetId} = ${clientId}`
+            );
         }
         const results = await db
             .select()

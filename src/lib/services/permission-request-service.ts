@@ -284,9 +284,9 @@ export class PermissionRequestService {
         relation: string
     ): Promise<void> {
         if (clientId) {
-            // Client-level permission
+            // OAuth-client login eligibility, not platform/resource access.
             await tupleRepo.createIfNotExists({
-                entityType: `client_${clientId}`,
+                entityType: "oauth_client_login",
                 entityId: clientId,
                 relation,
                 subjectType: "user",

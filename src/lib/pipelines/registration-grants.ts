@@ -8,6 +8,7 @@
 import { registrationContextService } from "@/lib/services/registration-context-service";
 import { metricsService } from "@/lib/services";
 import {
+    pendingRegistrationContextApplicationRepo,
     platformInviteRepo,
     registrationContextRepo,
 } from "@/lib/repositories/platform-access-repository";
@@ -18,6 +19,13 @@ const pendingContextGrants = new Map<string, Array<{
     contextSlug: string;
     inviteId?: string;
 }>>();
+
+type PendingContextGrantApplication = {
+    id?: string;
+    contextSlug: string;
+    inviteId?: string;
+    durable: boolean;
+};
 
 /**
  * Queue a registration context to be applied when a user is created.
@@ -37,6 +45,31 @@ export function queueContextGrant(
     }
 }
 
+export async function queueContextGrantDurable(
+    email: string,
+    contextSlug: string,
+    inviteId?: string,
+    options: {
+        triggerKind?: string;
+        triggerClientId?: string | null;
+    } = {}
+): Promise<void> {
+    const normalizedEmail = email.toLowerCase();
+    await pendingRegistrationContextApplicationRepo.create({
+        email: normalizedEmail,
+        contextSlug,
+        inviteId: inviteId ?? null,
+        triggerKind: options.triggerKind ?? (inviteId ? "invite" : "manual"),
+        triggerClientId: options.triggerClientId ?? null,
+        status: "pending",
+        attempts: 0,
+        idempotencyKey: `${normalizedEmail}:${contextSlug}:${inviteId ?? "open"}`,
+    });
+
+    // Keep the in-memory queue as a same-process fallback during rollout.
+    queueContextGrant(email, contextSlug, inviteId);
+}
+
 /**
  * Apply registration context grants after user creation.
  * This is called from the user.create.after hook.
@@ -46,7 +79,21 @@ export async function applyRegistrationContextGrants(
     email: string
 ): Promise<void> {
     const normalizedEmail = email.toLowerCase();
-    const pendingList = pendingContextGrants.get(normalizedEmail);
+    const durablePending = await pendingRegistrationContextApplicationRepo.findPendingByEmail(normalizedEmail);
+    const memoryPending = pendingContextGrants.get(normalizedEmail) ?? [];
+    const pendingList: PendingContextGrantApplication[] = [
+        ...durablePending.map((pending) => ({
+            id: pending.id,
+            contextSlug: pending.contextSlug,
+            inviteId: pending.inviteId ?? undefined,
+            durable: true,
+        })),
+        ...memoryPending
+            .filter((pending) =>
+                !durablePending.some((durable) => durable.contextSlug === pending.contextSlug)
+            )
+            .map((pending) => ({ ...pending, durable: false })),
+    ];
 
     if (!pendingList || pendingList.length === 0) {
         // No pending contexts for this user - they signed up without a context
@@ -69,10 +116,20 @@ export async function applyRegistrationContextGrants(
             }
 
             // Apply the grants from the context (idempotent via createIfNotExists)
-            await registrationContextService.applyContextGrants(
-                registrationContext,
-                userId
-            );
+            try {
+                await registrationContextService.applyContextGrants(
+                    registrationContext,
+                    userId
+                );
+            } catch (error) {
+                if (pending.durable && pending.id) {
+                    await pendingRegistrationContextApplicationRepo.markFailed(
+                        pending.id,
+                        error instanceof Error ? error.message : "Unknown error"
+                    );
+                }
+                throw error;
+            }
 
             console.log(
                 `Applied registration context grants: ${pending.contextSlug} -> user ${userId}`
@@ -82,6 +139,10 @@ export async function applyRegistrationContextGrants(
             if (pending.inviteId) {
                 await platformInviteRepo.markConsumed(pending.inviteId, userId);
                 console.log(`Consumed invite: ${pending.inviteId}`);
+            }
+
+            if (pending.durable && pending.id) {
+                await pendingRegistrationContextApplicationRepo.markApplied(pending.id, userId);
             }
         }
     } catch (error) {
@@ -193,6 +254,8 @@ export async function queuePlatformContextGrants(email: string): Promise<void> {
 
     for (const context of platformContexts) {
         if (!context.enabled) continue;
-        queueContextGrant(email, context.slug);
+        await queueContextGrantDurable(email, context.slug, undefined, {
+            triggerKind: "platform",
+        });
     }
 }

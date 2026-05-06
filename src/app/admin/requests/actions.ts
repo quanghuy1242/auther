@@ -101,11 +101,11 @@ export async function approveRequest(
         // Create the tuple grant
         const tupleRepo = new TupleRepository();
 
-        if (request.clientId) {
-            // Client-level permission
+        if (request.targetKind === "oauth_client_login" && request.targetId && request.targetId !== "*") {
+            // OAuth-client login eligibility, not platform/resource access.
             await tupleRepo.create({
-                entityType: `client_${request.clientId}`,
-                entityId: "*",
+                entityType: "oauth_client_login",
+                entityId: request.targetId,
                 relation: request.relation,
                 subjectType: "user",
                 subjectId: request.userId,

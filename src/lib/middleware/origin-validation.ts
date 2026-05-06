@@ -122,8 +122,10 @@ export async function validateAndQueueContextGrant(
     }
 
     // Queue the context grant for application after user creation
-    const { queueContextGrant, queuePlatformContextGrants } = await import("@/lib/pipelines/registration-grants");
-    queueContextGrant(email, contextSlug);
+    const { queueContextGrantDurable, queuePlatformContextGrants } = await import("@/lib/pipelines/registration-grants");
+    await queueContextGrantDurable(email, contextSlug, undefined, {
+        triggerKind: "origin",
+    });
 
     // Also queue all global platform contexts
     await queuePlatformContextGrants(email);

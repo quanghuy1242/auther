@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { registrationContextService } from "@/lib/services/registration-context-service";
-import { queueContextGrant, queuePlatformContextGrants } from "@/lib/pipelines/registration-grants";
+import { queueContextGrantDurable, queuePlatformContextGrants } from "@/lib/pipelines/registration-grants";
 
 /**
  * API Route: POST /api/auth/verify-invite
@@ -66,10 +66,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Queue the context grant for application after user creation
-        queueContextGrant(
+        await queueContextGrantDurable(
             email,
             verification.context.slug,
-            verification.invite?.id
+            verification.invite?.id,
+            { triggerKind: "invite" }
         );
 
         // Also queue all global platform contexts
