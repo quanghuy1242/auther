@@ -3,7 +3,6 @@ import { headers as nextHeaders } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
   authorizationSpaceRepository,
-  oauthClientSpaceLinkRepository,
   userRepository,
 } from "@/lib/repositories";
 
@@ -12,7 +11,6 @@ type RequestHeaders = Awaited<ReturnType<typeof nextHeaders>>;
 export interface AuthenticatedSpaceApiKey {
   apiKeyId: string;
   ownerUserId: string;
-  clientId: string;
   authorizationSpaceId: string;
 }
 
@@ -97,35 +95,30 @@ export async function authenticateAuthorizationSpaceApiKey(
     };
   }
 
-  const keyClientId =
-    typeof verification.key.metadata?.oauth_client_id === "string"
-      ? verification.key.metadata.oauth_client_id
+  const keySpaceId =
+    typeof verification.key.metadata?.authorization_space_id === "string"
+      ? verification.key.metadata.authorization_space_id
       : null;
 
-  if (!keyClientId) {
+  if (!keySpaceId) {
     return {
       error: {
         status: 403,
         body: {
           error: "forbidden",
-          message: "API key is missing client scope metadata",
+          message: "API key is missing authorization space metadata",
         },
       },
     };
   }
 
-  const link = await oauthClientSpaceLinkRepository.findByClientAndSpace(
-    keyClientId,
-    authorizationSpaceId
-  );
-
-  if (!link || link.accessMode !== "full") {
+  if (keySpaceId !== authorizationSpaceId) {
     return {
       error: {
         status: 403,
         body: {
           error: "forbidden",
-          message: "API key client is not allowed to consume this authorization space",
+          message: "API key cannot access grants outside its authorization space",
         },
       },
     };
@@ -135,7 +128,6 @@ export async function authenticateAuthorizationSpaceApiKey(
     data: {
       apiKeyId: verification.key.id,
       ownerUserId,
-      clientId: keyClientId,
       authorizationSpaceId,
     },
   };

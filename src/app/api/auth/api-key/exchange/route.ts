@@ -4,7 +4,6 @@ import { SignJWT } from "jose";
 import { auth } from "@/lib/auth";
 import { env } from "@/env";
 import { apiKeyPermissionResolver } from "@/lib/services";
-import { metricsService } from "@/lib/services/metrics-service";
 import { importLatestJwtSigningKey } from "@/lib/auth/jwt-signing-key";
 
 /**
@@ -38,19 +37,17 @@ interface ErrorResponse {
   message: string;
 }
 
-function scopeClaimsToClient(
+function scopeClaimsToAuthorizationSpace(
   claims: Record<string, string[]>,
-  clientId: string
+  authorizationSpaceId: string
 ): { scoped: Record<string, string[]>; droppedCount: number } {
   const scoped: Record<string, string[]> = {};
   let droppedCount = 0;
 
   for (const [entityKey, permissions] of Object.entries(claims)) {
-    const clientMatch = entityKey.match(/^client_([^:]+):/);
-
-    if (entityKey.startsWith("oauth_client:")) {
-      const claimClientId = entityKey.slice("oauth_client:".length);
-      if (claimClientId === clientId) {
+    if (entityKey === "authorization_space" || entityKey.startsWith("authorization_space:")) {
+      const [, entityId] = entityKey.split(":");
+      if (!entityId || entityId === authorizationSpaceId) {
         scoped[entityKey] = permissions;
       } else {
         droppedCount += 1;
@@ -58,17 +55,12 @@ function scopeClaimsToClient(
       continue;
     }
 
-    if (!clientMatch) {
-      scoped[entityKey] = permissions;
+    if (entityKey.startsWith("client_") || entityKey.startsWith("oauth_client:")) {
+      droppedCount += 1;
       continue;
     }
 
-    if (clientMatch[1] === clientId) {
-      scoped[entityKey] = permissions;
-      continue;
-    }
-
-    droppedCount += 1;
+    scoped[entityKey] = permissions;
   }
 
   return { scoped, droppedCount };
@@ -156,16 +148,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
     }
 
     const userId = apiKeyRecord.userId;
-    const keyClientId =
-      typeof apiKeyRecord.metadata?.oauth_client_id === "string"
-        ? apiKeyRecord.metadata.oauth_client_id
+    const keyAuthorizationSpaceId =
+      typeof apiKeyRecord.metadata?.authorization_space_id === "string"
+        ? apiKeyRecord.metadata.authorization_space_id
         : null;
 
-    if (!keyClientId) {
+    if (!keyAuthorizationSpaceId) {
       return NextResponse.json(
         {
           error: "forbidden",
-          message: "API key is missing client scope metadata",
+          message: "API key is missing authorization space metadata",
         },
         { status: 403 }
       );
@@ -176,15 +168,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
     // runtime ABAC evaluation via POST /api/auth/check-permission
     let permissions: Record<string, string[]> = {};
     let abac_required: Record<string, string[]> = {};
-    let client_full_access: string[] | undefined;
+    let authorization_space_full_access: string[] | undefined;
     try {
-      const [result, resolvedClientFullAccess] = await Promise.all([
+      const [result, resolvedSpaceFullAccess] = await Promise.all([
         apiKeyPermissionResolver.resolvePermissionsWithABACInfo(apiKeyRecord.id),
-        apiKeyPermissionResolver.resolveClientFullAccess(apiKeyRecord.id),
+        apiKeyPermissionResolver.resolveAuthorizationSpaceFullAccess(apiKeyRecord.id),
       ]);
 
-      const scopedPermissions = scopeClaimsToClient(result.permissions, keyClientId);
-      const scopedAbacRequired = scopeClaimsToClient(result.abac_required, keyClientId);
+      const scopedPermissions = scopeClaimsToAuthorizationSpace(result.permissions, keyAuthorizationSpaceId);
+      const scopedAbacRequired = scopeClaimsToAuthorizationSpace(result.abac_required, keyAuthorizationSpaceId);
 
       permissions = scopedPermissions.scoped;
       abac_required = scopedAbacRequired.scoped;
@@ -192,36 +184,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
       if (scopedPermissions.droppedCount > 0 || scopedAbacRequired.droppedCount > 0) {
         console.warn("[api-key-exchange] Filtered out-of-scope JWT claims", {
           apiKeyId: apiKeyRecord.id,
-          keyClientId,
+          authorizationSpaceId: keyAuthorizationSpaceId,
           droppedPermissions: scopedPermissions.droppedCount,
           droppedAbacRequired: scopedAbacRequired.droppedCount,
         });
       }
 
-      const clientFullAccess = keyClientId
-        ? resolvedClientFullAccess.filter((clientId) => clientId === keyClientId)
+      const spaceFullAccess = keyAuthorizationSpaceId
+        ? resolvedSpaceFullAccess.filter((spaceId) => spaceId === keyAuthorizationSpaceId)
         : [];
-
-      if (resolvedClientFullAccess.length !== clientFullAccess.length) {
-        console.warn("[api-key-exchange] Filtered out-of-scope client_full_access claims", {
-          apiKeyId: apiKeyRecord.id,
-          keyClientId,
-          resolvedClientIds: resolvedClientFullAccess,
-          emittedClientIds: clientFullAccess,
-        });
-      }
-
-      client_full_access = clientFullAccess.length > 0 ? clientFullAccess : undefined;
-
-      if (client_full_access) {
-        await metricsService.count("apikey.exchange.client_full_access_count", client_full_access.length);
-      }
+      authorization_space_full_access = spaceFullAccess.length > 0 ? spaceFullAccess : undefined;
 
       console.info("[api-key-exchange] ReBAC permissions resolved", {
         apiKeyId: apiKeyRecord.id,
         permissionCount: Object.keys(permissions).length,
         abacRequiredCount: Object.keys(abac_required).length,
-        clientFullAccessCount: client_full_access?.length ?? 0,
+        authorizationSpaceFullAccessCount: authorization_space_full_access?.length ?? 0,
       });
     } catch (error) {
       console.error("[api-key-exchange] Failed to resolve ReBAC permissions", {
@@ -278,7 +256,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExchangeR
         // Consuming services MUST call POST /api/auth/check-permission for these
         // with the actual resource context (e.g., invoice.amount) to get access decision
         abac_required: Object.keys(abac_required).length > 0 ? abac_required : undefined,
-        client_full_access,
+        authorization_space_full_access,
         apiKeyId: apiKeyRecord?.id,
       })
         .setProtectedHeader({

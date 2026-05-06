@@ -5,7 +5,9 @@ import {
     getPendingRequests,
     getAllRequests,
     getAutomationRules,
+    getSpaceRequestTargets,
 } from "./actions";
+import { userRepository } from "@/lib/repositories";
 import { RequestsClient } from "./requests-client";
 
 export const metadata: Metadata = {
@@ -18,10 +20,12 @@ export default async function RequestsPage() {
     await guards.platform.admin();
 
     // Fetch all data in parallel
-    const [pendingRequests, allRequests, rules] = await Promise.all([
+    const [pendingRequests, allRequests, rules, requestTargets, usersPage] = await Promise.all([
         getPendingRequests(),
         getAllRequests(),
         getAutomationRules(),
+        getSpaceRequestTargets(),
+        userRepository.findManyWithAccounts(1, 500),
     ]);
 
     return (
@@ -35,6 +39,11 @@ export default async function RequestsPage() {
                 pendingRequests={pendingRequests}
                 allRequests={allRequests}
                 rules={rules}
+                requestTargets={requestTargets}
+                users={usersPage.items.map((user) => ({
+                    id: user.id,
+                    label: `${user.name || user.email} (${user.email})`,
+                }))}
             />
         </PageContainer>
     );

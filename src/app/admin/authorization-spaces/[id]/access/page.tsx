@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageContainer, PageHeading } from "@/components/layout";
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select } from "@/components/ui";
+import { AuthorizationSpaceServiceAccountService } from "@/lib/auth/authorization-space-service-account-service";
 import { guards } from "@/lib/auth/platform-guard";
 import {
   authorizationModelRepository,
@@ -17,6 +18,7 @@ import type { AuthorizationModelEntity } from "@/lib/repositories";
 import { assignAuthorizationModelSpace } from "../../actions";
 import { SpaceDetailTabs } from "../space-detail-tabs";
 import { grantSpacePermission } from "./actions";
+import { ServiceAccountsPanel } from "./service-accounts-panel";
 import { SpaceGrantsTable } from "./space-grants-table";
 
 type AuthorizationSpaceAccessPageProps = {
@@ -37,16 +39,19 @@ function relationNames(model: AuthorizationModelEntity): string[] {
   return Object.keys(model.definition.relations ?? {}).sort();
 }
 
+const serviceAccountService = new AuthorizationSpaceServiceAccountService();
+
 export default async function AuthorizationSpaceAccessPage({ params }: AuthorizationSpaceAccessPageProps) {
   await guards.platform.admin();
   const { id } = await params;
-  const [space, models, tuplesPage, usersPage, groups, linkedClientRows] = await Promise.all([
+  const [space, models, tuplesPage, usersPage, groups, linkedClientRows, serviceAccounts] = await Promise.all([
     authorizationSpaceRepository.findById(id),
     authorizationModelRepository.findAll(),
     tupleRepository.findByAuthorizationSpacePaginated({ authorizationSpaceId: id, limit: 200 }),
     userRepository.findManyWithAccounts(1, 500),
     userGroupRepository.findAll(),
     oauthClientSpaceLinkRepository.listByAuthorizationSpaceId(id),
+    serviceAccountService.list(id),
   ]);
 
   if (!space) {
@@ -82,8 +87,6 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
   const usersById = new Map(userOptions.map((user) => [user.id, user]));
   const groupsById = new Map(groupOptions.map((group) => [group.id, group]));
   const modelsByEntityType = new Map(assignedModels.map((model) => [model.entityType, model]));
-  const serviceAccountTuples = tuplesPage.tuples.filter((tuple) => tuple.subjectType === "apikey");
-  const serviceAccountIds = Array.from(new Set(serviceAccountTuples.map((tuple) => tuple.subjectId))).sort();
   const linkedClients = (
     await Promise.all(
       linkedClientRows.map(async (link) => ({
@@ -284,40 +287,17 @@ export default async function AuthorizationSpaceAccessPage({ params }: Authoriza
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Service Accounts</CardTitle>
-            <CardDescription>
-              API keys are treated as service accounts in this authorization space. Creation and rotation should use
-              the space-scoped service-account flow; legacy client-owned key creation is intentionally not exposed here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {serviceAccountIds.length === 0 ? (
-              <div className="rounded-lg border border-border-dark bg-black/10 p-4 text-sm text-gray-400">
-                No API-key service accounts currently have grants in this authorization space.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {serviceAccountIds.map((apiKeyId) => {
-                  const grantCount = serviceAccountTuples.filter((tuple) => tuple.subjectId === apiKeyId).length;
-                  return (
-                    <div
-                      key={apiKeyId}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-dark bg-black/10 p-3"
-                    >
-                      <div>
-                        <p className="font-mono text-sm text-gray-200">{apiKeyId}</p>
-                        <p className="mt-1 text-xs text-gray-500">{grantCount} grant{grantCount === 1 ? "" : "s"}</p>
-                      </div>
-                      <Badge variant="default">apikey</Badge>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ServiceAccountsPanel
+          spaceId={space.id}
+          serviceAccounts={serviceAccounts}
+          grantOptions={grantableModels.flatMap((model) =>
+            relationNames(model).map((relation) => ({
+              modelId: model.id,
+              entityType: model.entityType,
+              relation,
+            }))
+          )}
+        />
 
         <Card>
           <CardHeader>

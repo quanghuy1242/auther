@@ -10,7 +10,11 @@ import {
     type PermissionRule,
 } from "@/lib/repositories/platform-access-repository";
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
-import { userRepository } from "@/lib/repositories";
+import {
+    authorizationModelRepository,
+    authorizationSpaceRepository,
+    userRepository,
+} from "@/lib/repositories";
 import { metricsService } from "@/lib/services";
 
 // Re-export types
@@ -20,6 +24,14 @@ export interface PermissionRequestWithDetails extends PermissionRequest {
     userName?: string;
     userEmail?: string;
     resolverName?: string;
+}
+
+export interface SpaceRequestTarget {
+    spaceId: string;
+    spaceName: string;
+    modelId: string;
+    modelName: string;
+    relations: string[];
 }
 
 // Helper to enrich requests with user details
@@ -77,6 +89,79 @@ export async function getAllRequests(): Promise<PermissionRequestWithDetails[]> 
     return enrichRequestsWithUserDetails(requests);
 }
 
+export async function getSpaceRequestTargets(): Promise<SpaceRequestTarget[]> {
+    await guards.platform.admin();
+    const spaces = await authorizationSpaceRepository.findAll();
+    const models = await authorizationModelRepository.findAll();
+    const spacesById = new Map(spaces.map((space) => [space.id, space]));
+
+    return models
+        .filter((model) => model.authorizationSpaceId)
+        .flatMap((model) => {
+            const space = model.authorizationSpaceId ? spacesById.get(model.authorizationSpaceId) : null;
+            if (!space) return [];
+            return [{
+                spaceId: space.id,
+                spaceName: space.name,
+                modelId: model.id,
+                modelName: model.entityType,
+                relations: Object.keys(model.definition.relations ?? {}).sort(),
+            }];
+        })
+        .sort((a, b) =>
+            a.spaceName.localeCompare(b.spaceName) ||
+            a.modelName.localeCompare(b.modelName)
+        );
+}
+
+export async function createAuthorizationSpacePermissionRequest(data: {
+    userId: string;
+    spaceId: string;
+    modelId: string;
+    entityId: string;
+    relation: string;
+    reason?: string;
+}): Promise<{ success: boolean; error?: string }> {
+    try {
+        await guards.platform.admin();
+        const [space, model, user] = await Promise.all([
+            authorizationSpaceRepository.findById(data.spaceId),
+            authorizationModelRepository.findById(data.modelId),
+            userRepository.findById(data.userId),
+        ]);
+
+        if (!space) return { success: false, error: "Authorization space not found" };
+        if (!user) return { success: false, error: "User not found" };
+        if (!model || model.authorizationSpaceId !== space.id) {
+            return { success: false, error: "Model does not belong to this authorization space" };
+        }
+        if (!Object.keys(model.definition.relations ?? {}).includes(data.relation)) {
+            return { success: false, error: "Relation is not defined for this model" };
+        }
+
+        await permissionRequestRepo.createTargeted({
+            userId: data.userId,
+            requestKind: "authorization_space",
+            targetKind: "authorization_space",
+            targetId: space.id,
+            targetEntityTypeId: model.id,
+            targetEntityId: data.entityId || "*",
+            relation: data.relation,
+            reason: data.reason || null,
+            status: "pending",
+        });
+
+        revalidatePath("/admin/requests");
+        return { success: true };
+    } catch (error) {
+        console.error("createAuthorizationSpacePermissionRequest error:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to create request",
+        };
+    }
+}
+
 export async function approveRequest(
     requestId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -101,7 +186,22 @@ export async function approveRequest(
         // Create the tuple grant
         const tupleRepo = new TupleRepository();
 
-        if (request.targetKind === "oauth_client_login" && request.targetId && request.targetId !== "*") {
+        if (request.targetKind === "authorization_space" && request.targetEntityTypeId) {
+            const model = await authorizationModelRepository.findById(request.targetEntityTypeId);
+            if (!model || model.authorizationSpaceId !== request.targetId) {
+                return { success: false, error: "Request target model does not belong to the authorization space" };
+            }
+
+            await tupleRepo.create({
+                entityType: model.entityType,
+                entityTypeId: model.id,
+                entityId: request.targetEntityId || "*",
+                relation: request.relation,
+                subjectType: "user",
+                subjectId: request.userId,
+                authorizationSpaceId: request.targetId,
+            });
+        } else if (request.targetKind === "oauth_client_login" && request.targetId && request.targetId !== "*") {
             // OAuth-client login eligibility, not platform/resource access.
             await tupleRepo.create({
                 entityType: "oauth_client_login",

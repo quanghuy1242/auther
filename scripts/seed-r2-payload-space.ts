@@ -2,8 +2,8 @@
  * Idempotently creates the R2 Payload content authorization space and links
  * the known Payload/blog OAuth clients to it.
  *
- * This is migration support, not a topology rewrite. Payload projection routing
- * remains client-based until R3.
+ * Authorization models are space-native. Legacy client-prefixed model names are
+ * handled by scripts/migrate-space-model-identities.ts before this seed runs.
  */
 
 import { and, eq, inArray } from "drizzle-orm";
@@ -105,7 +105,7 @@ async function main() {
   }
 
   const payloadModelEntityTypes = PAYLOAD_CONTENT_MODEL_NAMES.map(
-    (modelName) => `client_${payloadClientId}:${modelName}`
+    (modelName) => `space_${authorizationSpaceId}:${modelName}`
   );
 
   const updatedModels = await db

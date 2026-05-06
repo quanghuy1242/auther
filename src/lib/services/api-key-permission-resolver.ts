@@ -377,6 +377,29 @@ export class ApiKeyPermissionResolver {
         return Array.from(clientIds);
     }
 
+    async resolveAuthorizationSpaceFullAccess(apiKeyId: string): Promise<string[]> {
+        const subjects = await this.permissionService.expandSubjectsForResolution(
+            "apikey",
+            apiKeyId
+        );
+
+        const spaceIds = new Set<string>();
+        for (const subject of subjects) {
+            const tuples = await tupleRepository.findBySubjectAndEntityTypeAndRelation(
+                subject.type,
+                subject.id,
+                "authorization_space",
+                "full_access"
+            );
+
+            for (const tuple of tuples) {
+                spaceIds.add(tuple.entityId);
+            }
+        }
+
+        return Array.from(spaceIds);
+    }
+
     /**
      * Resolve detailed permission info for an API key.
      * Returns full tuple context for debugging/admin views.

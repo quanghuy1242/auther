@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import type {
     PermissionRequestWithDetails,
     PermissionRule,
+    SpaceRequestTarget,
 } from "./actions";
 import {
     approveRequest,
@@ -31,6 +32,7 @@ import {
     createAutomationRule,
     updateAutomationRule,
     deleteAutomationRule,
+    createAuthorizationSpacePermissionRequest,
 } from "./actions";
 
 // ============================================================================
@@ -111,7 +113,7 @@ export function PendingRequestsSection({ requests }: PendingRequestsSectionProps
                                         <div className="flex items-center gap-2 text-sm">
                                             <span className="text-neutral-500">Requesting:</span>
                                             <Badge variant="default" className="font-mono">
-                                                {request.clientId ? `client:${request.clientId}` : "platform"}:{request.relation}
+                                                {request.targetKind}:{request.targetId}:{request.relation}
                                             </Badge>
                                         </div>
                                         {request.reason && (
@@ -644,6 +646,129 @@ export function AutomationRulesSection({ rules }: AutomationRulesSectionProps) {
 }
 
 // ============================================================================
+// Create Space Request Section
+// ============================================================================
+
+interface CreateSpaceRequestSectionProps {
+    targets: SpaceRequestTarget[];
+    users: Array<{ id: string; label: string }>;
+}
+
+function CreateSpaceRequestSection({ targets, users }: CreateSpaceRequestSectionProps) {
+    const [creating, setCreating] = React.useState(false);
+    const [userId, setUserId] = React.useState(users[0]?.id ?? "");
+    const [targetKey, setTargetKey] = React.useState(
+        targets[0] ? `${targets[0].spaceId}|${targets[0].modelId}` : ""
+    );
+    const selectedTarget = targets.find((target) => `${target.spaceId}|${target.modelId}` === targetKey);
+    const [relation, setRelation] = React.useState(selectedTarget?.relations[0] ?? "");
+    const [entityId, setEntityId] = React.useState("*");
+    const [reason, setReason] = React.useState("");
+
+    React.useEffect(() => {
+        setRelation(selectedTarget?.relations[0] ?? "");
+    }, [selectedTarget?.modelId, selectedTarget?.relations]);
+
+    async function handleCreate() {
+        if (!selectedTarget || !userId || !relation) {
+            toast.error("User, target, and relation are required");
+            return;
+        }
+
+        setCreating(true);
+        try {
+            const result = await createAuthorizationSpacePermissionRequest({
+                userId,
+                spaceId: selectedTarget.spaceId,
+                modelId: selectedTarget.modelId,
+                entityId: entityId.trim() || "*",
+                relation,
+                reason: reason.trim() || undefined,
+            });
+            if (result.success) {
+                toast.success("Request created");
+                setReason("");
+            } else {
+                toast.error(result.error || "Failed to create request");
+            }
+        } finally {
+            setCreating(false);
+        }
+    }
+
+    return (
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6">
+                <CardTitle className="text-white text-lg font-bold leading-tight">
+                    New Authorization-Space Request
+                </CardTitle>
+                <CardDescription className="text-sm text-gray-400 mt-1">
+                    Create a request for a concrete resource model in an authorization space.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 pt-6 md:grid-cols-2">
+                <Select
+                    label="User"
+                    value={userId}
+                    onChange={setUserId}
+                    options={users.length ? users.map((user) => ({ value: user.id, label: user.label })) : [{ value: "", label: "No users", disabled: true }]}
+                    disabled={users.length === 0}
+                />
+                <Select
+                    label="Target"
+                    value={targetKey}
+                    onChange={setTargetKey}
+                    options={
+                        targets.length
+                            ? targets.map((target) => ({
+                                value: `${target.spaceId}|${target.modelId}`,
+                                label: `${target.spaceName} / ${target.modelName}`,
+                            }))
+                            : [{ value: "", label: "No space models", disabled: true }]
+                    }
+                    disabled={targets.length === 0}
+                />
+                <Select
+                    label="Relation"
+                    value={relation}
+                    onChange={setRelation}
+                    options={
+                        selectedTarget?.relations.length
+                            ? selectedTarget.relations.map((item) => ({ value: item, label: item }))
+                            : [{ value: "", label: "No relations", disabled: true }]
+                    }
+                    disabled={!selectedTarget}
+                />
+                <Input
+                    label="Resource ID"
+                    value={entityId}
+                    onChange={(event) => setEntityId(event.target.value)}
+                    placeholder="*"
+                />
+                <Input
+                    label="Reason"
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="Optional"
+                    containerClassName="md:col-span-2"
+                />
+                <div className="md:col-span-2">
+                    <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleCreate}
+                        disabled={creating || !selectedTarget || !userId || !relation}
+                    >
+                        {creating ? "Creating..." : "Create Request"}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+// ============================================================================
 // Main Requests Client
 // ============================================================================
 
@@ -651,12 +776,22 @@ interface RequestsClientProps {
     pendingRequests: PermissionRequestWithDetails[];
     allRequests: PermissionRequestWithDetails[];
     rules: PermissionRule[];
+    requestTargets: SpaceRequestTarget[];
+    users: Array<{ id: string; label: string }>;
 }
 
-export function RequestsClient({ pendingRequests, allRequests, rules }: RequestsClientProps) {
+export function RequestsClient({ pendingRequests, allRequests, rules, requestTargets, users }: RequestsClientProps) {
     return (
         <Tabs
             tabs={[
+                {
+                    label: "New Request",
+                    content: (
+                        <div className="space-y-6">
+                            <CreateSpaceRequestSection targets={requestTargets} users={users} />
+                        </div>
+                    ),
+                },
                 {
                     label: `Pending${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ""}`,
                     content: (

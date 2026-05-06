@@ -5,11 +5,7 @@ import { UserRepository } from "@/lib/repositories/user-repository";
 import { LuaPolicyEngine } from "@/lib/auth/policy-engine";
 import { abacRepository } from "@/lib/repositories/abac-repository";
 import { metricsService } from "@/lib/services/metrics-service";
-
-export function extractClientIdFromEntityType(entityType: string): string | null {
-  const match = entityType.match(/^client_([^:]+):.+$/);
-  return match ? match[1] : null;
-}
+import { authorizationModelRepository } from "@/lib/repositories";
 
 export interface ListObjectsParams {
   userId: string;
@@ -95,28 +91,22 @@ export class PermissionService {
         }
       }
 
-      // 0.5 Client-wide full_access bypass
-      const clientIdForCheck = extractClientIdFromEntityType(entityType);
-      if (clientIdForCheck) {
+      // 1. Get Authorization Model
+      const model = await this.modelService.getModel(entityType);
+      if (!model) {
+        console.debug(`No authorization model found for entity type '${entityType}'. Denying access.`);
+        const duration = performance.now() - checkStart;
+        void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: "no_model", entity_type: entityType });
+        void metricsService.count("authz.decision.count", 1, { result: "denied", source: "no_model" });
+        return false;
+      }
+
+      // 1.5 Authorization-space full_access bypass.
+      // This is intentionally based on the canonical model's authorizationSpaceId,
+      // not on legacy client-prefixed entity type names.
+      const modelRecord = await authorizationModelRepository.findByEntityType(entityType);
+      if (modelRecord?.authorizationSpaceId) {
         const subjects = await this.expandSubjects(subjectType, subjectId);
-
-        for (const subject of subjects) {
-          const fullAccessTuple = await this.tupleRepo.findExact({
-            entityType: "oauth_client",
-            entityId: clientIdForCheck,
-            relation: "full_access",
-            subjectType: subject.type,
-            subjectId: subject.id,
-          });
-
-          if (fullAccessTuple) {
-            const duration = performance.now() - checkStart;
-            void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
-            void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "client_full_access" });
-            return true;
-          }
-        }
-
         const canLookupSpaceFullAccess =
           typeof this.tupleRepo.findBySubjectAndEntityTypeAndRelation === "function";
         const spaceFullAccessTuples = canLookupSpaceFullAccess
@@ -136,31 +126,12 @@ export class PermissionService {
               .filter((tuple) => tuple.entityType === "authorization_space")
           : [];
 
-        if (spaceFullAccessTuples.length > 0) {
-          const { AuthorizationModelRepository } = await import("@/lib/repositories/authorization-model-repository");
-          const modelRecord = await new AuthorizationModelRepository().findByEntityType(entityType);
-          const authorizationSpaceId = modelRecord?.authorizationSpaceId ?? null;
-
-          if (
-            authorizationSpaceId &&
-            spaceFullAccessTuples.some((tuple) => tuple.entityId === authorizationSpaceId)
-          ) {
-            const duration = performance.now() - checkStart;
-            void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
-            void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "authorization_space_full_access" });
-            return true;
-          }
+        if (spaceFullAccessTuples.some((tuple) => tuple.entityId === modelRecord.authorizationSpaceId)) {
+          const duration = performance.now() - checkStart;
+          void metricsService.histogram("authz.check.duration_ms", duration, { result: "allowed", entity_type: entityType });
+          void metricsService.count("authz.decision.count", 1, { result: "allowed", source: "authorization_space_full_access" });
+          return true;
         }
-      }
-
-      // 1. Get Authorization Model
-      const model = await this.modelService.getModel(entityType);
-      if (!model) {
-        console.debug(`No authorization model found for entity type '${entityType}'. Denying access.`);
-        const duration = performance.now() - checkStart;
-        void metricsService.histogram("authz.check.duration_ms", duration, { result: "denied", reason: "no_model", entity_type: entityType });
-        void metricsService.count("authz.decision.count", 1, { result: "denied", source: "no_model" });
-        return false;
       }
 
       // 2. Get Required Relation

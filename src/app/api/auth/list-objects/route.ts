@@ -5,6 +5,7 @@ import {
   ListObjectsRequestError,
   PermissionService,
 } from "@/lib/auth/permission-service";
+import { authorizationModelRepository } from "@/lib/repositories";
 import { UserRepository } from "@/lib/repositories/user-repository";
 
 interface ListObjectsInput {
@@ -173,31 +174,30 @@ async function handleListObjectsRequest(input: ListObjectsInput): Promise<NextRe
       );
     }
 
-    const keyClientId =
-      typeof verification.key.metadata?.oauth_client_id === "string"
-        ? verification.key.metadata.oauth_client_id
+    const keyAuthorizationSpaceId =
+      typeof verification.key.metadata?.authorization_space_id === "string"
+        ? verification.key.metadata.authorization_space_id
         : null;
-    const namespacedPrefix = keyClientId ? `client_${keyClientId}:` : null;
-    const exactClientEntityType = keyClientId ? `client_${keyClientId}` : null;
 
-    if (!keyClientId || !namespacedPrefix || !exactClientEntityType) {
-      return NextResponse.json(
-        {
-          error: "forbidden",
-          message: "API key is missing client scope metadata",
-        },
-        { status: 403 }
+    if (keyAuthorizationSpaceId) {
+      const model = await authorizationModelRepository.findByEntityTypeOrAlias(
+        entityType,
+        keyAuthorizationSpaceId
       );
-    }
-
-    if (
-      entityType !== exactClientEntityType &&
-      !entityType.startsWith(namespacedPrefix)
-    ) {
+      if (!model || model.authorizationSpaceId !== keyAuthorizationSpaceId) {
+        return NextResponse.json(
+          {
+            error: "forbidden",
+            message: "API key cannot list objects outside its authorization space",
+          },
+          { status: 403 }
+        );
+      }
+    } else {
       return NextResponse.json(
         {
           error: "forbidden",
-          message: "API key cannot list objects outside its client scope",
+          message: "API key is missing authorization scope metadata",
         },
         { status: 403 }
       );

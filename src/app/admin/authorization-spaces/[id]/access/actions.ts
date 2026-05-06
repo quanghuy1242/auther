@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { AuthorizationSpaceServiceAccountService } from "@/lib/auth/authorization-space-service-account-service";
 import { guards } from "@/lib/auth/platform-guard";
 import {
   authorizationModelRepository,
@@ -18,6 +19,19 @@ const grantSpacePermissionSchema = z.object({
   entityId: z.string().trim().transform((value) => value || "*"),
   subject: z.string().min(1),
 });
+
+const createServiceAccountSchema = z.object({
+  spaceId: z.string().min(1),
+  name: z.string().min(2),
+  accessMode: z.enum(["scoped", "full_access"]),
+  grants: z.array(z.object({
+    modelId: z.string().min(1),
+    relation: z.string().min(1),
+  })).default([]),
+  expiresInDays: z.number().int().min(1).max(3650).nullable().optional(),
+});
+
+const serviceAccountService = new AuthorizationSpaceServiceAccountService();
 
 export async function grantSpacePermission(formData: FormData): Promise<void> {
   await guards.platform.admin();
@@ -92,4 +106,34 @@ export async function revokeSpacePermission(formData: FormData): Promise<void> {
 
   await tupleRepository.deleteById(tupleId);
   revalidatePath(`/admin/authorization-spaces/${spaceId}/access`);
+}
+
+export async function createSpaceServiceAccount(input: z.input<typeof createServiceAccountSchema>) {
+  await guards.platform.admin();
+  const validated = createServiceAccountSchema.parse(input);
+
+  const result = await serviceAccountService.create({
+    authorizationSpaceId: validated.spaceId,
+    name: validated.name,
+    accessMode: validated.accessMode,
+    grants: validated.grants,
+    expiresInDays: validated.expiresInDays ?? null,
+  });
+
+  revalidatePath(`/admin/authorization-spaces/${validated.spaceId}/access`);
+  return result;
+}
+
+export async function revokeSpaceServiceAccount(spaceId: string, serviceAccountId: string) {
+  await guards.platform.admin();
+  const result = await serviceAccountService.revoke(spaceId, serviceAccountId);
+  revalidatePath(`/admin/authorization-spaces/${spaceId}/access`);
+  return result;
+}
+
+export async function rotateSpaceServiceAccount(spaceId: string, serviceAccountId: string) {
+  await guards.platform.admin();
+  const result = await serviceAccountService.rotate(spaceId, serviceAccountId);
+  revalidatePath(`/admin/authorization-spaces/${spaceId}/access`);
+  return result;
 }
