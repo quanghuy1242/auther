@@ -55,11 +55,18 @@ export default async function AuthorizationSpacesPage() {
         title="Authorization Spaces"
         description="Define model ownership boundaries independently from OAuth clients. Spaces group the models and grants that belong to one resource domain."
         action={
-          <Link href="/admin/authorization-spaces/create">
-            <Button variant="primary" size="sm" leftIcon="add">
-              Create Authorization Space
-            </Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/admin/access#onboarding-flows">
+              <Button variant="secondary" size="sm" leftIcon="person_add">
+                Onboarding Flows
+              </Button>
+            </Link>
+            <Link href="/admin/authorization-spaces/create">
+              <Button variant="primary" size="sm" leftIcon="add">
+                Create Authorization Space
+              </Button>
+            </Link>
+          </div>
         }
       />
 

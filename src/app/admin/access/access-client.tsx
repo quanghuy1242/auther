@@ -1318,7 +1318,7 @@ export function PlatformContextsSection({ contexts, models, spaces }: PlatformCo
     };
 
     return (
-        <Card>
+        <Card id="onboarding-flows">
             <CardHeader className="border-b border-[#243647] pb-6 flex-row items-start justify-between space-y-0">
                 <div className="flex flex-1 items-center gap-4">
                     <div className="flex-1">

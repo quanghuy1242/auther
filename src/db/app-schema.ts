@@ -169,6 +169,7 @@ export const authorizationSpaces = sqliteTable(
     onboardingAllowedTriggers: text("onboarding_allowed_triggers", { mode: "json" })
       .$type<Array<{ kind: "oauth_client" | "resource_server"; id: string }>>()
       .notNull()
+      .default(sql`'[]'`)
       .$defaultFn(() => []),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -231,6 +232,8 @@ export const webhookEndpoint = sqliteTable(
       .references(() => oauthApplication.clientId, { onDelete: "set null" }),
     // Optional authorization-space scope filter: when set, only deliver events
     // whose payload carries this authorizationSpaceId.
+    // Indexes for user_id and authorization_space_id are enforced by
+    // scripts/ensure-sqlite-indexes.ts to avoid repeat drizzle-kit push drift.
     authorizationSpaceId: text("authorization_space_id").references(() => authorizationSpaces.id, {
       onDelete: "set null",
     }),
@@ -247,11 +250,7 @@ export const webhookEndpoint = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
-  },
-  (table) => [
-    index("webhook_endpoint_user_id_idx").on(table.userId),
-    index("webhook_endpoint_authorization_space_id_idx").on(table.authorizationSpaceId),
-  ]
+  }
 );
 
 // Webhook Subscription - Which event types each endpoint wants to receive

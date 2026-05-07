@@ -14,14 +14,28 @@ async function main() {
   });
 
   try {
+    const ensured = [
+      "registration_contexts_slug_unique",
+      "webhook_endpoint_user_id_idx",
+      "webhook_endpoint_authorization_space_id_idx",
+    ];
+
     await client.execute(`
       CREATE UNIQUE INDEX IF NOT EXISTS registration_contexts_slug_unique
       ON registration_contexts (slug)
     `);
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS webhook_endpoint_user_id_idx
+      ON webhook_endpoint (user_id)
+    `);
+    await client.execute(`
+      CREATE INDEX IF NOT EXISTS webhook_endpoint_authorization_space_id_idx
+      ON webhook_endpoint (authorization_space_id)
+    `);
 
     console.log(JSON.stringify({
       generatedAt: new Date().toISOString(),
-      ensured: ["registration_contexts_slug_unique"],
+      ensured,
     }, null, 2));
   } finally {
     client.close();

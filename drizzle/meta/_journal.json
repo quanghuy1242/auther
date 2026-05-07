@@ -162,6 +162,13 @@
       "when": 1778159811002,
       "tag": "0023_pending_registration_context_trigger_id",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1778160517636,
+      "tag": "0024_authorization_space_onboarding_columns",
+      "breakpoints": true
     }
   ]
 }
