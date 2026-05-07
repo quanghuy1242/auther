@@ -21,6 +21,9 @@ const authorizationSpaceRepo = new AuthorizationSpaceRepository();
 // Get HMAC secret from environment
 const INVITE_SECRET = process.env.INVITE_HMAC_SECRET || "default-secret-change-me";
 const SIGNUP_INTENT_KIND = "signup_intent";
+const DEFAULT_SIGNUP_INTENT_TTL_SECONDS = 15 * 60;
+const MIN_SIGNUP_INTENT_TTL_SECONDS = 60;
+const MAX_SIGNUP_INTENT_TTL_SECONDS = 15 * 60;
 
 type TriggerPrincipal = { kind: "oauth_client" | "resource_server"; id: string };
 type RequestedGrant = { entityTypeId: string; relation: string; entityId?: string };
@@ -62,6 +65,18 @@ export interface SignupIntentValidationResult extends ContextValidationResult {
 export interface AppliedContextGrantStats {
     appliedCount: number;
     projectedCount: number;
+}
+
+interface PendingGrantValidationInput {
+    contextSlug: string;
+    inviteId?: string;
+    triggerKind: string;
+    triggerClientId?: string | null;
+    triggerId?: string | null;
+    requestedGrants?: RequestedGrant[];
+    returnUrl?: string | null;
+    nonce?: string | null;
+    tokenExpiresAt?: Date | null;
 }
 
 /**
@@ -116,8 +131,14 @@ export class RegistrationContextService {
         return allowedReturnUrls.some((allowed) => {
             try {
                 const allowedUrl = new URL(allowed);
+                const allowedPath = allowedUrl.pathname.endsWith("/")
+                    ? allowedUrl.pathname
+                    : `${allowedUrl.pathname}/`;
                 return parsed.origin === allowedUrl.origin &&
-                    parsed.pathname.startsWith(allowedUrl.pathname);
+                    (
+                        parsed.pathname === allowedUrl.pathname ||
+                        parsed.pathname.startsWith(allowedPath)
+                    );
             } catch {
                 return false;
             }
@@ -155,11 +176,128 @@ export class RegistrationContextService {
         );
     }
 
+    private selectedGrants(context: RegistrationContext, requestedGrants?: RequestedGrant[]): RequestedGrant[] {
+        return requestedGrants && requestedGrants.length > 0
+            ? requestedGrants
+            : context.grants.map((grant) => ({
+                entityTypeId: grant.entityTypeId,
+                relation: grant.relation,
+                entityId: grant.entityId,
+            }));
+    }
+
+    private async validateTargetAuthorizationSpaceOnboarding(
+        context: RegistrationContext
+    ): Promise<ContextValidationResult> {
+        if (context.targetKind !== "authorization_space" || !context.targetId) {
+            return { valid: false, error: "Onboarding Flow must target an authorization space" };
+        }
+
+        const space = await authorizationSpaceRepo.findById(context.targetId);
+        if (!space || !space.enabled || !space.onboardingEnabled) {
+            return { valid: false, error: "Authorization space onboarding is disabled" };
+        }
+
+        return { valid: true, context };
+    }
+
+    private async assertContextGrantTargets(
+        context: RegistrationContext,
+        requestedGrants?: RequestedGrant[]
+    ): Promise<void> {
+        const grantsToApply = this.selectedGrants(context, requestedGrants);
+
+        if (grantsToApply.length === 0) {
+            throw new Error("Onboarding Flow must configure at least one grant");
+        }
+
+        if (!this.grantsAreSubset(context, grantsToApply)) {
+            throw new Error("Requested grants are outside the Onboarding Flow");
+        }
+
+        for (const grant of grantsToApply) {
+            if (!grant.entityTypeId || !grant.relation) {
+                throw new Error("Grant target and relation are required");
+            }
+
+            const model = await authzModelRepo.findById(grant.entityTypeId);
+
+            if (!model) {
+                throw new Error(`Authorization model not found for entityTypeId ${grant.entityTypeId}`);
+            }
+
+            if (!Object.prototype.hasOwnProperty.call(model.definition.relations ?? {}, grant.relation)) {
+                throw new Error(`Relation '${grant.relation}' is not defined on model '${model.entityType}'`);
+            }
+
+            if (context.targetKind === "authorization_space") {
+                if (!model.authorizationSpaceId || model.authorizationSpaceId !== context.targetId) {
+                    throw new Error(`Model '${model.entityType}' is outside the target authorization space`);
+                }
+            }
+        }
+    }
+
+    async validateContextGrantTargets(
+        context: RegistrationContext,
+        requestedGrants?: RequestedGrant[]
+    ): Promise<ContextValidationResult> {
+        try {
+            await this.assertContextGrantTargets(context, requestedGrants);
+            return { valid: true, context };
+        } catch (error) {
+            return {
+                valid: false,
+                error: error instanceof Error ? error.message : "Grant targets are invalid",
+            };
+        }
+    }
+
+    private async validateInviteContextPolicy(
+        context: RegistrationContext,
+        signUpEmail?: string
+    ): Promise<ContextValidationResult> {
+        if (!context.enabled) {
+            return { valid: false, error: "Registration context is disabled" };
+        }
+
+        const policy = await signupPolicyRepo.get();
+        if (!policy.inviteEnabled) {
+            return { valid: false, error: "Invite signup is disabled" };
+        }
+
+        if (context.signupMode !== "invite_only") {
+            return { valid: false, error: "This Onboarding Flow does not allow invites" };
+        }
+
+        const spaceCheck = await this.validateTargetAuthorizationSpaceOnboarding(context);
+        if (!spaceCheck.valid) {
+            return spaceCheck;
+        }
+
+        if (signUpEmail && !this.isEmailDomainAllowed(signUpEmail, context.allowedDomains)) {
+            return { valid: false, error: "Email domain is not allowed" };
+        }
+
+        return this.validateContextGrantTargets(context);
+    }
+
     async createSignedSignupIntent(payload: Omit<SignupIntentPayload, "kind" | "nonce" | "exp"> & {
         expiresInSeconds?: number;
     }): Promise<{ token: string; nonce: string; expiresAt: Date }> {
+        const expiresInSeconds = payload.expiresInSeconds ?? DEFAULT_SIGNUP_INTENT_TTL_SECONDS;
+        if (
+            !Number.isFinite(expiresInSeconds) ||
+            expiresInSeconds < MIN_SIGNUP_INTENT_TTL_SECONDS ||
+            expiresInSeconds > MAX_SIGNUP_INTENT_TTL_SECONDS
+        ) {
+            throw new Error(
+                `Signup intent expiry must be between ${MIN_SIGNUP_INTENT_TTL_SECONDS} and ${MAX_SIGNUP_INTENT_TTL_SECONDS} seconds`
+            );
+        }
+
         const nonce = randomBytes(16).toString("hex");
-        const expiresAt = new Date(Date.now() + (payload.expiresInSeconds ?? 15 * 60) * 1000);
+        const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
         const intentPayload: SignupIntentPayload = {
             kind: SIGNUP_INTENT_KIND,
             flow: payload.flow,
@@ -276,6 +414,11 @@ export class RegistrationContextService {
             return { valid: false, error: "Email domain is not allowed" };
         }
 
+        const grantTargetCheck = await this.validateContextGrantTargets(context, payload.requestedGrants);
+        if (!grantTargetCheck.valid) {
+            return grantTargetCheck;
+        }
+
         return { valid: true, context, payload };
     }
 
@@ -341,21 +484,17 @@ export class RegistrationContextService {
             throw new Error("Registration context is disabled");
         }
 
-        const policy = await signupPolicyRepo.get();
-        if (!policy.inviteEnabled) {
-            throw new Error("Invite signup is disabled");
-        }
-
-        if (context.signupMode !== "invite_only") {
-            throw new Error("This Onboarding Flow does not allow invites");
-        }
-
         // If client-scoped, check if client allows registration contexts
         if (context.clientId) {
             const metadata = await metadataRepo.findByClientId(context.clientId);
             if (!metadata?.allowsRegistrationContexts) {
                 throw new Error("Client does not allow registration contexts");
             }
+        }
+
+        const invitePolicy = await this.validateInviteContextPolicy(context, options.email);
+        if (!invitePolicy.valid) {
+            throw new Error(invitePolicy.error ?? "Invite signup is disabled");
         }
 
         const expiresInDays = options.expiresInDays ?? 7;
@@ -439,6 +578,10 @@ export class RegistrationContextService {
                 return { valid: false, error: "Invite not found" };
             }
 
+            if (invite.contextSlug !== payload.contextSlug) {
+                return { valid: false, error: "Invite context mismatch" };
+            }
+
             // Check if already consumed
             if (invite.consumedAt) {
                 return { valid: false, error: "Invite has already been used" };
@@ -455,22 +598,10 @@ export class RegistrationContextService {
                 return { valid: false, error: "Registration context not found" };
             }
 
-        if (!context.enabled) {
-            return { valid: false, error: "Registration context is disabled" };
-        }
-
-        const policy = await signupPolicyRepo.get();
-        if (!policy.inviteEnabled) {
-            return { valid: false, error: "Invite signup is disabled" };
-        }
-
-        if (context.signupMode !== "invite_only") {
-            return { valid: false, error: "This Onboarding Flow does not allow invites" };
-        }
-
-        if (signUpEmail && !this.isEmailDomainAllowed(signUpEmail, context.allowedDomains)) {
-            return { valid: false, error: "Email domain is not allowed" };
-        }
+            const invitePolicy = await this.validateInviteContextPolicy(context, signUpEmail);
+            if (!invitePolicy.valid) {
+                return { valid: false, error: invitePolicy.error };
+            }
 
             return { valid: true, invite, context };
         } catch (error) {
@@ -491,35 +622,13 @@ export class RegistrationContextService {
     ): Promise<AppliedContextGrantStats> {
         let appliedCount = 0;
         let projectedCount = 0;
-        const grantsToApply: RequestedGrant[] = requestedGrants && requestedGrants.length > 0
-            ? requestedGrants
-            : context.grants.map((grant) => ({
-                entityTypeId: grant.entityTypeId,
-                relation: grant.relation,
-                entityId: grant.entityId,
-            }));
-
-        if (!this.grantsAreSubset(context, grantsToApply)) {
-            throw new Error("Requested grants are outside the Onboarding Flow");
-        }
+        const grantsToApply = this.selectedGrants(context, requestedGrants);
+        await this.assertContextGrantTargets(context, requestedGrants);
 
         for (const grant of grantsToApply) {
             // Look up authorization model by ID to get current entity type name
             const model = await authzModelRepo.findById(grant.entityTypeId);
-
-            if (!model) {
-                throw new Error(`Authorization model not found for entityTypeId ${grant.entityTypeId}`);
-            }
-
-            if (!Object.prototype.hasOwnProperty.call(model.definition.relations, grant.relation)) {
-                throw new Error(`Relation '${grant.relation}' is not defined on model '${model.entityType}'`);
-            }
-
-            if (context.targetKind === "authorization_space") {
-                if (!model.authorizationSpaceId || model.authorizationSpaceId !== context.targetId) {
-                    throw new Error(`Model '${model.entityType}' is outside the target authorization space`);
-                }
-            }
+            if (!model) continue;
 
             // Create tuple using the current (possibly renamed) entity type
             const result = await tupleRepo.createIfNotExists({
@@ -566,6 +675,84 @@ export class RegistrationContextService {
      */
     async getPendingInvites(contextSlug: string): Promise<PlatformInvite[]> {
         return platformInviteRepo.findPendingByContext(contextSlug);
+    }
+
+    async validatePendingGrantApplication(
+        pending: PendingGrantValidationInput,
+        email: string
+    ): Promise<ContextValidationResult> {
+        const context = await registrationContextRepo.findBySlug(pending.contextSlug);
+
+        if (!context) {
+            return { valid: false, error: `Registration context not found: ${pending.contextSlug}` };
+        }
+
+        if (!context.enabled) {
+            return { valid: false, error: "Onboarding Flow is not active" };
+        }
+
+        if (pending.tokenExpiresAt && pending.tokenExpiresAt.getTime() <= Date.now()) {
+            return { valid: false, error: "Signup intent expired before email verification completed" };
+        }
+
+        if (pending.inviteId || pending.triggerKind === "invite") {
+            if (!pending.inviteId) {
+                return { valid: false, error: "Invite is required for invite onboarding grants" };
+            }
+
+            const invite = await platformInviteRepo.findById(pending.inviteId);
+            if (!invite) {
+                return { valid: false, error: "Invite not found" };
+            }
+            if (invite.contextSlug !== pending.contextSlug) {
+                return { valid: false, error: "Invite context mismatch" };
+            }
+            if (invite.consumedAt) {
+                return { valid: false, error: "Invite has already been used" };
+            }
+            if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+                return { valid: false, error: "Invite has expired" };
+            }
+            if (invite.email && invite.email.toLowerCase() !== email.toLowerCase()) {
+                return { valid: false, error: "This invite is for a different email address" };
+            }
+
+            return this.validateInviteContextPolicy(context, email);
+        }
+
+        if (pending.triggerKind === "oauth_client" || pending.triggerKind === "resource_server") {
+            const triggerId = pending.triggerId ?? pending.triggerClientId ?? null;
+            if (!triggerId) {
+                return { valid: false, error: "Signup trigger is missing" };
+            }
+            if (!pending.returnUrl) {
+                return { valid: false, error: "Signup continuation URL is missing" };
+            }
+            if (context.targetKind !== "authorization_space" || !context.targetId) {
+                return { valid: false, error: "Onboarding Flow must target an authorization space" };
+            }
+
+            return this.validateSignupIntentPolicy({
+                kind: SIGNUP_INTENT_KIND,
+                flow: pending.contextSlug,
+                trigger: {
+                    kind: pending.triggerKind,
+                    id: triggerId,
+                },
+                authorizationSpaceId: context.targetId,
+                requestedGrants: pending.requestedGrants,
+                returnUrl: pending.returnUrl,
+                nonce: pending.nonce ?? "",
+                exp: pending.tokenExpiresAt?.getTime() ?? Date.now(),
+            }, email);
+        }
+
+        const spaceCheck = await this.validateTargetAuthorizationSpaceOnboarding(context);
+        if (!spaceCheck.valid) {
+            return spaceCheck;
+        }
+
+        return this.validateContextGrantTargets(context, pending.requestedGrants);
     }
 
     /**

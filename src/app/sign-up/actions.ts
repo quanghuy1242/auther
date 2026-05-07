@@ -199,6 +199,7 @@ export async function onboardingSignUp(
     triggerKind: payload.trigger.kind,
     triggerClientId:
       payload.trigger.kind === "oauth_client" ? payload.trigger.id : null,
+    triggerId: payload.trigger.id,
     requestedGrants: payload.requestedGrants,
     returnUrl: payload.returnUrl,
     nonce: payload.nonce,

@@ -105,25 +105,21 @@ export async function validateOriginForContext(
 }
 
 /**
- * Middleware helper to validate and queue context grant during sign-up.
- * Call this at the start of sign-up flow when a context slug is provided.
+ * Legacy helper kept only for origin validation compatibility.
+ * Public onboarding grants must be queued by the server-side /sign-up actions
+ * after a signed intent or invite has been validated.
  * 
  */
 export async function validateAndQueueContextGrant(
     email: string,
     contextSlug: string
 ): Promise<OriginValidationResult> {
+    void email;
     const validation = await validateOriginForContext(contextSlug);
 
     if (!validation.valid) {
         return validation;
     }
-
-    // Queue the context grant for application after user creation
-    const { queueContextGrantDurable } = await import("@/lib/pipelines/registration-grants");
-    await queueContextGrantDurable(email, contextSlug, undefined, {
-        triggerKind: "origin",
-    });
 
     return { valid: true, contextSlug };
 }

@@ -6,17 +6,18 @@
  */
 
 import { registrationContextService } from "@/lib/services/registration-context-service";
-import {
-    pendingRegistrationContextApplicationRepo,
-    platformInviteRepo,
-    registrationContextRepo,
-} from "@/lib/repositories/platform-access-repository";
+import { pendingRegistrationContextApplicationRepo } from "@/lib/repositories/platform-access-repository";
 
 type PendingContextGrantApplication = {
     id?: string;
     contextSlug: string;
     inviteId?: string;
+    triggerKind: string;
+    triggerClientId?: string | null;
+    triggerId?: string | null;
     requestedGrants?: Array<{ entityTypeId: string; relation: string; entityId?: string }>;
+    returnUrl?: string | null;
+    nonce?: string | null;
     tokenExpiresAt?: Date | null;
     durable: boolean;
 };
@@ -28,6 +29,7 @@ export async function queueContextGrantDurable(
     options: {
         triggerKind?: string;
         triggerClientId?: string | null;
+        triggerId?: string | null;
         requestedGrants?: Array<{ entityTypeId: string; relation: string; entityId?: string }>;
         returnUrl?: string | null;
         nonce?: string | null;
@@ -41,6 +43,7 @@ export async function queueContextGrantDurable(
         inviteId: inviteId ?? null,
         triggerKind: options.triggerKind ?? (inviteId ? "invite" : "manual"),
         triggerClientId: options.triggerClientId ?? null,
+        triggerId: options.triggerId ?? options.triggerClientId ?? null,
         requestedGrants: options.requestedGrants ?? null,
         returnUrl: options.returnUrl ?? null,
         nonce: options.nonce ?? null,
@@ -67,7 +70,12 @@ export async function applyRegistrationContextGrants(
             id: pending.id,
             contextSlug: pending.contextSlug,
             inviteId: pending.inviteId ?? undefined,
+            triggerKind: pending.triggerKind,
+            triggerClientId: pending.triggerClientId,
+            triggerId: pending.triggerId,
             requestedGrants: pending.requestedGrants ?? undefined,
+            returnUrl: pending.returnUrl,
+            nonce: pending.nonce,
             tokenExpiresAt: pending.tokenExpiresAt ?? null,
             durable: true,
         }));
@@ -91,15 +99,41 @@ export async function applyRegistrationContextGrants(
                 continue;
             }
 
-            const registrationContext = await registrationContextRepo.findBySlug(
-                pending.contextSlug
+            const validation = await registrationContextService.validatePendingGrantApplication(
+                pending,
+                normalizedEmail
             );
 
-            if (!registrationContext) {
-                console.error(
-                    `Registration context not found: ${pending.contextSlug}`
-                );
+            if (!validation.valid || !validation.context) {
+                const error = validation.error ?? "Registration context grant is no longer allowed";
+                console.error(error);
+                if (pending.durable && pending.id) {
+                    await pendingRegistrationContextApplicationRepo.markFailed(
+                        pending.id,
+                        error
+                    );
+                }
                 continue;
+            }
+
+            const registrationContext = validation.context;
+
+            if (pending.inviteId) {
+                const consumed = await registrationContextService.consumeInvite(
+                    pending.inviteId,
+                    userId
+                );
+                if (!consumed) {
+                    const error = "Invite is no longer available";
+                    if (pending.durable && pending.id) {
+                        await pendingRegistrationContextApplicationRepo.markFailed(
+                            pending.id,
+                            error
+                        );
+                    }
+                    continue;
+                }
+                console.log(`Consumed invite: ${pending.inviteId}`);
             }
 
             // Apply the grants from the context (idempotent via createIfNotExists)
@@ -122,12 +156,6 @@ export async function applyRegistrationContextGrants(
             console.log(
                 `Applied registration context grants: ${pending.contextSlug} -> user ${userId}`
             );
-
-            // If this was from an invite, mark it as consumed
-            if (pending.inviteId) {
-                await platformInviteRepo.markConsumed(pending.inviteId, userId);
-                console.log(`Consumed invite: ${pending.inviteId}`);
-            }
 
             if (pending.durable && pending.id) {
                 await pendingRegistrationContextApplicationRepo.markApplied(pending.id, userId);

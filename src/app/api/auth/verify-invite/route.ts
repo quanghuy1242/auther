@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { registrationContextService } from "@/lib/services/registration-context-service";
-import { queueContextGrantDurable } from "@/lib/pipelines/registration-grants";
 
 /**
  * API Route: POST /api/auth/verify-invite
  * 
  * Verifies a signed invite token for invite-only registration contexts.
- * If valid, queues the context grant for application after user creation.
+ * Grant queueing happens only in the server-side /sign-up action after the
+ * user actually starts the invite signup flow.
  * 
  * Request body:
  * {
@@ -63,14 +63,6 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-
-        // Queue the context grant for application after user creation
-        await queueContextGrantDurable(
-            email,
-            verification.context.slug,
-            verification.invite?.id,
-            { triggerKind: "invite" }
-        );
 
         return NextResponse.json({
             valid: true,

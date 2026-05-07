@@ -495,6 +495,10 @@ export async function createPlatformContext(data: {
             return { success: false, error: "Context with this slug already exists" };
         }
 
+        if (!data.grants || data.grants.length === 0) {
+            return { success: false, error: "At least one grant is required" };
+        }
+
         if (data.signupMode === "public_signed_intent") {
             if (!data.targetAuthorizationSpaceId) {
                 return { success: false, error: "Public signed-intent flows must target an authorization space" };

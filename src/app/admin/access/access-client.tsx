@@ -1363,13 +1363,13 @@ export function PlatformContextsSection({ contexts, models, spaces }: PlatformCo
                                     <div className="flex items-center gap-2">
                                         <Switch
                                             checked={context.enabled ?? false}
-                                            onChange={() => handleToggleEnabled(context.id, context.enabled ?? false)}
-                                            disabled={updating === context.id}
+                                            onChange={() => handleToggleEnabled(context.slug, context.enabled ?? false)}
+                                            disabled={updating === context.slug}
                                         />
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => handleDelete(context.id)}
+                                            onClick={() => handleDelete(context.slug)}
                                         >
                                             <Icon name="delete" size="xs" className="h-4 w-4 text-red-500" />
                                         </Button>

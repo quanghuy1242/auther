@@ -166,6 +166,7 @@ export const pendingRegistrationContextApplications = sqliteTable(
         triggerClientId: text("trigger_client_id").references(() => oauthApplication.clientId, {
             onDelete: "set null",
         }),
+        triggerId: text("trigger_id"),
         requestedGrants: text("requested_grants", { mode: "json" })
             .$type<Array<{ entityTypeId: string; relation: string; entityId?: string }>>(),
         returnUrl: text("return_url"),

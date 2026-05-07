@@ -4,6 +4,7 @@ import test from "node:test";
 import { createRestrictedSignupPaths, validateInternalSignupAccess } from "@/lib/utils/auth-middleware";
 import { RegistrationContextService } from "@/lib/services/registration-context-service";
 import { AuthorizationSpaceRepository } from "@/lib/repositories/authorization-space-repository";
+import { AuthorizationModelRepository } from "@/lib/repositories/authorization-model-repository";
 import {
   registrationContextRepo,
   signupPolicyRepo,
@@ -112,12 +113,15 @@ test("onboarding policy validates grant subsets, email domains, and return URLs"
   assert.equal(service.isEmailDomainAllowed("reader@blocked.com", ["example.com"]), false);
   assert.equal(service.isReturnUrlAllowed("https://blog.example.com/welcome", ["https://blog.example.com/"]), true);
   assert.equal(service.isReturnUrlAllowed("https://evil.example.com/welcome", ["https://blog.example.com/"]), false);
+  assert.equal(service.isReturnUrlAllowed("https://blog.example.com/auth/callback", ["https://blog.example.com/auth/callback"]), true);
+  assert.equal(service.isReturnUrlAllowed("https://blog.example.com/auth/callback-extra", ["https://blog.example.com/auth/callback"]), false);
 });
 
 test("signup intent policy is data-configured for arbitrary clients, spaces, models, and flows", async () => {
   const originalSignupPolicyGet = signupPolicyRepo.get;
   const originalFindBySlug = registrationContextRepo.findBySlug;
   const originalFindSpaceById = AuthorizationSpaceRepository.prototype.findById;
+  const originalFindModelById = AuthorizationModelRepository.prototype.findById;
 
   (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = async () => ({
     id: "global",
@@ -172,6 +176,25 @@ test("signup intent policy is data-configured for arbitrary clients, spaces, mod
       updatedAt: new Date(),
     };
   };
+  AuthorizationModelRepository.prototype.findById = async function findById(id: string) {
+    if (id !== "model_article") {
+      return null;
+    }
+
+    return {
+      id,
+      entityType: "space_new_app:article",
+      authorizationSpaceId: "space_new_app",
+      definition: {
+        relations: {
+          reader: [],
+        },
+        permissions: {},
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  };
 
   try {
     const service = new RegistrationContextService();
@@ -207,5 +230,133 @@ test("signup intent policy is data-configured for arbitrary clients, spaces, mod
     (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = originalSignupPolicyGet;
     (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = originalFindBySlug;
     AuthorizationSpaceRepository.prototype.findById = originalFindSpaceById;
+    AuthorizationModelRepository.prototype.findById = originalFindModelById;
+  }
+});
+
+test("signup intent policy rejects stale or invalid grant target configuration", async () => {
+  const originalSignupPolicyGet = signupPolicyRepo.get;
+  const originalFindBySlug = registrationContextRepo.findBySlug;
+  const originalFindSpaceById = AuthorizationSpaceRepository.prototype.findById;
+  const originalFindModelById = AuthorizationModelRepository.prototype.findById;
+
+  (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = async () => ({
+    id: "global",
+    directSignupEnabled: false,
+    publicSignedIntentEnabled: true,
+    inviteEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = async () => ({
+    id: "ctx_blog",
+    slug: "blog-commenter",
+    name: "Blog commenter",
+    description: null,
+    clientId: null,
+    triggerKind: "oauth_client",
+    triggerClientId: "blog-client",
+    targetKind: "authorization_space",
+    targetId: "space_blog",
+    allowedOrigins: [],
+    allowedDomains: null,
+    signupMode: "public_signed_intent",
+    allowedTriggerPrincipals: [{ kind: "oauth_client", id: "blog-client" }],
+    allowedReturnUrls: ["https://blog.example.com/signup"],
+    theme: null,
+    grants: [{ entityTypeId: "deleted_model", relation: "commenter", entityId: "*" }],
+    enabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  AuthorizationSpaceRepository.prototype.findById = async () => ({
+    id: "space_blog",
+    slug: "blog",
+    name: "Blog",
+    description: null,
+    enabled: true,
+    resourceServerId: null,
+    onboardingEnabled: true,
+    onboardingAllowedTriggers: [{ kind: "oauth_client", id: "blog-client" }],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  AuthorizationModelRepository.prototype.findById = async () => null;
+
+  try {
+    const result = await new RegistrationContextService().validateSignupIntentPolicy({
+      kind: "signup_intent",
+      flow: "blog-commenter",
+      trigger: { kind: "oauth_client", id: "blog-client" },
+      authorizationSpaceId: "space_blog",
+      requestedGrants: [{ entityTypeId: "deleted_model", relation: "commenter" }],
+      returnUrl: "https://blog.example.com/signup/complete",
+      nonce: "nonce",
+      exp: Date.now() + 60_000,
+    });
+
+    assert.equal(result.valid, false);
+    assert.equal(result.error, "Authorization model not found for entityTypeId deleted_model");
+  } finally {
+    (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = originalSignupPolicyGet;
+    (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = originalFindBySlug;
+    AuthorizationSpaceRepository.prototype.findById = originalFindSpaceById;
+    AuthorizationModelRepository.prototype.findById = originalFindModelById;
+  }
+});
+
+test("pending signup intent grants fail closed when policy changes before verification", async () => {
+  const originalSignupPolicyGet = signupPolicyRepo.get;
+  const originalFindBySlug = registrationContextRepo.findBySlug;
+
+  (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = async () => ({
+    id: "global",
+    directSignupEnabled: false,
+    publicSignedIntentEnabled: false,
+    inviteEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = async () => ({
+    id: "ctx_blog",
+    slug: "blog-commenter",
+    name: "Blog commenter",
+    description: null,
+    clientId: null,
+    triggerKind: "oauth_client",
+    triggerClientId: "blog-client",
+    targetKind: "authorization_space",
+    targetId: "space_blog",
+    allowedOrigins: [],
+    allowedDomains: null,
+    signupMode: "public_signed_intent",
+    allowedTriggerPrincipals: [{ kind: "oauth_client", id: "blog-client" }],
+    allowedReturnUrls: ["https://blog.example.com/signup"],
+    theme: null,
+    grants: [{ entityTypeId: "model_book", relation: "commenter", entityId: "*" }],
+    enabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  try {
+    const result = await new RegistrationContextService().validatePendingGrantApplication(
+      {
+        contextSlug: "blog-commenter",
+        triggerKind: "oauth_client",
+        triggerId: "blog-client",
+        requestedGrants: [{ entityTypeId: "model_book", relation: "commenter" }],
+        returnUrl: "https://blog.example.com/signup/complete",
+        nonce: "nonce",
+        tokenExpiresAt: new Date(Date.now() + 60_000),
+      },
+      "reader@example.com"
+    );
+
+    assert.equal(result.valid, false);
+    assert.equal(result.error, "Public signup is disabled");
+  } finally {
+    (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = originalSignupPolicyGet;
+    (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = originalFindBySlug;
   }
 });
