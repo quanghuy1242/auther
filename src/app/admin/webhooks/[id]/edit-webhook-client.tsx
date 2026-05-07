@@ -42,9 +42,15 @@ interface EditWebhookClientProps {
   webhook: WebhookEndpointWithSubscriptions;
   deliveryHistory: WebhookDeliveryEntity[];
   clients: { clientId: string; name: string }[];
+  authorizationSpaces: { id: string; name: string }[];
 }
 
-export function EditWebhookClient({ webhook, deliveryHistory, clients }: EditWebhookClientProps) {
+export function EditWebhookClient({
+  webhook,
+  deliveryHistory,
+  clients,
+  authorizationSpaces,
+}: EditWebhookClientProps) {
   const router = useRouter();
   const [regeneratedSecret, setRegeneratedSecret] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -59,6 +65,7 @@ export function EditWebhookClient({ webhook, deliveryHistory, clients }: EditWeb
     deliveryFormat: webhook.deliveryFormat,
     requestMethod: webhook.requestMethod,
     clientId: webhook.clientId ?? "",
+    authorizationSpaceId: webhook.authorizationSpaceId ?? "",
   }), [
     webhook.displayName,
     webhook.url,
@@ -68,6 +75,7 @@ export function EditWebhookClient({ webhook, deliveryHistory, clients }: EditWeb
     webhook.deliveryFormat,
     webhook.requestMethod,
     webhook.clientId,
+    webhook.authorizationSpaceId,
   ]);
 
   const handleSubmit = async (
@@ -142,7 +150,7 @@ export function EditWebhookClient({ webhook, deliveryHistory, clients }: EditWeb
                 defaultValues={defaultValues}
                 resetOnSuccess={false}
               >
-                <WebhookFormContent clients={clients} />
+                <WebhookFormContent clients={clients} authorizationSpaces={authorizationSpaces} />
 
                 {/* Form Actions */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between pt-6 mt-6 border-t border-gray-700">

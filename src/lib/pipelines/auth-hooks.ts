@@ -43,12 +43,12 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
 
                 // AFTER: Async hook (runs AFTER user insert)
                 async after(user) {
-                    // Apply registration context grants if applicable
-                    // The context slug is passed via user metadata during sign-up
-                    try {
-                        await applyRegistrationContextGrants(user.id, user.email);
-                    } catch (err) {
-                        console.error("Failed to apply registration context grants:", err);
+                    if (user.emailVerified) {
+                        try {
+                            await applyRegistrationContextGrants(user.id, user.email);
+                        } catch (err) {
+                            console.error("Failed to apply registration context grants:", err);
+                        }
                     }
 
                     // Fire-and-forget pipeline with user metadata for tracing
@@ -76,6 +76,14 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
             },
             update: {
                 async after(user) {
+                    if (user.emailVerified) {
+                        try {
+                            await applyRegistrationContextGrants(user.id, user.email);
+                        } catch (err) {
+                            console.error("Failed to apply verified registration context grants:", err);
+                        }
+                    }
+
                     await emitWebhookEvent(user.id, "user.updated", {
                         id: user.id,
                         email: user.email,
@@ -145,4 +153,3 @@ export function createPipelineDatabaseHooks(): BetterAuthOptions["databaseHooks"
 // Note: before_signin must be wired via auth middleware because session.create
 // does not have access to the user's email. See auth.ts beforeHook.
 export const beforeSigninPipeline = PipelineIntegrator.createBlockingHook("before_signin");
-

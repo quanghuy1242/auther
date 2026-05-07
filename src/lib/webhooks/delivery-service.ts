@@ -96,7 +96,8 @@ export async function emitWebhookEvent(
   userId: string,
   eventType: WebhookEventType,
   data: Record<string, unknown>,
-  clientId?: string | null
+  clientId?: string | null,
+  authorizationSpaceId?: string | null
 ): Promise<void> {
   const emitStart = performance.now();
   try {
@@ -123,7 +124,8 @@ export async function emitWebhookEvent(
     const endpoints = await webhookRepository.findActiveEndpointsByEvent(
       userId,
       eventType,
-      clientId
+      clientId,
+      authorizationSpaceId
     );
 
     if (endpoints.length === 0) {

@@ -27,6 +27,10 @@ const settingsNavItems: NavItem[] = [
   { label: "Configuration", href: "/admin/settings", icon: "settings" },
 ];
 
+const profileOnlySettingsNavItems: NavItem[] = [
+  { label: "Profile", href: "/admin/profile", icon: "person" },
+];
+
 const footerNavItems: NavItem[] = [
   { label: "Help Center", href: "/help", icon: "help" },
 ];
@@ -43,17 +47,12 @@ export default async function AdminLayout({
     redirect("/sign-in");
   }
 
-  // Require admin role to access admin dashboard
   const hasAdminAccess = await isAdmin(session);
-  if (!hasAdminAccess) {
-    // Redirect to a forbidden page or sign-in with error
-    redirect("/sign-in?error=forbidden");
-  }
 
   return (
     <AdminLayoutClient
-      mainNavItems={mainNavItems}
-      settingsNavItems={settingsNavItems}
+      mainNavItems={hasAdminAccess ? mainNavItems : []}
+      settingsNavItems={hasAdminAccess ? settingsNavItems : profileOnlySettingsNavItems}
       footerNavItems={footerNavItems}
       user={session.user}
     >

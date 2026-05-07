@@ -9,7 +9,7 @@ import {
 } from "@/components/forms";
 import { PageHeading } from "@/components/layout";
 import { Icon } from "@/components/ui";
-import { createWebhook, getClientsForWebhookFilter } from "../actions";
+import { createWebhook, getAuthorizationSpacesForWebhookFilter, getClientsForWebhookFilter } from "../actions";
 import { webhookSchema } from "@/schemas/webhooks";
 import { WebhookFormContent } from "../[id]/webhook-form-content";
 
@@ -19,9 +19,11 @@ export default function CreateWebhookPage() {
     null
   );
   const [clients, setClients] = useState<{ clientId: string; name: string }[]>([]);
+  const [authorizationSpaces, setAuthorizationSpaces] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     getClientsForWebhookFilter().then(setClients).catch(() => {});
+    getAuthorizationSpacesForWebhookFilter().then(setAuthorizationSpaces).catch(() => {});
   }, []);
 
   // Define default values that match the schema defaults
@@ -34,6 +36,7 @@ export default function CreateWebhookPage() {
     deliveryFormat: "json" as const,
     requestMethod: "POST" as const,
     clientId: "",
+    authorizationSpaceId: "",
   };
 
   const handleSubmit = async (prevState: unknown, formData: FormData) => {
@@ -101,7 +104,7 @@ export default function CreateWebhookPage() {
             onSuccess={handleSuccess}
             defaultValues={defaultValues}
           >
-            <WebhookFormContent clients={clients} />
+            <WebhookFormContent clients={clients} authorizationSpaces={authorizationSpaces} />
 
             {/* Form Actions */}
             <div className="flex flex-col sm:flex-row gap-3 justify-end pt-6 mt-6 border-t border-gray-700">

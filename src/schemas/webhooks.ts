@@ -45,7 +45,14 @@ export const webhookSchema = z.object({
   deliveryFormat: z.enum(["json", "form-encoded"]).default("json"),
   requestMethod: z.enum(["POST", "PUT"]).default("POST"),
   clientId: z.string().optional().nullable(),
+  authorizationSpaceId: z.string().optional().nullable(),
 }).refine(
+  (data) => !(data.clientId && data.authorizationSpaceId),
+  {
+    message: "Choose either a client filter or an authorization-space filter, not both",
+    path: ["authorizationSpaceId"],
+  }
+).refine(
   (data) => {
     // If no URL, isActive must be false
     if (!data.url || data.url.trim() === "") {

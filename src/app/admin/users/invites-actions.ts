@@ -25,8 +25,8 @@ export interface InviteWithContext extends PlatformInvite {
 export async function getPlatformInvites(): Promise<InviteWithContext[]> {
     await guards.users.view();
 
-    // Get all contexts first
-    const contexts = await registrationContextRepo.findPlatformContexts();
+    // Get all invitable Onboarding Flows first
+    const contexts = await registrationContextRepo.findInvitableOnboardingFlows();
     const contextMap = new Map(contexts.map(c => [c.slug, c.name]));
 
     // Get invites for each context
@@ -50,7 +50,7 @@ export async function getPlatformInvites(): Promise<InviteWithContext[]> {
 
 export async function getAvailableContexts(): Promise<RegistrationContext[]> {
     await guards.users.view();
-    return registrationContextRepo.findPlatformContexts();
+    return registrationContextRepo.findInvitableOnboardingFlows();
 }
 
 export async function createInvite(data: {

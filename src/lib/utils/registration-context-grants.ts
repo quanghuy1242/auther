@@ -3,6 +3,7 @@ import type { AuthorizationModelEntity } from "@/lib/repositories/authorization-
 export interface RegistrationContextGrantInput {
   entityTypeId: string;
   relation: string;
+  entityId?: string;
 }
 
 export interface RegistrationContextGrantTarget {

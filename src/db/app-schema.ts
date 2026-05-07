@@ -163,6 +163,13 @@ export const authorizationSpaces = sqliteTable(
     resourceServerId: text("resource_server_id").references(() => resourceServers.id, {
       onDelete: "set null",
     }),
+    onboardingEnabled: integer("onboarding_enabled", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    onboardingAllowedTriggers: text("onboarding_allowed_triggers", { mode: "json" })
+      .$type<Array<{ kind: "oauth_client" | "resource_server"; id: string }>>()
+      .notNull()
+      .$defaultFn(() => []),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -222,6 +229,11 @@ export const webhookEndpoint = sqliteTable(
     // When null, deliver all events regardless of client (platform-wide).
     clientId: text("client_id")
       .references(() => oauthApplication.clientId, { onDelete: "set null" }),
+    // Optional authorization-space scope filter: when set, only deliver events
+    // whose payload carries this authorizationSpaceId.
+    authorizationSpaceId: text("authorization_space_id").references(() => authorizationSpaces.id, {
+      onDelete: "set null",
+    }),
     displayName: text("display_name").notNull(),
     url: text("url"), // Nullable - webhooks can be created without URL (pending setup)
     encryptedSecret: text("encrypted_secret").notNull(), // Store encrypted webhook signing secret
@@ -236,7 +248,10 @@ export const webhookEndpoint = sqliteTable(
       .notNull()
       .default(sql`(unixepoch())`),
   },
-  (table) => [index("webhook_endpoint_user_id_idx").on(table.userId)]
+  (table) => [
+    index("webhook_endpoint_user_id_idx").on(table.userId),
+    index("webhook_endpoint_authorization_space_id_idx").on(table.authorizationSpaceId),
+  ]
 );
 
 // Webhook Subscription - Which event types each endpoint wants to receive

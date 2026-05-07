@@ -253,7 +253,8 @@ export class WebhookRepository {
   async findActiveEndpointsByEvent(
     userId: string,
     eventType: string,
-    clientId?: string | null
+    clientId?: string | null,
+    authorizationSpaceId?: string | null
   ): Promise<WebhookEndpointEntity[]> {
     try {
       const endpointIds = await db
@@ -279,12 +280,16 @@ export class WebhookRepository {
           )
         );
 
-      // Filter by clientId: endpoints with a clientId set only receive events for that client.
-      // Endpoints with null clientId receive all events.
+      // Filter by scope: unscoped endpoints receive all events; scoped endpoints
+      // only receive events for the matching client or authorization space.
       const filtered = (endpoints as WebhookEndpointEntity[]).filter((ep) => {
-        if (!ep.clientId) return true; // no filter — receive all
-        if (!clientId) return false;   // endpoint wants a client but event has none
-        return ep.clientId === clientId;
+        if (ep.authorizationSpaceId) {
+          return !!authorizationSpaceId && ep.authorizationSpaceId === authorizationSpaceId;
+        }
+        if (ep.clientId) {
+          return !!clientId && ep.clientId === clientId;
+        }
+        return true;
       });
 
       return filtered;
@@ -300,7 +305,8 @@ export class WebhookRepository {
    */
   async findSubscribedUserIdsByEvent(
     eventType: string,
-    clientId?: string | null
+    clientId?: string | null,
+    authorizationSpaceId?: string | null
   ): Promise<string[]> {
     try {
       const endpointIds = await db
@@ -313,7 +319,11 @@ export class WebhookRepository {
       }
 
       const endpoints = await db
-        .select({ userId: webhookEndpoint.userId, clientId: webhookEndpoint.clientId })
+        .select({
+          userId: webhookEndpoint.userId,
+          clientId: webhookEndpoint.clientId,
+          authorizationSpaceId: webhookEndpoint.authorizationSpaceId,
+        })
         .from(webhookEndpoint)
         .where(
           and(
@@ -325,12 +335,16 @@ export class WebhookRepository {
           )
         );
 
-      // Respect clientId filter: endpoints with null clientId receive all events;
-      // endpoints with a set clientId only receive events for that client.
+      // Respect scope filters: endpoints with no scope receive all events;
+      // endpoints with a set clientId or authorizationSpaceId only receive matching events.
       const filtered = endpoints.filter((ep) => {
-        if (!ep.clientId) return true;
-        if (!clientId) return false;
-        return ep.clientId === clientId;
+        if (ep.authorizationSpaceId) {
+          return !!authorizationSpaceId && ep.authorizationSpaceId === authorizationSpaceId;
+        }
+        if (ep.clientId) {
+          return !!clientId && ep.clientId === clientId;
+        }
+        return true;
       });
 
       return Array.from(new Set(filtered.map((ep) => ep.userId)));
@@ -347,6 +361,7 @@ export class WebhookRepository {
     id: string;
     userId: string;
     clientId?: string | null;
+    authorizationSpaceId?: string | null;
     displayName: string;
     url: string | null;
     encryptedSecret: string;

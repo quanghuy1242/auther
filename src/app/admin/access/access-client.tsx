@@ -25,8 +25,10 @@ import { toast } from "sonner";
 import type {
     PolicyTemplate,
     AuthorizationModel,
+    AuthorizationSpaceOption,
     ClientWithRegistrationStatus,
     RegistrationContext,
+    SignupPolicy,
 } from "./actions";
 import {
     createPolicyTemplate,
@@ -39,9 +41,92 @@ import {
     createAuthorizationModel,
     updateAuthorizationModel,
     deleteAuthorizationModel,
+    updateSignupPolicy,
 } from "./actions";
 import { getAllUsers } from "@/app/admin/users/actions";
 import type { UserPickerItem } from "@/app/admin/users/actions";
+
+// ============================================================================
+// Signup Policy Section
+// ============================================================================
+
+interface SignupPolicySectionProps {
+    policy: SignupPolicy;
+}
+
+export function SignupPolicySection({ policy }: SignupPolicySectionProps) {
+    const [updating, setUpdating] = React.useState(false);
+    const [state, setState] = React.useState({
+        directSignupEnabled: policy.directSignupEnabled,
+        publicSignedIntentEnabled: policy.publicSignedIntentEnabled,
+        inviteEnabled: policy.inviteEnabled,
+    });
+
+    async function setPolicy(next: typeof state) {
+        setState(next);
+        setUpdating(true);
+        try {
+            const result = await updateSignupPolicy(next);
+            if (result.success && result.policy) {
+                setState({
+                    directSignupEnabled: result.policy.directSignupEnabled,
+                    publicSignedIntentEnabled: result.policy.publicSignedIntentEnabled,
+                    inviteEnabled: result.policy.inviteEnabled,
+                });
+                toast.success("Signup policy updated");
+            } else {
+                toast.error(result.error || "Failed to update signup policy");
+                setState({
+                    directSignupEnabled: policy.directSignupEnabled,
+                    publicSignedIntentEnabled: policy.publicSignedIntentEnabled,
+                    inviteEnabled: policy.inviteEnabled,
+                });
+            }
+        } finally {
+            setUpdating(false);
+        }
+    }
+
+    return (
+        <Card>
+            <CardHeader className="border-b border-[#243647] pb-6">
+                <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
+                    <Icon name="person_add" size="xs" className="h-5 w-5 text-gray-400" />
+                    Global Signup Policy
+                </CardTitle>
+                <CardDescription className="text-sm text-gray-400 mt-1">
+                    Controls which public onboarding entry modes are available.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="!pt-6 grid gap-4 md:grid-cols-3">
+                <label className="flex items-center justify-between rounded-lg border border-neutral-200 p-4 dark:border-[#243647]">
+                    <span className="text-sm font-medium">Direct Auther signup</span>
+                    <Switch
+                        checked={state.directSignupEnabled}
+                        disabled={updating}
+                        onChange={() => setPolicy({ ...state, directSignupEnabled: !state.directSignupEnabled })}
+                    />
+                </label>
+                <label className="flex items-center justify-between rounded-lg border border-neutral-200 p-4 dark:border-[#243647]">
+                    <span className="text-sm font-medium">Public signed intent</span>
+                    <Switch
+                        checked={state.publicSignedIntentEnabled}
+                        disabled={updating}
+                        onChange={() => setPolicy({ ...state, publicSignedIntentEnabled: !state.publicSignedIntentEnabled })}
+                    />
+                </label>
+                <label className="flex items-center justify-between rounded-lg border border-neutral-200 p-4 dark:border-[#243647]">
+                    <span className="text-sm font-medium">Invite signup</span>
+                    <Switch
+                        checked={state.inviteEnabled}
+                        disabled={updating}
+                        onChange={() => setPolicy({ ...state, inviteEnabled: !state.inviteEnabled })}
+                    />
+                </label>
+            </CardContent>
+        </Card>
+    );
+}
 
 // ============================================================================
 // Policy Templates Section
@@ -1079,15 +1164,16 @@ export function ClientWhitelistSection({ clients }: ClientWhitelistSectionProps)
 }
 
 // ============================================================================
-// Platform Sign-Up Flows Section
+// Onboarding Flows Section
 // ============================================================================
 
 interface PlatformContextsSectionProps {
     contexts: RegistrationContext[];
     models: AuthorizationModel[];
+    spaces: AuthorizationSpaceOption[];
 }
 
-export function PlatformContextsSection({ contexts, models }: PlatformContextsSectionProps) {
+export function PlatformContextsSection({ contexts, models, spaces }: PlatformContextsSectionProps) {
     const [updating, setUpdating] = React.useState<string | null>(null);
     const [showCreate, setShowCreate] = React.useState(false);
     const [creating, setCreating] = React.useState(false);
@@ -1097,14 +1183,20 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
     const [originsText, setOriginsText] = React.useState("");
-    const [grants, setGrants] = React.useState<Array<{ entityTypeId: string; relation: string }>>([]);
+    const [allowedDomainsText, setAllowedDomainsText] = React.useState("");
+    const [allowedReturnUrlsText, setAllowedReturnUrlsText] = React.useState("");
+    const [allowedTriggersText, setAllowedTriggersText] = React.useState("");
+    const [signupMode, setSignupMode] = React.useState<"disabled" | "public_signed_intent" | "invite_only">("invite_only");
+    const [targetAuthorizationSpaceId, setTargetAuthorizationSpaceId] = React.useState("");
+    const [theme, setTheme] = React.useState("");
+    const [grants, setGrants] = React.useState<Array<{ entityTypeId: string; relation: string; entityId?: string }>>([]);
 
     async function handleToggleEnabled(id: string, currentValue: boolean) {
         setUpdating(id);
         try {
             const result = await toggleContextEnabled(id, !currentValue);
             if (result.success) {
-                toast.success(currentValue ? "Context disabled" : "Context enabled");
+                toast.success(currentValue ? "Onboarding Flow disabled" : "Onboarding Flow enabled");
             } else {
                 toast.error(result.error || "Failed to update");
             }
@@ -1118,7 +1210,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
 
         const result = await deleteContext(id);
         if (result.success) {
-            toast.success("Context deleted");
+            toast.success("Onboarding Flow deleted");
         } else {
             toast.error(result.error || "Failed to delete");
         }
@@ -1141,15 +1233,34 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
         setCreating(true);
         try {
             const allowedOrigins = originsText.split("\n").map(s => s.trim()).filter(Boolean);
+            const allowedDomains = allowedDomainsText.split("\n").map(s => s.trim()).filter(Boolean);
+            const allowedReturnUrls = allowedReturnUrlsText.split("\n").map(s => s.trim()).filter(Boolean);
+            const allowedTriggerPrincipals = allowedTriggersText
+                .split(/\r?\n|,/)
+                .map(s => s.trim())
+                .filter(Boolean)
+                .map((entry) => {
+                    const [kind, ...idParts] = entry.split(":");
+                    return { kind, id: idParts.join(":").trim() };
+                })
+                .filter((trigger): trigger is { kind: "oauth_client" | "resource_server"; id: string } =>
+                    (trigger.kind === "oauth_client" || trigger.kind === "resource_server") && trigger.id.length > 0
+                );
             const result = await createPlatformContext({
                 slug: slug.trim().toLowerCase().replace(/\s+/g, "-"),
                 name: name.trim(),
                 description: description.trim() || undefined,
                 allowedOrigins: allowedOrigins.length > 0 ? allowedOrigins : undefined,
+                allowedDomains: allowedDomains.length > 0 ? allowedDomains : undefined,
+                allowedReturnUrls: allowedReturnUrls.length > 0 ? allowedReturnUrls : undefined,
+                allowedTriggerPrincipals,
+                signupMode,
+                targetAuthorizationSpaceId: targetAuthorizationSpaceId || undefined,
+                theme: theme.trim() || undefined,
                 grants,
             });
             if (result.success) {
-                toast.success("Context created");
+                toast.success("Onboarding Flow created");
                 setShowCreate(false);
                 resetForm();
             } else {
@@ -1165,29 +1276,39 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
         setName("");
         setDescription("");
         setOriginsText("");
+        setAllowedDomainsText("");
+        setAllowedReturnUrlsText("");
+        setAllowedTriggersText("");
+        setSignupMode("invite_only");
+        setTargetAuthorizationSpaceId("");
+        setTheme("");
         setGrants([]);
     }
 
     function addGrant() {
-        setGrants([...grants, { entityTypeId: "", relation: "" }]);
+        setGrants([...grants, { entityTypeId: "", relation: "", entityId: "*" }]);
     }
 
     function removeGrant(idx: number) {
         setGrants(grants.filter((_, i) => i !== idx));
     }
 
-    function updateGrant(idx: number, entityTypeId: string, relation: string) {
+    function updateGrant(idx: number, entityTypeId: string, relation: string, entityId?: string) {
         const updated = [...grants];
-        updated[idx] = { entityTypeId, relation };
+        updated[idx] = { entityTypeId, relation, entityId };
         setGrants(updated);
     }
 
     // Build options for entity type select (using model ID as value)
-    const entityOptions = models.map(m => ({ value: m.id, label: m.entityType }));
+    const visibleModels = targetAuthorizationSpaceId
+        ? models.filter((m) => m.authorizationSpaceId === targetAuthorizationSpaceId)
+        : models;
+    const selectedTargetSpace = spaces.find((space) => space.id === targetAuthorizationSpaceId);
+    const entityOptions = visibleModels.map(m => ({ value: m.id, label: m.entityType }));
 
     // Helper to get relations for a model by ID
     const getRelationsForModel = (modelId: string) => {
-        const model = models.find(m => m.id === modelId);
+        const model = visibleModels.find(m => m.id === modelId) ?? models.find(m => m.id === modelId);
         return model?.relations.map(r => ({ value: r, label: r })) || [];
     };
 
@@ -1203,14 +1324,14 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                     <div className="flex-1">
                         <CardTitle className="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex items-center gap-2">
                             <Icon name="person_add" size="xs" className="h-5 w-5 text-gray-400" />
-                            Platform Sign-Up Flows
+                            Onboarding Flows
                         </CardTitle>
-                        <CardDescription className="text-sm text-gray-400 mt-1">Sign-up flows that grant platform-level permissions</CardDescription>
+                        <CardDescription className="text-sm text-gray-400 mt-1">Sign-up flows that grant authorization-space permissions</CardDescription>
                     </div>
                 </div>
                 <div className="pl-4 flex items-center">
                     <Button variant="secondary" size="sm" leftIcon="add" onClick={() => setShowCreate(true)}>
-                        Create Context
+                        Create Flow
                     </Button>
                 </div>
             </CardHeader>
@@ -1231,7 +1352,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                             </Badge>
                                         </div>
                                         <p className="text-sm text-neutral-500 font-mono">
-                                            /{context.slug}
+                                            /{context.slug} · {context.signupMode.replaceAll("_", " ")}
                                         </p>
                                         {context.description && (
                                             <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -1263,7 +1384,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                         <div className="flex flex-wrap gap-1">
                                             {context.grants.map((grant, idx) => (
                                                 <Badge key={idx} variant="default" className="text-xs font-mono">
-                                                    {getEntityTypeName(grant.entityTypeId)}:{grant.relation}
+                                                    {getEntityTypeName(grant.entityTypeId)}:{grant.entityId ?? "*"}#{grant.relation}
                                                 </Badge>
                                             ))}
                                         </div>
@@ -1278,6 +1399,14 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                             </span>
                                         </div>
                                     )}
+                                    {context.targetKind === "authorization_space" && (
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-neutral-500">Space:</span>
+                                            <span className="text-neutral-600 dark:text-neutral-400">
+                                                {spaces.find((space) => space.id === context.targetId)?.name ?? context.targetId}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -1285,8 +1414,8 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                 ) : (
                     <EmptyState
                         icon="person_add"
-                        title="No platform registration contexts"
-                        description="Create contexts to enable user sign-up with platform permissions"
+                        title="No Onboarding Flows"
+                        description="Create flows to enable policy-controlled public signup."
                     />
                 )}
 
@@ -1294,7 +1423,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                 <Modal
                     isOpen={showCreate}
                     onClose={() => { setShowCreate(false); resetForm(); }}
-                    title="Create Registration Context"
+                    title="Create Onboarding Flow"
                 >
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -1328,6 +1457,37 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                             />
                         </div>
                         <div className="space-y-2">
+                            <Label htmlFor="context-signup-mode">Signup Mode</Label>
+                            <Select
+                                options={[
+                                    { value: "invite_only", label: "Invite only" },
+                                    { value: "public_signed_intent", label: "Public signed intent" },
+                                    { value: "disabled", label: "Disabled" },
+                                ]}
+                                value={signupMode}
+                                onChange={(value) => setSignupMode(value as typeof signupMode)}
+                                placeholder="Select mode"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="context-target-space">Target Authorization Space</Label>
+                            <Select
+                                options={[
+                                    ...spaces.map((space) => ({
+                                        value: space.id,
+                                        label: `${space.name}${space.onboardingEnabled ? "" : " (onboarding disabled)"}`,
+                                    })),
+                                ]}
+                                value={targetAuthorizationSpaceId}
+                                onChange={(value) => {
+                                    setTargetAuthorizationSpaceId(value);
+                                    setGrants([]);
+                                    setAllowedTriggersText("");
+                                }}
+                                placeholder="Select authorization space"
+                            />
+                        </div>
+                        <div className="space-y-2">
                             <Label htmlFor="context-origins">Allowed Origins (one per line)</Label>
                             <Textarea
                                 id="context-origins"
@@ -1337,6 +1497,68 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                 rows={2}
                             />
                             <p className="text-xs text-neutral-500">Leave empty for invite-only contexts</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="context-return-urls">Allowed Return URLs (one per line)</Label>
+                            <Textarea
+                                id="context-return-urls"
+                                value={allowedReturnUrlsText}
+                                onChange={(e) => setAllowedReturnUrlsText(e.target.value)}
+                                placeholder="https://example.com/signup/complete"
+                                rows={2}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="context-domains">Allowed Email Domains (one per line)</Label>
+                            <Textarea
+                                id="context-domains"
+                                value={allowedDomainsText}
+                                onChange={(e) => setAllowedDomainsText(e.target.value)}
+                                placeholder="example.com"
+                                rows={2}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Allowed Trigger Principals</Label>
+                            {selectedTargetSpace && selectedTargetSpace.onboardingAllowedTriggers.length > 0 ? (
+                                <div className="space-y-2 rounded-md border border-[#243647] p-3">
+                                    {selectedTargetSpace.onboardingAllowedTriggers.map((trigger) => {
+                                        const key = `${trigger.kind}:${trigger.id}`;
+                                        const selected = allowedTriggersText.split("\n").includes(key);
+                                        return (
+                                            <label key={key} className="flex items-center gap-2 text-sm">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected}
+                                                    onChange={(event) => {
+                                                        const current = new Set(allowedTriggersText.split("\n").filter(Boolean));
+                                                        if (event.target.checked) {
+                                                            current.add(key);
+                                                        } else {
+                                                            current.delete(key);
+                                                        }
+                                                        setAllowedTriggersText(Array.from(current).join("\n"));
+                                                    }}
+                                                />
+                                                <span className="font-mono">{key}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+                                    Select a space with onboarding trigger principals configured.
+                                </p>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="context-theme">Theme</Label>
+                            <Input
+                                id="context-theme"
+                                value={theme}
+                                onChange={(e) => setTheme(e.target.value)}
+                                placeholder="default"
+                            />
                         </div>
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
@@ -1359,16 +1581,22 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                                                 <Select
                                                     options={entityOptions}
                                                     value={grant.entityTypeId}
-                                                    onChange={(val) => updateGrant(idx, val, "")}
+                                                    onChange={(val) => updateGrant(idx, val, "", grant.entityId)}
                                                     placeholder="Select entity..."
                                                     className="flex-1 min-w-0"
                                                 />
                                                 <Select
                                                     options={relationOptions}
                                                     value={grant.relation}
-                                                    onChange={(val) => updateGrant(idx, grant.entityTypeId, val)}
+                                                    onChange={(val) => updateGrant(idx, grant.entityTypeId, val, grant.entityId)}
                                                     placeholder="Select relation..."
                                                     disabled={!grant.entityTypeId}
+                                                    className="flex-1 min-w-0"
+                                                />
+                                                <Input
+                                                    value={grant.entityId ?? "*"}
+                                                    onChange={(e) => updateGrant(idx, grant.entityTypeId, grant.relation, e.target.value.trim() || "*")}
+                                                    placeholder="Entity ID or *"
                                                     className="flex-1 min-w-0"
                                                 />
                                                 <Button
@@ -1391,7 +1619,7 @@ export function PlatformContextsSection({ contexts, models }: PlatformContextsSe
                             Cancel
                         </Button>
                         <Button variant="primary" onClick={handleCreate} disabled={creating}>
-                            {creating ? "Creating..." : "Create Context"}
+                            {creating ? "Creating..." : "Create Flow"}
                         </Button>
                     </ModalFooter>
                 </Modal>

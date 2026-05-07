@@ -259,6 +259,7 @@ export interface WebhookEndpointEntity {
   id: string;
   userId: string;
   clientId: string | null; // null = deliver all clients' events; set = filter to this client only
+  authorizationSpaceId: string | null; // null = not space-scoped; set = filter to this authorization space only
   displayName: string;
   url: string | null; // Nullable - webhooks can be created without URL (pending setup)
   encryptedSecret: string;
@@ -346,4 +347,3 @@ export interface WebhookPaginatedResult<T> {
   pageSize: number;
   totalPages: number;
 }
-

@@ -116,14 +116,14 @@ export class TupleRepository {
       return;
     }
 
-      void emitGrantCreatedEvent({
-        tupleId: tuple.id,
-        subjectType: tuple.subjectType,
-        subjectId: tuple.subjectId,
-        entityType: tuple.entityType,
-        authorizationSpaceId: tuple.authorizationSpaceId ?? null,
-        entityId: tuple.entityId,
-        relation: tuple.relation,
+    void emitGrantCreatedEvent({
+      tupleId: tuple.id,
+      subjectType: tuple.subjectType,
+      subjectId: tuple.subjectId,
+      entityType: tuple.entityType,
+      authorizationSpaceId: tuple.authorizationSpaceId ?? null,
+      entityId: tuple.entityId,
+      relation: tuple.relation,
       hasCondition: !!tuple.condition,
     });
   }
@@ -133,14 +133,14 @@ export class TupleRepository {
       return;
     }
 
-      void emitGrantRevokedEvent({
-        tupleId: tuple.id,
-        subjectType: tuple.subjectType,
-        subjectId: tuple.subjectId,
-        entityType: tuple.entityType,
-        authorizationSpaceId: tuple.authorizationSpaceId ?? null,
-        entityId: tuple.entityId,
-        relation: tuple.relation,
+    void emitGrantRevokedEvent({
+      tupleId: tuple.id,
+      subjectType: tuple.subjectType,
+      subjectId: tuple.subjectId,
+      entityType: tuple.entityType,
+      authorizationSpaceId: tuple.authorizationSpaceId ?? null,
+      entityId: tuple.entityId,
+      relation: tuple.relation,
       hasCondition: !!tuple.condition,
     });
   }

@@ -4,6 +4,8 @@ import {
     registrationContexts,
     platformInvites,
     pendingRegistrationContextApplications,
+    signupIntentNonces,
+    signupPolicy,
     permissionRequests,
     permissionRules,
     policyTemplates,
@@ -16,9 +18,13 @@ import { assertLegacyWriteAllowed } from "@/lib/auth/legacy-write-guard";
 
 export type RegistrationContext = typeof registrationContexts.$inferSelect;
 export type NewRegistrationContext = typeof registrationContexts.$inferInsert;
+export type SignupPolicy = typeof signupPolicy.$inferSelect;
+export type NewSignupPolicy = typeof signupPolicy.$inferInsert;
 
 export type PlatformInvite = typeof platformInvites.$inferSelect;
 export type NewPlatformInvite = typeof platformInvites.$inferInsert;
+export type SignupIntentNonce = typeof signupIntentNonces.$inferSelect;
+export type NewSignupIntentNonce = typeof signupIntentNonces.$inferInsert;
 
 export type PendingRegistrationContextApplication =
     typeof pendingRegistrationContextApplications.$inferSelect;
@@ -33,6 +39,61 @@ export type NewPermissionRule = typeof permissionRules.$inferInsert;
 
 export type PolicyTemplate = typeof policyTemplates.$inferSelect;
 export type NewPolicyTemplate = typeof policyTemplates.$inferInsert;
+
+// ========================================
+// Signup Policy Repository
+// ========================================
+
+export class SignupPolicyRepository {
+    private readonly singletonId = "global";
+
+    async get(): Promise<SignupPolicy> {
+        const [existing] = await db
+            .select()
+            .from(signupPolicy)
+            .where(eq(signupPolicy.id, this.singletonId))
+            .limit(1);
+
+        if (existing) {
+            return existing;
+        }
+
+        await db
+            .insert(signupPolicy)
+            .values({
+                id: this.singletonId,
+                directSignupEnabled: false,
+                publicSignedIntentEnabled: false,
+                inviteEnabled: true,
+            })
+            .onConflictDoNothing({ target: signupPolicy.id });
+
+        const [created] = await db
+            .select()
+            .from(signupPolicy)
+            .where(eq(signupPolicy.id, this.singletonId))
+            .limit(1);
+
+        if (!created) {
+            throw new Error("Failed to create signup policy");
+        }
+
+        return created;
+    }
+
+    async update(data: {
+        directSignupEnabled: boolean;
+        publicSignedIntentEnabled: boolean;
+        inviteEnabled: boolean;
+    }): Promise<SignupPolicy> {
+        await this.get();
+        await db
+            .update(signupPolicy)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(signupPolicy.id, this.singletonId));
+        return this.get();
+    }
+}
 
 // ========================================
 // Registration Context Repository
@@ -57,11 +118,29 @@ export class RegistrationContextRepository {
             );
     }
 
-    async findPlatformContexts(): Promise<RegistrationContext[]> {
+    async findOnboardingFlows(): Promise<RegistrationContext[]> {
         return db
             .select()
             .from(registrationContexts)
-            .where(sql`${registrationContexts.clientId} IS NULL`);
+            .where(
+                and(
+                    sql`${registrationContexts.clientId} IS NULL`,
+                    eq(registrationContexts.targetKind, "authorization_space")
+                )
+            );
+    }
+
+    async findInvitableOnboardingFlows(): Promise<RegistrationContext[]> {
+        return db
+            .select()
+            .from(registrationContexts)
+            .where(
+                and(
+                    sql`${registrationContexts.clientId} IS NULL`,
+                    eq(registrationContexts.targetKind, "authorization_space"),
+                    eq(registrationContexts.signupMode, "invite_only")
+                )
+            );
     }
 
     async findEnabled(): Promise<RegistrationContext[]> {
@@ -69,6 +148,20 @@ export class RegistrationContextRepository {
             .select()
             .from(registrationContexts)
             .where(eq(registrationContexts.enabled, true));
+    }
+
+    async findByTargetAuthorizationSpaceId(
+        authorizationSpaceId: string
+    ): Promise<RegistrationContext[]> {
+        return db
+            .select()
+            .from(registrationContexts)
+            .where(
+                and(
+                    eq(registrationContexts.targetKind, "authorization_space"),
+                    eq(registrationContexts.targetId, authorizationSpaceId)
+                )
+            );
     }
 
     async create(
@@ -250,6 +343,51 @@ export class PendingRegistrationContextApplicationRepository {
                 updatedAt: new Date(),
             })
             .where(eq(pendingRegistrationContextApplications.id, id));
+        return result.rowsAffected > 0;
+    }
+}
+
+// ========================================
+// Signup Intent Nonce Repository
+// ========================================
+
+export class SignupIntentNonceRepository {
+    async create(data: Omit<NewSignupIntentNonce, "id">): Promise<SignupIntentNonce> {
+        const id = crypto.randomUUID();
+        await db.insert(signupIntentNonces).values({ ...data, id });
+
+        const row = await this.findByNonce(data.nonce);
+        if (!row) {
+            throw new Error("Failed to create signup intent nonce");
+        }
+
+        return row;
+    }
+
+    async findByNonce(nonce: string): Promise<SignupIntentNonce | null> {
+        const [row] = await db
+            .select()
+            .from(signupIntentNonces)
+            .where(eq(signupIntentNonces.nonce, nonce))
+            .limit(1);
+        return row ?? null;
+    }
+
+    async consume(nonce: string, email: string): Promise<boolean> {
+        const result = await db
+            .update(signupIntentNonces)
+            .set({
+                consumedAt: new Date(),
+                consumedByEmail: email.toLowerCase(),
+            })
+            .where(
+                and(
+                    eq(signupIntentNonces.nonce, nonce),
+                    sql`${signupIntentNonces.consumedAt} IS NULL`,
+                    sql`${signupIntentNonces.expiresAt} > unixepoch()`
+                )
+            );
+
         return result.rowsAffected > 0;
     }
 }
@@ -663,7 +801,9 @@ export class PolicyTemplateRepository {
 // ========================================
 
 export const registrationContextRepo = new RegistrationContextRepository();
+export const signupPolicyRepo = new SignupPolicyRepository();
 export const platformInviteRepo = new PlatformInviteRepository();
+export const signupIntentNonceRepo = new SignupIntentNonceRepository();
 export const pendingRegistrationContextApplicationRepo =
     new PendingRegistrationContextApplicationRepository();
 export const permissionRequestRepo = new PermissionRequestRepository();

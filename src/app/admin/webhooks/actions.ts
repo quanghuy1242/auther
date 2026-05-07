@@ -3,7 +3,7 @@
 import { getSession } from "@/lib/session";
 import { guards } from "@/lib/auth/platform-guard";
 import { webhookRepository, userRepository } from "@/lib/repositories";
-import { oauthClientRepository } from "@/lib/repositories";
+import { authorizationSpaceRepository, oauthClientRepository } from "@/lib/repositories";
 import {
   encryptSecret,
   decryptSecret,
@@ -76,6 +76,18 @@ export async function getClientsForWebhookFilter(): Promise<{ clientId: string; 
         name: client.name ?? client.clientId ?? "",
       }))
       .filter((client) => client.clientId.length > 0 && client.name.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export async function getAuthorizationSpacesForWebhookFilter(): Promise<{ id: string; name: string }[]> {
+  try {
+    await guards.webhooks.view();
+    const spaces = await authorizationSpaceRepository.findAll();
+    return spaces
+      .filter((space) => space.enabled)
+      .map((space) => ({ id: space.id, name: `${space.name} (${space.slug})` }));
   } catch {
     return [];
   }
@@ -261,6 +273,7 @@ export async function createWebhook(
       deliveryFormat: formData.get("deliveryFormat") || "json",
       requestMethod: formData.get("requestMethod") || "POST",
       clientId: formData.get("clientId") || null,
+      authorizationSpaceId: formData.get("authorizationSpaceId") || null,
     });
 
     if (!result.success) {
@@ -286,6 +299,7 @@ export async function createWebhook(
       id,
       userId: session.user.id,
       clientId: data.clientId ?? null,
+      authorizationSpaceId: data.authorizationSpaceId ?? null,
       displayName: data.displayName,
       url: data.url || null,
       encryptedSecret,
@@ -363,6 +377,9 @@ export async function updateWebhook(
     const clientIdValue = formData.has("clientId")
       ? formData.get("clientId") || null
       : existing.clientId ?? null;
+    const authorizationSpaceIdValue = formData.has("authorizationSpaceId")
+      ? formData.get("authorizationSpaceId") || null
+      : existing.authorizationSpaceId ?? null;
 
     const result = webhookSchema.safeParse({
       displayName: formData.get("displayName"),
@@ -373,6 +390,7 @@ export async function updateWebhook(
       deliveryFormat: formData.get("deliveryFormat") || "json",
       requestMethod: formData.get("requestMethod") || "POST",
       clientId: clientIdValue,
+      authorizationSpaceId: authorizationSpaceIdValue,
     });
 
     if (!result.success) {
@@ -393,6 +411,7 @@ export async function updateWebhook(
       displayName: data.displayName,
       url: data.url || null,
       clientId: data.clientId ?? null,
+      authorizationSpaceId: data.authorizationSpaceId ?? null,
       isActive: effectiveIsActive,
       retryPolicy: data.retryPolicy as WebhookRetryPolicy,
       deliveryFormat: data.deliveryFormat as WebhookDeliveryFormat,

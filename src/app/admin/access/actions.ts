@@ -11,9 +11,10 @@ import {
 import { TupleRepository } from "@/lib/repositories/tuple-repository";
 import {
     policyTemplateRepo,
-    registrationContextRepo
+    registrationContextRepo,
+    signupPolicyRepo
 } from "@/lib/repositories/platform-access-repository";
-import type { PolicyTemplate, RegistrationContext } from "@/lib/repositories/platform-access-repository";
+import type { PolicyTemplate, RegistrationContext, SignupPolicy } from "@/lib/repositories/platform-access-repository";
 import { AuthorizationModelService } from "@/lib/auth/authorization-model-service";
 import { SYSTEM_MODELS } from "@/lib/auth/system-models";
 import { AuthorizationModelDefinition } from "@/schemas/rebac";
@@ -23,7 +24,7 @@ import { resolveRegistrationContextGrantTargets } from "@/lib/utils/registration
 const authorizationModelService = new AuthorizationModelService();
 
 // Re-export types
-export type { PolicyTemplate, RegistrationContext };
+export type { PolicyTemplate, RegistrationContext, SignupPolicy };
 
 export interface AuthorizationModel {
     id: string;
@@ -44,6 +45,56 @@ export interface ClientWithRegistrationStatus {
     name: string | null;
     allowsRegistrationContexts: boolean;
     contextCount: number;
+}
+
+export interface AuthorizationSpaceOption {
+    id: string;
+    slug: string;
+    name: string;
+    onboardingEnabled: boolean;
+    onboardingAllowedTriggers: Array<{ kind: "oauth_client" | "resource_server"; id: string }>;
+}
+
+// ============================================================================
+// Signup Policy
+// ============================================================================
+
+export async function getSignupPolicy(): Promise<SignupPolicy> {
+    await guards.platform.admin();
+    return signupPolicyRepo.get();
+}
+
+export async function updateSignupPolicy(data: {
+    directSignupEnabled: boolean;
+    publicSignedIntentEnabled: boolean;
+    inviteEnabled: boolean;
+}): Promise<{ success: boolean; policy?: SignupPolicy; error?: string }> {
+    try {
+        await guards.platform.admin();
+        const policy = await signupPolicyRepo.update(data);
+        revalidatePath("/admin/access");
+        return { success: true, policy };
+    } catch (error) {
+        console.error("updateSignupPolicy error:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to update signup policy",
+        };
+    }
+}
+
+export async function getAuthorizationSpaceOptions(): Promise<AuthorizationSpaceOption[]> {
+    await guards.platform.admin();
+    const spaces = await authorizationSpaceRepository.findAll();
+    return spaces
+        .filter((space) => space.enabled)
+        .map((space) => ({
+            id: space.id,
+            slug: space.slug,
+            name: space.name,
+            onboardingEnabled: space.onboardingEnabled,
+            onboardingAllowedTriggers: space.onboardingAllowedTriggers,
+        }));
 }
 
 // ============================================================================
@@ -414,12 +465,12 @@ export async function toggleClientRegistrationContexts(
 }
 
 // ============================================================================
-// Platform Sign-Up Flows
+// Onboarding Flows
 // ============================================================================
 
 export async function getPlatformContexts(): Promise<RegistrationContext[]> {
     await guards.platform.admin();
-    return registrationContextRepo.findPlatformContexts();
+    return registrationContextRepo.findOnboardingFlows();
 }
 
 export async function createPlatformContext(data: {
@@ -427,7 +478,13 @@ export async function createPlatformContext(data: {
     name: string;
     description?: string;
     allowedOrigins?: string[];
-    grants: Array<{ entityTypeId: string; relation: string }>;
+    allowedDomains?: string[];
+    allowedReturnUrls?: string[];
+    signupMode?: "disabled" | "public_signed_intent" | "invite_only";
+    targetAuthorizationSpaceId?: string;
+    allowedTriggerPrincipals?: Array<{ kind: "oauth_client" | "resource_server"; id: string }>;
+    theme?: string | null;
+    grants: Array<{ entityTypeId: string; relation: string; entityId?: string }>;
 }): Promise<{ success: boolean; context?: RegistrationContext; error?: string }> {
     try {
         await guards.platform.admin();
@@ -438,10 +495,46 @@ export async function createPlatformContext(data: {
             return { success: false, error: "Context with this slug already exists" };
         }
 
+        if (data.signupMode === "public_signed_intent") {
+            if (!data.targetAuthorizationSpaceId) {
+                return { success: false, error: "Public signed-intent flows must target an authorization space" };
+            }
+            if (!data.allowedReturnUrls || data.allowedReturnUrls.length === 0) {
+                return { success: false, error: "Public signed-intent flows require at least one allowed return URL" };
+            }
+            if (!data.allowedTriggerPrincipals || data.allowedTriggerPrincipals.length === 0) {
+                return { success: false, error: "Public signed-intent flows require at least one allowed trigger principal" };
+            }
+        }
+
+        if (data.targetAuthorizationSpaceId && data.allowedTriggerPrincipals?.length) {
+            const targetSpace = await authorizationSpaceRepository.findById(data.targetAuthorizationSpaceId);
+            if (!targetSpace || !targetSpace.enabled) {
+                return { success: false, error: "Target authorization space is not enabled" };
+            }
+            const allowedBySpace = new Set(
+                targetSpace.onboardingAllowedTriggers.map((trigger) => `${trigger.kind}:${trigger.id}`)
+            );
+            const outsideSpacePolicy = data.allowedTriggerPrincipals.find(
+                (trigger) => !allowedBySpace.has(`${trigger.kind}:${trigger.id}`)
+            );
+            if (outsideSpacePolicy) {
+                return {
+                    success: false,
+                    error: `Trigger ${outsideSpacePolicy.kind}:${outsideSpacePolicy.id} is not allowed by the target authorization space`,
+                };
+            }
+        }
+
+        if (!data.targetAuthorizationSpaceId) {
+            return { success: false, error: "Onboarding Flows must target an authorization space" };
+        }
+
+        const allowedAuthorizationSpaceIds = [data.targetAuthorizationSpaceId];
         const validation = await resolveRegistrationContextGrantTargets({
             sourceClientId: null,
             allowedProjectionClientIds: [],
-            allowedAuthorizationSpaceIds: await getEnabledAuthorizationSpaceIds(),
+            allowedAuthorizationSpaceIds,
             enforceAllowedAuthorizationSpaces: true,
             grants: data.grants,
             resolveModelById: (entityTypeId) => authorizationModelRepository.findById(entityTypeId),
@@ -456,12 +549,19 @@ export async function createPlatformContext(data: {
             name: data.name,
             description: data.description,
             clientId: null, // Platform context
-            triggerKind: "platform",
-            triggerClientId: null,
-            targetKind: "platform",
-            targetId: "*",
+            triggerKind: data.allowedTriggerPrincipals?.[0]?.kind ?? "platform",
+            triggerClientId:
+                data.allowedTriggerPrincipals?.[0]?.kind === "oauth_client"
+                    ? data.allowedTriggerPrincipals[0].id
+                    : null,
+            targetKind: "authorization_space",
+            targetId: data.targetAuthorizationSpaceId,
             allowedOrigins: data.allowedOrigins || null,
-            allowedDomains: null,
+            allowedDomains: data.allowedDomains || null,
+            signupMode: data.signupMode ?? "invite_only",
+            allowedTriggerPrincipals: data.allowedTriggerPrincipals ?? [],
+            allowedReturnUrls: data.allowedReturnUrls ?? data.allowedOrigins ?? [],
+            theme: data.theme ?? null,
             grants: data.grants, // Now uses entityTypeId
             enabled: true,
         });
@@ -475,11 +575,6 @@ export async function createPlatformContext(data: {
             error: error instanceof Error ? error.message : "Failed to create context",
         };
     }
-}
-
-async function getEnabledAuthorizationSpaceIds(): Promise<string[]> {
-    const spaces = await authorizationSpaceRepository.findAll();
-    return spaces.filter((space) => space.enabled).map((space) => space.id);
 }
 
 export async function toggleContextEnabled(

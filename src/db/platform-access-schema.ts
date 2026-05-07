@@ -4,6 +4,31 @@ import { user } from "./auth-schema";
 import { oauthApplication } from "./auth-schema";
 
 // ========================================
+// Signup Policy
+// ========================================
+
+export const signupPolicy = sqliteTable("signup_policy", {
+    id: text("id").primaryKey(),
+    directSignupEnabled: integer("direct_signup_enabled", { mode: "boolean" })
+        .notNull()
+        .default(false),
+    publicSignedIntentEnabled: integer("public_signed_intent_enabled", {
+        mode: "boolean",
+    })
+        .notNull()
+        .default(false),
+    inviteEnabled: integer("invite_enabled", { mode: "boolean" })
+        .notNull()
+        .default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+        .notNull()
+        .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+        .notNull()
+        .default(sql`(unixepoch())`),
+});
+
+// ========================================
 // Registration Contexts
 // ========================================
 
@@ -38,13 +63,23 @@ export const registrationContexts = sqliteTable(
         // Source restrictions for open registration
         allowedOrigins: text("allowed_origins", { mode: "json" }).$type<string[]>(), // ["https://blog.example.com"]
         allowedDomains: text("allowed_domains", { mode: "json" }).$type<string[]>(), // Email domain restrictions
+        signupMode: text("signup_mode").notNull().default("invite_only"),
+        allowedTriggerPrincipals: text("allowed_trigger_principals", { mode: "json" })
+            .$type<Array<{ kind: "oauth_client" | "resource_server"; id: string }>>()
+            .notNull()
+            .$defaultFn(() => []),
+        allowedReturnUrls: text("allowed_return_urls", { mode: "json" })
+            .$type<string[]>()
+            .notNull()
+            .$defaultFn(() => []),
+        theme: text("theme"),
 
         // Grants: references to existing authorization model relations
         // entityTypeId = authorization_models.id (stable across renames)
         // relation = relation name within that model
         grants: text("grants", { mode: "json" })
             .notNull()
-            .$type<Array<{ entityTypeId: string; relation: string }>>(),
+            .$type<Array<{ entityTypeId: string; relation: string; entityId?: string }>>(),
 
         enabled: integer("enabled", { mode: "boolean" }).default(true),
 
@@ -131,6 +166,11 @@ export const pendingRegistrationContextApplications = sqliteTable(
         triggerClientId: text("trigger_client_id").references(() => oauthApplication.clientId, {
             onDelete: "set null",
         }),
+        requestedGrants: text("requested_grants", { mode: "json" })
+            .$type<Array<{ entityTypeId: string; relation: string; entityId?: string }>>(),
+        returnUrl: text("return_url"),
+        nonce: text("nonce"),
+        tokenExpiresAt: integer("token_expires_at", { mode: "timestamp" }),
         status: text("status").notNull().default("pending"),
         attempts: integer("attempts").notNull().default(0),
         lastError: text("last_error"),
@@ -148,6 +188,30 @@ export const pendingRegistrationContextApplications = sqliteTable(
         index("pending_context_applications_user_id_idx").on(table.userId),
         index("pending_context_applications_status_idx").on(table.status),
         index("pending_context_applications_context_slug_idx").on(table.contextSlug),
+    ]
+);
+
+export const signupIntentNonces = sqliteTable(
+    "signup_intent_nonces",
+    {
+        id: text("id").primaryKey(),
+        nonce: text("nonce").notNull().unique(),
+        flowSlug: text("flow_slug")
+            .notNull()
+            .references(() => registrationContexts.slug, { onDelete: "cascade" }),
+        triggerKind: text("trigger_kind").notNull(),
+        triggerId: text("trigger_id").notNull(),
+        returnUrl: text("return_url"),
+        expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+        consumedAt: integer("consumed_at", { mode: "timestamp" }),
+        consumedByEmail: text("consumed_by_email"),
+        createdAt: integer("created_at", { mode: "timestamp" })
+            .notNull()
+            .default(sql`(unixepoch())`),
+    },
+    (table) => [
+        index("signup_intent_nonces_nonce_idx").on(table.nonce),
+        index("signup_intent_nonces_flow_slug_idx").on(table.flowSlug),
     ]
 );
 

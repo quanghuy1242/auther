@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import * as React from "react";
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeading, PageContainer } from "@/components/layout";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, Badge, Icon } from "@/components/ui";
@@ -9,6 +10,8 @@ import { StatCard } from "@/components/admin";
 import { DashboardCharts } from "@/components/admin/dashboard";
 import { getDashboardStats, getRecentSignIns } from "./actions";
 import { formatTimeAgo } from "@/lib/utils/date-formatter";
+import { getSession } from "@/lib/session";
+import { isAdmin } from "@/lib/auth-utils";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -16,6 +19,11 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminDashboard() {
+  const session = await getSession();
+  if (!(await isAdmin(session))) {
+    redirect("/admin/profile");
+  }
+
   const stats = await getDashboardStats();
   const recentSignIns = await getRecentSignIns(3);
 
@@ -179,4 +187,3 @@ export default async function AdminDashboard() {
     </PageContainer>
   );
 }
-

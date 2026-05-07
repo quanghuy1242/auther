@@ -9,6 +9,8 @@ export interface AuthorizationSpaceEntity {
   description: string | null;
   enabled: boolean;
   resourceServerId: string | null;
+  onboardingEnabled: boolean;
+  onboardingAllowedTriggers: Array<{ kind: "oauth_client" | "resource_server"; id: string }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +21,8 @@ export interface SaveAuthorizationSpaceData {
   description?: string | null;
   enabled?: boolean;
   resourceServerId?: string | null;
+  onboardingEnabled?: boolean;
+  onboardingAllowedTriggers?: Array<{ kind: "oauth_client" | "resource_server"; id: string }>;
 }
 
 const SLUG_VALUE = /^[a-z0-9][a-z0-9-_.]*$/;
@@ -68,6 +72,8 @@ export class AuthorizationSpaceRepository {
       description: data.description?.trim() || null,
       enabled: data.enabled ?? true,
       resourceServerId: data.resourceServerId || null,
+      onboardingEnabled: data.onboardingEnabled ?? false,
+      onboardingAllowedTriggers: data.onboardingAllowedTriggers ?? [],
     });
 
     const created = await this.findById(id);
@@ -83,6 +89,7 @@ export class AuthorizationSpaceRepository {
     data: SaveAuthorizationSpaceData
   ): Promise<AuthorizationSpaceEntity | null> {
     assertValidAuthorizationSpace(data);
+    const existing = await this.findById(id);
 
     await db
       .update(authorizationSpaces)
@@ -92,6 +99,9 @@ export class AuthorizationSpaceRepository {
         description: data.description?.trim() || null,
         enabled: data.enabled ?? true,
         resourceServerId: data.resourceServerId || null,
+        onboardingEnabled: data.onboardingEnabled ?? existing?.onboardingEnabled ?? false,
+        onboardingAllowedTriggers:
+          data.onboardingAllowedTriggers ?? existing?.onboardingAllowedTriggers ?? [],
         updatedAt: new Date(),
       })
       .where(eq(authorizationSpaces.id, id));
@@ -101,5 +111,24 @@ export class AuthorizationSpaceRepository {
 
   async delete(id: string): Promise<void> {
     await db.delete(authorizationSpaces).where(eq(authorizationSpaces.id, id));
+  }
+
+  async updateOnboardingPolicy(
+    id: string,
+    data: {
+      onboardingEnabled: boolean;
+      onboardingAllowedTriggers: Array<{ kind: "oauth_client" | "resource_server"; id: string }>;
+    }
+  ): Promise<AuthorizationSpaceEntity | null> {
+    await db
+      .update(authorizationSpaces)
+      .set({
+        onboardingEnabled: data.onboardingEnabled,
+        onboardingAllowedTriggers: data.onboardingAllowedTriggers,
+        updatedAt: new Date(),
+      })
+      .where(eq(authorizationSpaces.id, id));
+
+    return this.findById(id);
   }
 }

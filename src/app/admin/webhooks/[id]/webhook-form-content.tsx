@@ -18,15 +18,25 @@ import {
 
 interface WebhookFormContentProps {
   clients?: { clientId: string; name: string }[];
+  authorizationSpaces?: { id: string; name: string }[];
 }
 
-export function WebhookFormContent({ clients = [] }: WebhookFormContentProps) {
+export function WebhookFormContent({
+  clients = [],
+  authorizationSpaces = [],
+}: WebhookFormContentProps) {
   const form = useFormContext();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const selectedClientId = String(form.watch("clientId") ?? "");
+  const selectedAuthorizationSpaceId = String(form.watch("authorizationSpaceId") ?? "");
   const hasSelectedClientOption =
     selectedClientId.length > 0 && clients.some((client) => client.clientId === selectedClientId);
   const shouldShowClientFilter = clients.length > 0 || selectedClientId.length > 0;
+  const hasSelectedSpaceOption =
+    selectedAuthorizationSpaceId.length > 0 &&
+    authorizationSpaces.some((space) => space.id === selectedAuthorizationSpaceId);
+  const shouldShowSpaceFilter =
+    authorizationSpaces.length > 0 || selectedAuthorizationSpaceId.length > 0;
 
   const clientOptions = [
     { value: "", label: "All clients (no filter)" },
@@ -34,6 +44,13 @@ export function WebhookFormContent({ clients = [] }: WebhookFormContentProps) {
       ? [{ value: selectedClientId, label: selectedClientId }]
       : []),
     ...clients.map((c) => ({ value: c.clientId, label: c.name })),
+  ];
+  const authorizationSpaceOptions = [
+    { value: "", label: "All authorization spaces (no filter)" },
+    ...(!hasSelectedSpaceOption && selectedAuthorizationSpaceId
+      ? [{ value: selectedAuthorizationSpaceId, label: selectedAuthorizationSpaceId }]
+      : []),
+    ...authorizationSpaces.map((space) => ({ value: space.id, label: space.name })),
   ];
 
   return (
@@ -152,6 +169,22 @@ export function WebhookFormContent({ clients = [] }: WebhookFormContentProps) {
               />
               <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                 Only deliver events from a specific OAuth client. Leave unset to receive events from all clients.
+              </p>
+            </div>
+          )}
+
+          {shouldShowSpaceFilter && (
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                Authorization Space Filter
+              </label>
+              <ControlledSelect
+                name="authorizationSpaceId"
+                options={authorizationSpaceOptions}
+                placeholder="All authorization spaces (no filter)"
+              />
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                Use this for space-native grant mirror consumers such as PayloadCMS. Do not combine it with a client filter.
               </p>
             </div>
           )}

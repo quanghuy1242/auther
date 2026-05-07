@@ -6,12 +6,15 @@ import {
     getAuthorizationModels,
     getClientsWithRegistrationStatus,
     getPlatformContexts,
+    getAuthorizationSpaceOptions,
+    getSignupPolicy,
 } from "./actions";
 import {
     PolicyTemplatesSection,
     AuthorizationModelsSection,
     ClientWhitelistSection,
     PlatformContextsSection,
+    SignupPolicySection,
 } from "./access-client";
 
 export const metadata: Metadata = {
@@ -24,11 +27,13 @@ export default async function AccessPage() {
     await guards.platform.admin();
 
     // Fetch all data in parallel
-    const [templates, models, clients, contexts] = await Promise.all([
+    const [templates, models, clients, contexts, signupPolicy, spaces] = await Promise.all([
         getPolicyTemplates(),
         getAuthorizationModels(),
         getClientsWithRegistrationStatus(),
         getPlatformContexts(),
+        getSignupPolicy(),
+        getAuthorizationSpaceOptions(),
     ]);
 
     return (
@@ -42,14 +47,17 @@ export default async function AccessPage() {
                 {/* Authorization Models */}
                 <AuthorizationModelsSection models={models} />
 
+                {/* Signup Policy */}
+                <SignupPolicySection policy={signupPolicy} />
+
                 {/* Policy Templates */}
                 <PolicyTemplatesSection templates={templates} models={models} />
 
                 {/* Client Registration Whitelist */}
                 <ClientWhitelistSection clients={clients} />
 
-                {/* Platform Sign-Up Flows */}
-                <PlatformContextsSection contexts={contexts} models={models} />
+                {/* Onboarding Flows */}
+                <PlatformContextsSection contexts={contexts} models={models} spaces={spaces} />
             </div>
         </PageContainer>
     );

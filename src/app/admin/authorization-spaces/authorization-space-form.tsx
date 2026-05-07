@@ -16,6 +16,9 @@ export function AuthorizationSpaceForm({
   resourceServers,
 }: AuthorizationSpaceFormProps) {
   const isEdit = mode === "edit";
+  const onboardingAllowedTriggers = authorizationSpace?.onboardingAllowedTriggers
+    .map((trigger) => `${trigger.kind}:${trigger.id}`)
+    .join("\n") ?? "";
 
   return (
     <Card>
@@ -85,6 +88,29 @@ export function AuthorizationSpaceForm({
             <p className="mt-2 pl-8 text-sm text-gray-400">
               Disabled spaces should not receive projected grants or resource-token issuance for linked clients.
             </p>
+          </div>
+
+          <div className="rounded-lg border border-border-dark bg-black/10 p-4 space-y-4">
+            <Checkbox
+              name="onboardingEnabled"
+              value="on"
+              defaultChecked={authorizationSpace?.onboardingEnabled ?? false}
+              label="Enable public onboarding for this authorization space"
+              className="items-start font-medium"
+            />
+            <Textarea
+              name="onboardingAllowedTriggers"
+              label="Allowed Onboarding Triggers"
+              rows={4}
+              defaultValue={onboardingAllowedTriggers}
+              placeholder="oauth_client:blog-client-id&#10;resource_server:payload-resource-server-id"
+              helperText="One trigger per line. Onboarding Flows in this space can only use principals listed here."
+            />
+            {resourceServers.length > 0 && (
+              <p className="text-sm text-gray-400">
+                Resource servers: {resourceServers.map((server) => `${server.name}=${server.id}`).join(", ")}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-3 border-t border-border-dark pt-5">

@@ -97,10 +97,15 @@ async function emitSystemScopedEvent(
     | GroupMemberAddedEventType
     | GroupMemberRemovedEventType,
   payload: object,
-  clientId?: string | null
+  clientId?: string | null,
+  authorizationSpaceId?: string | null
 ): Promise<void> {
   try {
-    const subscriberUserIds = await webhookRepository.findSubscribedUserIdsByEvent(eventType, clientId);
+    const subscriberUserIds = await webhookRepository.findSubscribedUserIdsByEvent(
+      eventType,
+      clientId,
+      authorizationSpaceId
+    );
     if (subscriberUserIds.length === 0) {
       return;
     }
@@ -112,7 +117,7 @@ async function emitSystemScopedEvent(
 
     await Promise.allSettled(
       subscriberUserIds.map((userId) =>
-        emitWebhookEvent(userId, eventType, payloadWithClient, clientId)
+        emitWebhookEvent(userId, eventType, payloadWithClient, clientId, authorizationSpaceId)
       )
     );
   } catch (error) {
@@ -126,19 +131,19 @@ async function emitSystemScopedEvent(
 
 export async function emitGrantCreatedEvent(data: GrantCreatedEventData): Promise<void> {
   const clientId = resolveGrantClientId(data);
-  await emitSystemScopedEvent("grant.created", data, clientId);
+  await emitSystemScopedEvent("grant.created", data, clientId, data.authorizationSpaceId ?? null);
 }
 
 export async function emitGrantRevokedEvent(data: GrantRevokedEventData): Promise<void> {
   const clientId = resolveGrantClientId(data);
-  await emitSystemScopedEvent("grant.revoked", data, clientId);
+  await emitSystemScopedEvent("grant.revoked", data, clientId, data.authorizationSpaceId ?? null);
 }
 
 export async function emitGrantConditionUpdatedEvent(
   data: GrantConditionUpdatedEventData
 ): Promise<void> {
   const clientId = resolveGrantClientId(data);
-  await emitSystemScopedEvent("grant.condition.updated", data, clientId);
+  await emitSystemScopedEvent("grant.condition.updated", data, clientId, data.authorizationSpaceId ?? null);
 }
 
 export async function emitGroupMemberAddedEvent(data: GroupMembershipEventData): Promise<void> {

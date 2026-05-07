@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { getWebhookById, getDeliveryHistory, getClientsForWebhookFilter } from "../actions";
+import {
+  getAuthorizationSpacesForWebhookFilter,
+  getClientsForWebhookFilter,
+  getDeliveryHistory,
+  getWebhookById,
+} from "../actions";
 import { EditWebhookClient } from "./edit-webhook-client";
 import { Card, CardContent, Button, Icon } from "@/components/ui";
 import Link from "next/link";
@@ -27,10 +32,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function EditWebhookPage({ params }: PageProps) {
   const resolvedParams = await params;
   
-  const [webhook, deliveryHistoryResult, clients] = await Promise.all([
+  const [webhook, deliveryHistoryResult, clients, authorizationSpaces] = await Promise.all([
     getWebhookById(resolvedParams.id),
     getDeliveryHistory(resolvedParams.id, { page: 1, pageSize: 25 }),
     getClientsForWebhookFilter(),
+    getAuthorizationSpacesForWebhookFilter(),
   ]);
   const deliveryHistory = deliveryHistoryResult?.deliveries || [];
 
@@ -55,5 +61,12 @@ export default async function EditWebhookPage({ params }: PageProps) {
     );
   }
 
-  return <EditWebhookClient webhook={webhook} deliveryHistory={deliveryHistory} clients={clients} />;
+  return (
+    <EditWebhookClient
+      webhook={webhook}
+      deliveryHistory={deliveryHistory}
+      clients={clients}
+      authorizationSpaces={authorizationSpaces}
+    />
+  );
 }
