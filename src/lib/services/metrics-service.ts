@@ -53,6 +53,17 @@ function sanitizeTags(
  * High-level abstraction for recording metrics
  */
 class MetricsServiceImpl implements MetricsService {
+    private async createMetric(data: Omit<CreateMetricData, "id" | "createdAt">): Promise<void> {
+        try {
+            await metricsRepository.create(data);
+        } catch (error) {
+            console.warn(
+                "Failed to record metric:",
+                error instanceof Error ? error.message : error
+            );
+        }
+    }
+
     /**
      * Record a counter metric (incremented value)
      */
@@ -61,7 +72,7 @@ class MetricsServiceImpl implements MetricsService {
         value: number = 1,
         tags?: Record<string, string>
     ): Promise<void> {
-        await metricsRepository.create({
+        await this.createMetric({
             name,
             value,
             tags: sanitizeTags(tags),
@@ -78,7 +89,7 @@ class MetricsServiceImpl implements MetricsService {
         value: number,
         tags?: Record<string, string>
     ): Promise<void> {
-        await metricsRepository.create({
+        await this.createMetric({
             name,
             value,
             tags: sanitizeTags(tags),
@@ -95,7 +106,7 @@ class MetricsServiceImpl implements MetricsService {
         value: number,
         tags?: Record<string, string>
     ): Promise<void> {
-        await metricsRepository.create({
+        await this.createMetric({
             name,
             value,
             tags: sanitizeTags(tags),
@@ -148,7 +159,7 @@ class MetricsServiceImpl implements MetricsService {
             timestamp: new Date(),
         };
 
-        await metricsRepository.create(data);
+        await this.createMetric(data);
     }
 }
 
