@@ -266,11 +266,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const baseUrl = env.NEXT_PUBLIC_APP_URL ?? env.PRODUCTION_URL ?? "http://localhost:3000";
-  const signupUrl = `${baseUrl}/sign-up?intent=${encodeURIComponent(intent.token)}`;
+  const signupUrl = new URL("/sign-up", baseUrl);
+  signupUrl.searchParams.set("intent", intent.token);
+
+  const theme = policyCheck.context?.theme?.trim();
+  if (theme) {
+    signupUrl.searchParams.set("theme", theme);
+  }
 
   return NextResponse.json({
     token: intent.token,
-    signupUrl,
+    signupUrl: signupUrl.toString(),
     nonce: intent.nonce,
     expiresAt: intent.expiresAt.toISOString(),
   });

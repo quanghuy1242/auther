@@ -20,6 +20,16 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function appendTheme(url: string, theme: string | null | undefined): string {
+  const normalizedTheme = theme?.trim();
+  if (!normalizedTheme) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}theme=${encodeURIComponent(normalizedTheme)}`;
+}
+
 function readNameEmailPassword(formData: FormData, session?: Awaited<ReturnType<typeof getSession>>) {
   const emailValue = formData.get("email");
   const password = formData.get("password");
@@ -122,7 +132,10 @@ export async function inviteSignUp(
 
   const userRepo = new UserRepository();
   const existingUser = await userRepo.findByEmail(email);
-  const returnTo = `/sign-up?invite=${encodeURIComponent(token)}`;
+  const returnTo = appendTheme(
+    `/sign-up?invite=${encodeURIComponent(token)}`,
+    validation.context.theme
+  );
 
   if (session) {
     if (!existingUser || existingUser.id !== session.user.id) {
@@ -148,7 +161,10 @@ export async function inviteSignUp(
   if (existingUser) {
     return {
       success: true,
-      redirectUrl: `/sign-in?returnUrl=${encodeURIComponent(returnTo)}`,
+      redirectUrl: appendTheme(
+        `/sign-in?returnUrl=${encodeURIComponent(returnTo)}`,
+        validation.context.theme
+      ),
     };
   }
 
@@ -236,10 +252,16 @@ export async function onboardingSignUp(
   }
 
   if (existingUser) {
-    const returnTo = `/sign-up?intent=${encodeURIComponent(token)}`;
+    const returnTo = appendTheme(
+      `/sign-up?intent=${encodeURIComponent(token)}`,
+      context.theme
+    );
     return {
       success: true,
-      redirectUrl: `/sign-in?returnUrl=${encodeURIComponent(returnTo)}`,
+      redirectUrl: appendTheme(
+        `/sign-in?returnUrl=${encodeURIComponent(returnTo)}`,
+        context.theme
+      ),
     };
   }
 
