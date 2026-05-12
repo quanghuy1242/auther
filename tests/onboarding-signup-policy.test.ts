@@ -7,6 +7,7 @@ import { AuthorizationSpaceRepository } from "@/lib/repositories/authorization-s
 import { AuthorizationModelRepository } from "@/lib/repositories/authorization-model-repository";
 import {
   registrationContextRepo,
+  signupIntentNonceRepo,
   signupPolicyRepo,
 } from "@/lib/repositories/platform-access-repository";
 import { directSignUp } from "@/app/sign-up/actions";
@@ -358,5 +359,263 @@ test("pending signup intent grants fail closed when policy changes before verifi
   } finally {
     (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = originalSignupPolicyGet;
     (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = originalFindBySlug;
+  }
+});
+
+test("signup intent policy rejects disabled flow, invalid target space, relation, redirect, and email domain", async () => {
+  const originalSignupPolicyGet = signupPolicyRepo.get;
+  const originalFindBySlug = registrationContextRepo.findBySlug;
+  const originalFindSpaceById = AuthorizationSpaceRepository.prototype.findById;
+  const originalFindModelById = AuthorizationModelRepository.prototype.findById;
+  const context = {
+    id: "ctx_blog",
+    slug: "blog-commenter",
+    name: "Blog commenter",
+    description: null,
+    clientId: null,
+    triggerKind: "oauth_client",
+    triggerClientId: "blog-client",
+    targetKind: "authorization_space",
+    targetId: "space_blog",
+    allowedOrigins: [],
+    allowedDomains: ["example.com"],
+    signupMode: "public_signed_intent",
+    allowedTriggerPrincipals: [{ kind: "oauth_client" as const, id: "blog-client" }],
+    allowedReturnUrls: ["https://blog.example.com/signup"],
+    theme: null,
+    grants: [{ entityTypeId: "model_book", relation: "commenter", entityId: "*" }],
+    enabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const model: {
+    id: string;
+    entityType: string;
+    authorizationSpaceId: string;
+    definition: {
+      relations: Record<string, string[]>;
+      permissions: Record<string, { relation: string }>;
+    };
+    createdAt: Date;
+    updatedAt: Date;
+  } = {
+    id: "model_book",
+    entityType: "space_blog:book",
+    authorizationSpaceId: "space_blog",
+    definition: {
+      relations: {
+        commenter: [],
+      },
+      permissions: {},
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = async () => ({
+    id: "global",
+    directSignupEnabled: false,
+    publicSignedIntentEnabled: true,
+    inviteEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = async () => context;
+  AuthorizationSpaceRepository.prototype.findById = async () => ({
+    id: "space_blog",
+    slug: "blog",
+    name: "Blog",
+    description: null,
+    enabled: true,
+    resourceServerId: null,
+    onboardingEnabled: true,
+    onboardingAllowedTriggers: [{ kind: "oauth_client", id: "blog-client" }],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  AuthorizationModelRepository.prototype.findById = async () => model;
+
+  const payload = {
+    kind: "signup_intent" as const,
+    flow: "blog-commenter",
+    trigger: { kind: "oauth_client" as const, id: "blog-client" },
+    authorizationSpaceId: "space_blog",
+    requestedGrants: [{ entityTypeId: "model_book", relation: "commenter", entityId: "book-1" }],
+    returnUrl: "https://blog.example.com/signup/complete",
+    nonce: "nonce",
+    exp: Date.now() + 60_000,
+  };
+
+  try {
+    const service = new RegistrationContextService();
+
+    context.enabled = false;
+    const disabled = await service.validateSignupIntentPolicy(payload, "reader@example.com");
+    assert.equal(disabled.valid, false);
+    assert.equal(disabled.error, "Onboarding Flow is not active");
+
+    context.enabled = true;
+    const wrongSpace = await service.validateSignupIntentPolicy({
+      ...payload,
+      authorizationSpaceId: "space_other",
+    }, "reader@example.com");
+    assert.equal(wrongSpace.valid, false);
+    assert.equal(wrongSpace.error, "Signup intent targets the wrong authorization space");
+
+    const badRedirect = await service.validateSignupIntentPolicy({
+      ...payload,
+      returnUrl: "https://evil.example.com/signup/complete",
+    }, "reader@example.com");
+    assert.equal(badRedirect.valid, false);
+    assert.equal(badRedirect.error, "Return URL is not allowed");
+
+    const badDomain = await service.validateSignupIntentPolicy(payload, "reader@blocked.com");
+    assert.equal(badDomain.valid, false);
+    assert.equal(badDomain.error, "Email domain is not allowed");
+
+    model.definition.relations = {};
+    const badRelation = await service.validateSignupIntentPolicy(payload, "reader@example.com");
+    assert.equal(badRelation.valid, false);
+    assert.equal(badRelation.error, "Relation 'commenter' is not defined on model 'space_blog:book'");
+  } finally {
+    (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = originalSignupPolicyGet;
+    (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = originalFindBySlug;
+    AuthorizationSpaceRepository.prototype.findById = originalFindSpaceById;
+    AuthorizationModelRepository.prototype.findById = originalFindModelById;
+  }
+});
+
+test("signup intent verification rejects expired and replayed tokens", async () => {
+  const originalSignupPolicyGet = signupPolicyRepo.get;
+  const originalFindBySlug = registrationContextRepo.findBySlug;
+  const originalFindSpaceById = AuthorizationSpaceRepository.prototype.findById;
+  const originalFindModelById = AuthorizationModelRepository.prototype.findById;
+  const originalNonceCreate = signupIntentNonceRepo.create;
+  const originalNonceFindByNonce = signupIntentNonceRepo.findByNonce;
+
+  (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = async () => ({
+    id: "global",
+    directSignupEnabled: false,
+    publicSignedIntentEnabled: true,
+    inviteEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = async () => ({
+    id: "ctx_blog",
+    slug: "blog-commenter",
+    name: "Blog commenter",
+    description: null,
+    clientId: null,
+    triggerKind: "oauth_client",
+    triggerClientId: "blog-client",
+    targetKind: "authorization_space",
+    targetId: "space_blog",
+    allowedOrigins: [],
+    allowedDomains: ["example.com"],
+    signupMode: "public_signed_intent",
+    allowedTriggerPrincipals: [{ kind: "oauth_client", id: "blog-client" }],
+    allowedReturnUrls: ["https://blog.example.com/signup"],
+    theme: null,
+    grants: [{ entityTypeId: "model_book", relation: "commenter", entityId: "*" }],
+    enabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  AuthorizationSpaceRepository.prototype.findById = async () => ({
+    id: "space_blog",
+    slug: "blog",
+    name: "Blog",
+    description: null,
+    enabled: true,
+    resourceServerId: null,
+    onboardingEnabled: true,
+    onboardingAllowedTriggers: [{ kind: "oauth_client", id: "blog-client" }],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  AuthorizationModelRepository.prototype.findById = async () => ({
+    id: "model_book",
+    entityType: "space_blog:book",
+    authorizationSpaceId: "space_blog",
+    definition: {
+      relations: {
+        commenter: [],
+      },
+      permissions: {},
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  type SignupIntentNonceRow = Awaited<ReturnType<typeof signupIntentNonceRepo.create>>;
+  const nonceRows = new Map<string, SignupIntentNonceRow>();
+  (signupIntentNonceRepo as unknown as { create: typeof signupIntentNonceRepo.create }).create = async (data) => {
+    const row = {
+      id: `nonce_${data.nonce}`,
+      nonce: data.nonce,
+      flowSlug: data.flowSlug,
+      triggerKind: data.triggerKind,
+      triggerId: data.triggerId,
+      returnUrl: data.returnUrl ?? null,
+      expiresAt: data.expiresAt,
+      consumedAt: null,
+      consumedByEmail: null,
+      createdAt: new Date(),
+    };
+    nonceRows.set(data.nonce, row);
+    return row;
+  };
+  (signupIntentNonceRepo as unknown as { findByNonce: typeof signupIntentNonceRepo.findByNonce }).findByNonce = async (nonce) => nonceRows.get(nonce) ?? null;
+
+  try {
+    const service = new RegistrationContextService();
+    const random = "random";
+    const expiredPayload = {
+      kind: "signup_intent" as const,
+      flow: "blog-commenter",
+      trigger: { kind: "oauth_client" as const, id: "blog-client" },
+      authorizationSpaceId: "space_blog",
+      requestedGrants: [{ entityTypeId: "model_book", relation: "commenter", entityId: "*" }],
+      returnUrl: "https://blog.example.com/signup/complete",
+      nonce: "expired-nonce",
+      exp: Date.now() - 1_000,
+    };
+    const expiredSig = (service as unknown as {
+      signPayload: (payload: object, random: string) => string;
+    }).signPayload(expiredPayload, random);
+    const expiredToken = Buffer.from(JSON.stringify({
+      payload: expiredPayload,
+      random,
+      sig: expiredSig,
+    })).toString("base64url");
+
+    const expired = await service.validateSignupIntent(expiredToken, "reader@example.com");
+    assert.equal(expired.valid, false);
+    assert.equal(expired.error, "Signup link has expired");
+
+    const intent = await service.createSignedSignupIntent({
+      flow: "blog-commenter",
+      trigger: { kind: "oauth_client", id: "blog-client" },
+      authorizationSpaceId: "space_blog",
+      requestedGrants: [{ entityTypeId: "model_book", relation: "commenter", entityId: "*" }],
+      returnUrl: "https://blog.example.com/signup/complete",
+      expiresInSeconds: 60,
+    });
+    const row = nonceRows.get(intent.nonce);
+    assert.ok(row);
+    row.consumedAt = new Date();
+    row.consumedByEmail = "reader@example.com";
+
+    const replayed = await service.validateSignupIntent(intent.token, "reader@example.com");
+    assert.equal(replayed.valid, false);
+    assert.equal(replayed.error, "Signup link is no longer active");
+  } finally {
+    (signupPolicyRepo as unknown as { get: typeof signupPolicyRepo.get }).get = originalSignupPolicyGet;
+    (registrationContextRepo as unknown as { findBySlug: typeof registrationContextRepo.findBySlug }).findBySlug = originalFindBySlug;
+    AuthorizationSpaceRepository.prototype.findById = originalFindSpaceById;
+    AuthorizationModelRepository.prototype.findById = originalFindModelById;
+    (signupIntentNonceRepo as unknown as { create: typeof signupIntentNonceRepo.create }).create = originalNonceCreate;
+    (signupIntentNonceRepo as unknown as { findByNonce: typeof signupIntentNonceRepo.findByNonce }).findByNonce = originalNonceFindByNonce;
   }
 });
